@@ -98,3 +98,6 @@ temp/
 
 # Tauri
 packages/client/src-tauri/target/
+
+# SSL certificates (development)
+packages/server/ssl/

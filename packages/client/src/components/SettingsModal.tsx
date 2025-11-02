@@ -99,17 +99,49 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     setUpdateStatus({ type: 'downloading', message: 'Downloading update...' })
 
     try {
+      console.log('Starting update installation...')
       await installUpdate()
+      console.log('Update installed successfully')
+
       setUpdateStatus({
         type: 'current',
-        message: 'Update installed! Restarting...',
+        message: 'Update installed! Restarting in 3 seconds...',
       })
+
       // Relaunch the app to apply the update
-      setTimeout(() => relaunch(), 2000)
+      setTimeout(async () => {
+        try {
+          console.log('Relaunching app...')
+          await relaunch()
+        } catch (relaunchError: any) {
+          console.error('Relaunch error:', relaunchError)
+          setUpdateStatus({
+            type: 'error',
+            message: 'Update installed but failed to restart. Please restart manually.',
+          })
+        }
+      }, 3000)
     } catch (error: any) {
+      console.error('Installation error:', error)
+
+      let errorMessage = 'Failed to install update'
+
+      // Provide more helpful error messages
+      if (error.message) {
+        errorMessage = error.message
+      }
+
+      if (error.toString().includes('permission') || error.toString().includes('access')) {
+        errorMessage = 'Permission denied. Try running as administrator.'
+      } else if (error.toString().includes('download')) {
+        errorMessage = 'Download failed. Check your internet connection.'
+      } else if (error.toString().includes('signature')) {
+        errorMessage = 'Update signature verification failed.'
+      }
+
       setUpdateStatus({
         type: 'error',
-        message: error.message || 'Failed to install update',
+        message: errorMessage,
       })
     }
   }
@@ -254,7 +286,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-grey-400 text-sm">Version</span>
-                  <span className="text-white text-sm font-mono">1.0.2</span>
+                  <span className="text-white text-sm font-mono">1.0.3</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-grey-400 text-sm">Product</span>

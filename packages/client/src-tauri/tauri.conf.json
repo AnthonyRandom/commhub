@@ -9,7 +9,7 @@
   },
   "package": {
     "productName": "CommHub",
-    "version": "1.0.2"
+    "version": "1.0.3"
   },
   "tauri": {
     "allowlist": {
@@ -75,8 +75,8 @@
       "endpoints": [
         "https://github.com/AnthonyRandom/commhub/releases/latest/download/latest.json"
       ],
-      "dialog": true,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkwOEY4MDRGRTg4RjQzREQKUldUZFE0L29UNENQa0ViaTB3cnpLOU1qUytPQjZNNGxSS0NXOEtOVXBPTmFmV3o4ZkVrRGRrNU0K"
+      "dialog": false,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkwOEY4MDRGRTg4RjQzREQKUldUZFE0L29UNENQa0ViaTB3cnpLOU1qUStPQjZNNGxSS0NXOEtOVXBPTmFmV3o4ZkVrRGRrNU0K"
     },
     "windows": [
       {

@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:17-alpine
+    container_name: commhub-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: commhub
+      POSTGRES_USER: commhub_user
+      POSTGRES_PASSWORD: commhub_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./packages/server/prisma/migrations:/docker-entrypoint-initdb.d/migrations
+    ports:
+      - '5432:5432'
+    networks:
+      - commhub-network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U commhub_user -d commhub']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # CommHub Server
+  server:
+    build:
+      context: ./packages/server
+      dockerfile: Dockerfile
+    container_name: commhub-server
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://commhub_user:commhub_password@postgres:5432/commhub?schema=public
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production}
+      - PORT=3000
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      - HTTPS_ENABLED=false
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - commhub-network
+    volumes:
+      - ./packages/server/ssl:/app/ssl:ro
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis (optional, for session management and scaling)
+  redis:
+    image: redis:8-alpine
+    container_name: commhub-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - '6379:6379'
+    networks:
+      - commhub-network
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  commhub-network:
+    driver: bridge

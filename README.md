@@ -19,7 +19,6 @@ A lightweight, privacy-focused communication platform for real-time text and voi
 
 CommHub is currently in active development, focusing on delivering a solid MVP with core communication features. The project follows a structured approach with planned phases covering backend infrastructure, user interface, testing, and deployment.
 
-
 ## 🛠️ Technology Stack
 
 - **Client**: Cross-platform desktop application
@@ -29,11 +28,35 @@ CommHub is currently in active development, focusing on delivering a solid MVP w
 
 ## 📋 Roadmap Highlights
 
-- [ ] User authentication and account management
-- [ ] Server creation and channel organization
-- [ ] Real-time text messaging with formatting
-- [ ] Voice channel implementation
-- [ ] Cross-platform installer packages
-- [ ] Self-hosting capabilities
+- [x] User authentication and account management
+- [x] Server creation and channel organization
+- [x] Real-time text messaging with formatting
+- [x] Voice channel implementation
+- [x] Cross-platform installer packages
+- [x] Self-hosting capabilities
+
+## 🏠 Self-Hosting
+
+CommHub supports self-hosting for users who prefer to run their own server. The server can be deployed using Docker for easy setup and management.
+
+### Quick Setup (Windows/Linux)
+
+1. **Prerequisites**: Install Docker and Docker Compose
+2. **Run the setup script**:
+   - **Windows**: Double-click `setup-server.bat` or run it from command prompt
+   - **Linux/macOS**: Run `./setup-server.sh` from terminal
+3. **Configure**: Edit `packages/server/.env` with your settings
+4. **Access**: Server runs at `http://localhost:3000`
+
+### Manual Setup
+
+See `packages/server/README.md` for detailed deployment instructions, including production configuration, security setup, and troubleshooting.
+
+### System Requirements
+
+- **RAM**: 2GB minimum, 4GB recommended
+- **Storage**: 5GB free space
+- **Network**: Stable internet connection
+- **OS**: Windows 10+, Ubuntu 18.04+, or any Docker-compatible system
 
 ---

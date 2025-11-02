@@ -98,23 +98,27 @@ const ChannelList: React.FC<ChannelListProps> = ({
           <div className="absolute top-full left-0 right-0 bg-grey-850 border-2 border-grey-700 z-50 animate-slide-down">
             {server && (
               <>
-                <button
-                  onClick={() => {
-                    handleGetInviteCode()
-                    setShowServerMenu(false)
-                  }}
-                  className="w-full px-4 py-3 text-left text-white hover:bg-grey-800 flex items-center gap-2 border-b border-grey-700"
-                >
-                  <Copy className="w-4 h-4" />
-                  Invite People
-                </button>
-                <button
-                  onClick={onServerSettings}
-                  className="w-full px-4 py-3 text-left text-white hover:bg-grey-800 flex items-center gap-2 border-b border-grey-700"
-                >
-                  <Settings className="w-4 h-4" />
-                  Server Settings
-                </button>
+                {server.ownerId === user?.id && (
+                  <>
+                    <button
+                      onClick={() => {
+                        handleGetInviteCode()
+                        setShowServerMenu(false)
+                      }}
+                      className="w-full px-4 py-3 text-left text-white hover:bg-grey-800 flex items-center gap-2 border-b border-grey-700"
+                    >
+                      <Copy className="w-4 h-4" />
+                      Invite People
+                    </button>
+                    <button
+                      onClick={onServerSettings}
+                      className="w-full px-4 py-3 text-left text-white hover:bg-grey-800 flex items-center gap-2 border-b border-grey-700"
+                    >
+                      <Settings className="w-4 h-4" />
+                      Server Settings
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={handleLeaveServer}
                   className="w-full px-4 py-3 text-left text-red-500 hover:bg-grey-800 flex items-center gap-2"
@@ -128,7 +132,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
         )}
 
         {/* Invite Code Modal */}
-        {inviteCode && (
+        {inviteCode && server?.ownerId === user?.id && (
           <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 animate-fade-in">
             <div className="bg-grey-900 border-2 border-white w-96 animate-slide-up">
               <div className="border-b-2 border-grey-800 p-4">

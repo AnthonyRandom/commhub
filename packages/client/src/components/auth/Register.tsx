@@ -3,10 +3,9 @@ import { useAuthStore } from '../../stores/auth'
 
 interface RegisterProps {
   onRegisterSuccess: () => void
-  onSwitchToLogin: () => void
 }
 
-const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onSwitchToLogin }) => {
+const Register: React.FC<RegisterProps> = ({ onRegisterSuccess }) => {
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

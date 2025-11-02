@@ -3,10 +3,9 @@ import { useAuthStore } from '../../stores/auth'
 
 interface LoginProps {
   onLoginSuccess: () => void
-  onSwitchToRegister: () => void
 }
 
-const Login: React.FC<LoginProps> = ({ onLoginSuccess, onSwitchToRegister }) => {
+const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)

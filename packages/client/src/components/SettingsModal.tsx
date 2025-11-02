@@ -1,11 +1,18 @@
-import React, { useState } from 'react'
-import { X, Download, CheckCircle, AlertCircle } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { X, Download, CheckCircle, AlertCircle, Bell, Volume2, Type, Clock } from 'lucide-react'
 import { checkUpdate, installUpdate } from '@tauri-apps/api/updater'
 import { relaunch } from '@tauri-apps/api/process'
 
 interface SettingsModalProps {
   isOpen: boolean
   onClose: () => void
+}
+
+interface UserSettings {
+  notifications: boolean
+  sounds: boolean
+  fontSize: 'small' | 'medium' | 'large'
+  timestampFormat: '12h' | '24h'
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
@@ -15,6 +22,33 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     message: string
     version?: string
   }>({ type: 'idle', message: '' })
+
+  // User preferences state
+  const [settings, setSettings] = useState<UserSettings>({
+    notifications: true,
+    sounds: true,
+    fontSize: 'medium',
+    timestampFormat: '12h',
+  })
+
+  // Load settings from localStorage on mount
+  useEffect(() => {
+    const savedSettings = localStorage.getItem('commhub-settings')
+    if (savedSettings) {
+      try {
+        setSettings(JSON.parse(savedSettings))
+      } catch (error) {
+        console.error('Failed to load settings:', error)
+      }
+    }
+  }, [])
+
+  // Save settings to localStorage when they change
+  const updateSetting = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
+    const newSettings = { ...settings, [key]: value }
+    setSettings(newSettings)
+    localStorage.setItem('commhub-settings', JSON.stringify(newSettings))
+  }
 
   const handleCheckUpdate = async () => {
     setIsCheckingUpdate(true)
@@ -36,9 +70,25 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         })
       }
     } catch (error: any) {
+      console.error('Update check error:', error)
+
+      let errorMessage = 'Failed to check for updates'
+
+      // Provide more helpful error messages
+      if (error.message) {
+        errorMessage = error.message
+      }
+
+      // Check if it's a network/GitHub issue
+      if (error.toString().includes('404') || error.toString().includes('Not Found')) {
+        errorMessage = 'No releases found. Please create a GitHub release first.'
+      } else if (error.toString().includes('Network') || error.toString().includes('fetch')) {
+        errorMessage = 'Network error. Check your internet connection.'
+      }
+
       setUpdateStatus({
         type: 'error',
-        message: error.message || 'Failed to check for updates',
+        message: errorMessage,
       })
     } finally {
       setIsCheckingUpdate(false)
@@ -82,6 +132,119 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Preferences Section */}
+          <div>
+            <h4 className="text-xs font-bold text-grey-400 uppercase tracking-wider mb-3">
+              Preferences
+            </h4>
+            <div className="bg-grey-850 border-2 border-grey-700 p-4 space-y-4">
+              {/* Notifications Toggle */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Bell className="w-5 h-5 text-grey-400" />
+                  <div>
+                    <p className="text-white text-sm font-medium">Desktop Notifications</p>
+                    <p className="text-grey-500 text-xs">Show notifications for new messages</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => updateSetting('notifications', !settings.notifications)}
+                  className={`relative w-12 h-6 border-2 transition-colors ${
+                    settings.notifications ? 'bg-white border-white' : 'bg-grey-700 border-grey-600'
+                  }`}
+                >
+                  <div
+                    className={`absolute top-0.5 w-4 h-4 bg-black transition-transform ${
+                      settings.notifications ? 'translate-x-6' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Sound Toggle */}
+              <div className="flex items-center justify-between pt-4 border-t border-grey-700">
+                <div className="flex items-center gap-3">
+                  <Volume2 className="w-5 h-5 text-grey-400" />
+                  <div>
+                    <p className="text-white text-sm font-medium">Sound Effects</p>
+                    <p className="text-grey-500 text-xs">Play sounds for events</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => updateSetting('sounds', !settings.sounds)}
+                  className={`relative w-12 h-6 border-2 transition-colors ${
+                    settings.sounds ? 'bg-white border-white' : 'bg-grey-700 border-grey-600'
+                  }`}
+                >
+                  <div
+                    className={`absolute top-0.5 w-4 h-4 bg-black transition-transform ${
+                      settings.sounds ? 'translate-x-6' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Font Size Selector */}
+              <div className="pt-4 border-t border-grey-700">
+                <div className="flex items-center gap-3 mb-3">
+                  <Type className="w-5 h-5 text-grey-400" />
+                  <div>
+                    <p className="text-white text-sm font-medium">Font Size</p>
+                    <p className="text-grey-500 text-xs">Adjust message text size</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {(['small', 'medium', 'large'] as const).map((size) => (
+                    <button
+                      key={size}
+                      onClick={() => updateSetting('fontSize', size)}
+                      className={`flex-1 py-2 border-2 transition-colors uppercase text-xs font-bold tracking-wider ${
+                        settings.fontSize === size
+                          ? 'bg-white text-black border-white'
+                          : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Timestamp Format */}
+              <div className="pt-4 border-t border-grey-700">
+                <div className="flex items-center gap-3 mb-3">
+                  <Clock className="w-5 h-5 text-grey-400" />
+                  <div>
+                    <p className="text-white text-sm font-medium">Time Format</p>
+                    <p className="text-grey-500 text-xs">Message timestamp display</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => updateSetting('timestampFormat', '12h')}
+                    className={`flex-1 py-2 border-2 transition-colors uppercase text-xs font-bold tracking-wider ${
+                      settings.timestampFormat === '12h'
+                        ? 'bg-white text-black border-white'
+                        : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
+                    }`}
+                  >
+                    12 Hour
+                  </button>
+                  <button
+                    onClick={() => updateSetting('timestampFormat', '24h')}
+                    className={`flex-1 py-2 border-2 transition-colors uppercase text-xs font-bold tracking-wider ${
+                      settings.timestampFormat === '24h'
+                        ? 'bg-white text-black border-white'
+                        : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
+                    }`}
+                  >
+                    24 Hour
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* App Info Section */}
           <div>
             <h4 className="text-xs font-bold text-grey-400 uppercase tracking-wider mb-3">
@@ -91,7 +254,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-grey-400 text-sm">Version</span>
-                  <span className="text-white text-sm font-mono">1.0.1</span>
+                  <span className="text-white text-sm font-mono">1.0.2</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-grey-400 text-sm">Product</span>

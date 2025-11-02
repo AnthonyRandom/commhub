@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CommHub WebRTC Voice Prototype</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      .controls {
+        margin: 20px 0;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      button {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 16px;
+      }
+      .btn-primary {
+        background: #007bff;
+        color: white;
+      }
+      .btn-danger {
+        background: #dc3545;
+        color: white;
+      }
+      .btn-success {
+        background: #28a745;
+        color: white;
+      }
+      .status {
+        padding: 10px;
+        border-radius: 5px;
+        margin: 10px 0;
+      }
+      .status.connected {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+      .status.disconnected {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+      .peers {
+        margin: 20px 0;
+      }
+      .peer {
+        padding: 10px;
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        margin: 5px 0;
+      }
+      .peer.connected {
+        border-color: #28a745;
+        background: #d4edda;
+      }
+      .logs {
+        margin: 20px 0;
+        max-height: 200px;
+        overflow-y: auto;
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        padding: 10px;
+        font-family: monospace;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>CommHub WebRTC Voice Prototype</h1>
+
+      <div class="controls">
+        <input
+          type="text"
+          id="roomId"
+          placeholder="Room ID"
+          value="test-room"
+        />
+        <button id="joinBtn" class="btn-primary">Join Room</button>
+        <button id="leaveBtn" class="btn-danger" disabled>Leave Room</button>
+      </div>
+
+      <div id="status" class="status disconnected">Status: Disconnected</div>
+
+      <div class="controls">
+        <button id="startVoiceBtn" class="btn-success" disabled>
+          Start Voice
+        </button>
+        <button id="stopVoiceBtn" class="btn-danger" disabled>
+          Stop Voice
+        </button>
+        <span id="micStatus">Microphone: Off</span>
+      </div>
+
+      <div class="peers">
+        <h3>Connected Peers:</h3>
+        <div id="peersList"></div>
+      </div>
+
+      <div class="logs">
+        <strong>Event Log:</strong><br />
+        <div id="logs"></div>
+      </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
+    <script>
+      class VoiceChat {
+        constructor() {
+          this.socket = null;
+          this.peers = new Map();
+          this.localStream = null;
+          this.roomId = null;
+          this.isInRoom = false;
+          this.isVoiceActive = false;
+
+          this.initElements();
+          this.bindEvents();
+        }
+
+        initElements() {
+          this.joinBtn = document.getElementById('joinBtn');
+          this.leaveBtn = document.getElementById('leaveBtn');
+          this.startVoiceBtn = document.getElementById('startVoiceBtn');
+          this.stopVoiceBtn = document.getElementById('stopVoiceBtn');
+          this.roomIdInput = document.getElementById('roomId');
+          this.statusDiv = document.getElementById('status');
+          this.peersList = document.getElementById('peersList');
+          this.logsDiv = document.getElementById('logs');
+          this.micStatus = document.getElementById('micStatus');
+        }
+
+        bindEvents() {
+          this.joinBtn.addEventListener('click', () => this.joinRoom());
+          this.leaveBtn.addEventListener('click', () => this.leaveRoom());
+          this.startVoiceBtn.addEventListener('click', () => this.startVoice());
+          this.stopVoiceBtn.addEventListener('click', () => this.stopVoice());
+        }
+
+        log(message) {
+          const timestamp = new Date().toLocaleTimeString();
+          this.logsDiv.innerHTML += `[${timestamp}] ${message}<br>`;
+          this.logsDiv.scrollTop = this.logsDiv.scrollHeight;
+        }
+
+        updateStatus(message, connected = false) {
+          this.statusDiv.textContent = `Status: ${message}`;
+          this.statusDiv.className = `status ${connected ? 'connected' : 'disconnected'}`;
+        }
+
+        updatePeersList() {
+          this.peersList.innerHTML = '';
+          this.peers.forEach((peer, peerId) => {
+            const peerDiv = document.createElement('div');
+            peerDiv.className = `peer ${peer.connected ? 'connected' : ''}`;
+            peerDiv.textContent = `Peer ${peerId.slice(0, 8)}... (${peer.connected ? 'Connected' : 'Connecting'})`;
+            this.peersList.appendChild(peerDiv);
+          });
+        }
+
+        async joinRoom() {
+          const roomId = this.roomIdInput.value.trim();
+          if (!roomId) {
+            alert('Please enter a room ID');
+            return;
+          }
+
+          this.roomId = roomId;
+          this.socket = io('http://localhost:3003');
+
+          this.socket.on('connect', () => {
+            this.log('Connected to signaling server');
+            this.socket.emit('join-room', {
+              roomId: this.roomId,
+              peerId: this.socket.id,
+            });
+          });
+
+          this.socket.on('room-joined', data => {
+            this.log(`Joined room: ${data.roomId}`);
+            this.isInRoom = true;
+            this.updateStatus(`Connected to room: ${data.roomId}`, true);
+
+            this.joinBtn.disabled = true;
+            this.leaveBtn.disabled = false;
+            this.startVoiceBtn.disabled = false;
+
+            // Connect to existing peers
+            data.peers.forEach(peerId => {
+              this.createPeer(peerId, false);
+            });
+          });
+
+          this.socket.on('peer-joined', data => {
+            this.log(`Peer joined: ${data.peerId}`);
+            this.createPeer(data.socketId, true);
+          });
+
+          this.socket.on('peer-left', data => {
+            this.log(`Peer left: ${data.peerId}`);
+            this.removePeer(data.socketId);
+          });
+
+          this.socket.on('signal', data => {
+            this.handleSignal(data);
+          });
+
+          this.socket.on('voice-started', data => {
+            this.log(`Peer started voice: ${data.peerId}`);
+          });
+
+          this.socket.on('voice-stopped', data => {
+            this.log(`Peer stopped voice: ${data.peerId}`);
+          });
+        }
+
+        leaveRoom() {
+          if (this.socket) {
+            this.socket.disconnect();
+          }
+          this.cleanup();
+          this.updateStatus('Disconnected', false);
+          this.joinBtn.disabled = false;
+          this.leaveBtn.disabled = true;
+          this.startVoiceBtn.disabled = true;
+          this.stopVoiceBtn.disabled = true;
+          this.log('Left room');
+        }
+
+        async startVoice() {
+          try {
+            this.localStream = await navigator.mediaDevices.getUserMedia({
+              audio: true,
+              video: false,
+            });
+
+            this.isVoiceActive = true;
+            this.micStatus.textContent = 'Microphone: On';
+            this.startVoiceBtn.disabled = true;
+            this.stopVoiceBtn.disabled = false;
+
+            // Connect to all peers with audio
+            this.peers.forEach(peer => {
+              if (peer.peer && !peer.stream) {
+                peer.peer.addStream(this.localStream);
+              }
+            });
+
+            this.socket.emit('start-voice', { roomId: this.roomId });
+            this.log('Voice started');
+          } catch (error) {
+            this.log(`Error starting voice: ${error.message}`);
+            alert('Could not access microphone. Please check permissions.');
+          }
+        }
+
+        stopVoice() {
+          if (this.localStream) {
+            this.localStream.getTracks().forEach(track => track.stop());
+            this.localStream = null;
+          }
+
+          this.isVoiceActive = false;
+          this.micStatus.textContent = 'Microphone: Off';
+          this.startVoiceBtn.disabled = false;
+          this.stopVoiceBtn.disabled = true;
+
+          this.socket.emit('stop-voice', { roomId: this.roomId });
+          this.log('Voice stopped');
+        }
+
+        createPeer(peerId, initiator) {
+          this.log(
+            `Creating peer connection with ${peerId} (initiator: ${initiator})`
+          );
+
+          const peer = new SimplePeer({
+            initiator: initiator,
+            trickle: false,
+          });
+
+          this.peers.set(peerId, {
+            peer: peer,
+            connected: false,
+            stream: null,
+          });
+
+          peer.on('signal', signal => {
+            this.socket.emit('signal', {
+              targetPeerId: peerId,
+              signal: signal,
+              type: initiator ? 'offer' : 'answer',
+            });
+          });
+
+          peer.on('connect', () => {
+            this.log(`Peer connected: ${peerId}`);
+            this.peers.get(peerId).connected = true;
+            this.updatePeersList();
+
+            // Add stream if voice is active
+            if (this.isVoiceActive && this.localStream) {
+              peer.addStream(this.localStream);
+            }
+          });
+
+          peer.on('stream', stream => {
+            this.log(`Received stream from ${peerId}`);
+            this.peers.get(peerId).stream = stream;
+
+            // Create audio element for playback
+            const audio = new Audio();
+            audio.srcObject = stream;
+            audio.play();
+          });
+
+          peer.on('error', error => {
+            this.log(`Peer error with ${peerId}: ${error.message}`);
+          });
+
+          peer.on('close', () => {
+            this.log(`Peer connection closed: ${peerId}`);
+            this.removePeer(peerId);
+          });
+
+          this.updatePeersList();
+        }
+
+        handleSignal(data) {
+          const peer = this.peers.get(data.peerId);
+          if (peer && peer.peer) {
+            peer.peer.signal(data.signal);
+          }
+        }
+
+        removePeer(peerId) {
+          const peerData = this.peers.get(peerId);
+          if (peerData) {
+            if (peerData.peer) {
+              peerData.peer.destroy();
+            }
+            if (peerData.stream) {
+              peerData.stream.getTracks().forEach(track => track.stop());
+            }
+          }
+          this.peers.delete(peerId);
+          this.updatePeersList();
+        }
+
+        cleanup() {
+          this.peers.forEach((peerData, peerId) => {
+            this.removePeer(peerId);
+          });
+          this.peers.clear();
+          this.isInRoom = false;
+          this.isVoiceActive = false;
+          if (this.localStream) {
+            this.localStream.getTracks().forEach(track => track.stop());
+            this.localStream = null;
+          }
+        }
+      }
+
+      // Initialize the voice chat when page loads
+      document.addEventListener('DOMContentLoaded', () => {
+        new VoiceChat();
+      });
+    </script>
+  </body>
+</html>

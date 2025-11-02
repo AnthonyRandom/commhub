@@ -39,4 +39,10 @@ export class AuthController {
   getProfile(@Request() req) {
     return req.user;
   }
+
+  // Test endpoint for security testing - not for production use
+  @Get('test-endpoint')
+  testEndpoint() {
+    return { message: 'Security test endpoint' };
+  }
 }

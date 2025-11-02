@@ -1,6 +1,7 @@
-import { createStore } from 'zustand/vanilla'
+import { create } from 'zustand'
 import { apiService, type Message } from '../services/api'
 import { wsService, type WSMessage } from '../services/websocket'
+import { useAuthStore } from './auth'
 
 interface MessagesState {
   messages: { [channelId: number]: Message[] }
@@ -15,7 +16,7 @@ interface MessagesState {
   initializeWebSocketListeners: () => void
 }
 
-export const useMessagesStore = createStore<MessagesState>((set, get) => ({
+export const useMessagesStore = create<MessagesState>((set, get) => ({
   messages: {},
   isLoading: false,
   error: null,
@@ -76,29 +77,66 @@ export const useMessagesStore = createStore<MessagesState>((set, get) => ({
   },
 
   addMessage: (message: WSMessage) => {
-    const channelMessage: Message = {
-      id: message.id,
-      content: message.content,
-      userId: message.userId,
-      channelId: message.channelId,
-      createdAt: message.createdAt,
-      user: {
-        id: message.userId,
-        username: message.username,
-      },
-      channel: {
-        id: message.channelId,
-        name: 'Current Channel',
-      },
-    }
+    const currentUser = useAuthStore.getState().user
 
     set((state) => {
       const channelMessages = state.messages[message.channelId] || []
+
       // Check if message already exists (to avoid duplicates)
       const messageExists = channelMessages.some((m) => m.id === message.id)
-
       if (messageExists) {
         return state
+      }
+
+      // Check if this message is from the current user (replace optimistic message)
+      if (currentUser && message.userId === currentUser.id) {
+        const optimisticMessageIndex = channelMessages.findIndex(
+          (m) => m.userId === 0 && m.content === message.content
+        )
+
+        if (optimisticMessageIndex !== -1) {
+          // Replace optimistic message with real message
+          const updatedMessages = [...channelMessages]
+          updatedMessages[optimisticMessageIndex] = {
+            id: message.id,
+            content: message.content,
+            userId: message.userId,
+            channelId: message.channelId,
+            createdAt: message.createdAt,
+            user: {
+              id: message.userId,
+              username: message.username,
+            },
+            channel: {
+              id: message.channelId,
+              name: 'Current Channel',
+            },
+          }
+
+          return {
+            messages: {
+              ...state.messages,
+              [message.channelId]: updatedMessages,
+            },
+          }
+        }
+      }
+
+      // Add new message normally
+      const channelMessage: Message = {
+        id: message.id,
+        content: message.content,
+        userId: message.userId,
+        channelId: message.channelId,
+        createdAt: message.createdAt,
+        user: {
+          id: message.userId,
+          username: message.username,
+        },
+        channel: {
+          id: message.channelId,
+          name: 'Current Channel',
+        },
       }
 
       return {

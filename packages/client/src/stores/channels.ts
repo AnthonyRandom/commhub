@@ -1,4 +1,4 @@
-import { createStore } from 'zustand/vanilla'
+import { create } from 'zustand'
 import { apiService, type Channel } from '../services/api'
 
 interface ChannelsState {
@@ -15,7 +15,7 @@ interface ChannelsState {
   clearError: () => void
 }
 
-export const useChannelsStore = createStore<ChannelsState>((set, get) => ({
+export const useChannelsStore = create<ChannelsState>((set, get) => ({
   channels: [],
   currentChannel: null,
   isLoading: false,

@@ -6,27 +6,22 @@ const Auth: React.FC = () => {
   const [view, setView] = useState<'login' | 'register'>('login')
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
-      {/* Background decorative elements */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
-        <div className="absolute top-40 left-1/2 w-80 h-80 bg-pink-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
-      </div>
-
+    <div className="min-h-screen bg-grey-950 flex items-center justify-center p-4">
       {/* Main content */}
-      <div className="relative z-10 w-full max-w-md">
+      <div className="w-full max-w-md">
         {/* Logo/Brand */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full mb-4 shadow-lg">
-            <span className="text-2xl font-bold text-white">C</span>
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-white border-2 border-black mb-6">
+            <span className="text-3xl font-bold text-black">C</span>
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">CommHub</h1>
-          <p className="text-gray-400">Connect with your community</p>
+          <h1 className="text-4xl font-bold text-white mb-3 tracking-tight">CommHub</h1>
+          <p className="text-grey-400 text-sm uppercase tracking-wider">
+            Minimal Communication Platform
+          </p>
         </div>
 
         {/* Auth Card */}
-        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 shadow-2xl border border-white/20">
+        <div className="bg-grey-900 border-2 border-grey-800 p-8">
           {view === 'register' ? (
             <Register
               onRegisterSuccess={() => setView('login')}
@@ -40,12 +35,12 @@ const Auth: React.FC = () => {
           )}
 
           {/* Form switcher */}
-          <div className="mt-6 text-center">
-            <p className="text-gray-400 text-sm">
+          <div className="mt-6 pt-6 border-t-2 border-grey-800 text-center">
+            <p className="text-grey-400 text-sm">
               {view === 'login' ? "Don't have an account?" : 'Already have an account?'}
               <button
                 onClick={() => setView(view === 'login' ? 'register' : 'login')}
-                className="ml-2 text-purple-400 hover:text-purple-300 font-medium transition-colors duration-200"
+                className="ml-2 text-white hover:text-grey-300 font-bold transition-colors uppercase tracking-wide"
               >
                 {view === 'login' ? 'Sign up' : 'Sign in'}
               </button>
@@ -54,8 +49,8 @@ const Auth: React.FC = () => {
         </div>
 
         {/* Footer */}
-        <div className="text-center mt-8">
-          <p className="text-gray-500 text-xs">© 2024 CommHub. Built for communities.</p>
+        <div className="text-center mt-6">
+          <p className="text-grey-600 text-xs uppercase tracking-wider">© 2025 CommHub</p>
         </div>
       </div>
     </div>

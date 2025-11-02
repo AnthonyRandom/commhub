@@ -13,8 +13,7 @@ class WebSocketManager {
     this.isInitialized = true
 
     // Initialize WebSocket listeners
-    const messagesStore = useMessagesStore.getState()
-    messagesStore.initializeWebSocketListeners()
+    useMessagesStore.getState().initializeWebSocketListeners()
 
     // Set up auth-based connection management
     this.checkAndConnect()

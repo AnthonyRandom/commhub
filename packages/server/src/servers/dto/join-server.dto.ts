@@ -10,9 +10,9 @@ export class JoinServerDto {
   @IsNotEmpty()
   @IsString()
   @MinLength(6, { message: 'Invite code must be at least 6 characters long' })
-  @MaxLength(20, { message: 'Invite code must not exceed 20 characters' })
-  @Matches(/^[A-Z0-9]+$/, {
-    message: 'Invite code can only contain uppercase letters and numbers',
+  @MaxLength(32, { message: 'Invite code must not exceed 32 characters' })
+  @Matches(/^[a-zA-Z0-9]+$/, {
+    message: 'Invite code can only contain letters and numbers',
   })
   inviteCode: string;
 }

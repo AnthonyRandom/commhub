@@ -1,4 +1,4 @@
-import { createStore } from 'zustand/vanilla'
+import { create } from 'zustand'
 import { apiService, type Server } from '../services/api'
 
 interface ServersState {
@@ -17,7 +17,7 @@ interface ServersState {
   clearError: () => void
 }
 
-export const useServersStore = createStore<ServersState>((set, get) => ({
+export const useServersStore = create<ServersState>((set, get) => ({
   servers: [],
   currentServer: null,
   isLoading: false,

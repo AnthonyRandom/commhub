@@ -21,6 +21,11 @@ target/
 .env.test.local
 .env.production.local
 
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
 # IDE
 .vscode/
 .idea/

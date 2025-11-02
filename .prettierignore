@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+packages/*/dist/
+packages/*/build/
+packages/client/src-tauri/target/
+
+# Generated files
+*.d.ts
+coverage/
+
+# Config files that shouldn't be formatted
+.eslintrc.js
+.prettierrc
+package.json
+tsconfig.json
+
+# Logs
+*.log
+
+# Environment files
+.env*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

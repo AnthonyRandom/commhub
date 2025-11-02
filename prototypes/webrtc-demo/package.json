@@ -1,0 +1,16 @@
+{
+  "name": "webrtc-demo",
+  "version": "1.0.0",
+  "description": "WebRTC peer-to-peer voice communication prototype for CommHub",
+  "scripts": {
+    "start": "http-server . -p 3002 -c-1",
+    "dev": "http-server . -p 3002 -c-1 --cors"
+  },
+  "dependencies": {
+    "simple-peer": "^9.11.1",
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "commhub",
+  "version": "1.0.0",
+  "description": "A cross-platform communication application for Windows and Linux",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=packages/client",
+    "dev:server": "npm run dev --workspace=packages/server",
+    "build": "npm run build --workspace=packages/client && npm run build --workspace=packages/server",
+    "test": "npm run test --workspace=packages/client && npm run test --workspace=packages/server",
+    "lint": "npm run lint --workspace=packages/client && npm run lint --workspace=packages/server"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "prettier": "^3.0.0",
+    "eslint": "^9.0.0"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  }
+}

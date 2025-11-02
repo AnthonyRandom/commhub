@@ -1,7 +1,17 @@
 import React, { useState, useEffect } from 'react'
-import { X, Download, CheckCircle, AlertCircle, Bell, Volume2, Type, Clock } from 'lucide-react'
-import { checkUpdate, installUpdate, onUpdaterEvent } from '@tauri-apps/api/updater'
-import { relaunch } from '@tauri-apps/api/process'
+import {
+  X,
+  Download,
+  CheckCircle,
+  AlertCircle,
+  Bell,
+  Volume2,
+  Type,
+  Clock,
+  ExternalLink,
+} from 'lucide-react'
+import { checkUpdate } from '@tauri-apps/api/updater'
+import { open } from '@tauri-apps/api/shell'
 import type { UpdateManifest } from '@tauri-apps/api/updater'
 
 interface SettingsModalProps {
@@ -43,35 +53,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       } catch (error) {
         console.error('Failed to load settings:', error)
       }
-    }
-  }, [])
-
-  // Set up updater event listeners
-  useEffect(() => {
-    const unlisten = onUpdaterEvent(({ error, status }) => {
-      console.log('Updater event:', status, error)
-
-      if (error) {
-        console.error('Updater error:', error)
-        setUpdateStatus({
-          type: 'error',
-          message: `Update failed: ${error}`,
-        })
-        return
-      }
-
-      // Handle status updates
-      if (status === 'UPTODATE') {
-        setUpdateStatus({ type: 'current', message: 'You are on the latest version' })
-      } else if (status === 'ERROR') {
-        setUpdateStatus({ type: 'error', message: error || 'Update failed' })
-      } else if (status === 'DONE') {
-        setUpdateStatus({ type: 'installing', message: 'Update complete! Restarting...' })
-      }
-    })
-
-    return () => {
-      unlisten.then((fn) => fn())
     }
   }, [])
 
@@ -132,72 +113,27 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     }
   }
 
-  const handleInstallUpdate = async () => {
+  const handleDownloadUpdate = async () => {
     if (!updateManifest) {
       console.error('No update manifest available')
-      setUpdateStatus({
-        type: 'error',
-        message: 'No update information available. Please check for updates first.',
-      })
       return
     }
 
-    setUpdateStatus({
-      type: 'downloading',
-      message: 'Downloading update... This may take a moment.',
-    })
-
     try {
-      console.log('Starting update installation...', updateManifest)
-
-      // Install the update - this downloads and prepares it
-      await installUpdate()
-
-      console.log('Update download complete, preparing to restart...')
+      // Open the GitHub releases page for this version
+      const downloadUrl = `https://github.com/AnthonyRandom/commhub/releases/tag/v${updateManifest.version}`
+      console.log('Opening download page:', downloadUrl)
+      await open(downloadUrl)
 
       setUpdateStatus({
-        type: 'installing',
-        message: 'Update ready! Restarting in 3 seconds...',
+        type: 'downloading',
+        message: 'Download page opened. Get the installer, close CommHub, then run it.',
       })
-
-      // Give user time to see the message, then restart
-      setTimeout(async () => {
-        try {
-          console.log('Relaunching application...')
-          await relaunch()
-        } catch (relaunchError: any) {
-          console.error('Relaunch error:', relaunchError)
-          setUpdateStatus({
-            type: 'error',
-            message:
-              'Update ready but failed to restart. Please close and reopen the app manually.',
-          })
-        }
-      }, 3000)
     } catch (error: any) {
-      console.error('Installation error:', error)
-      console.error('Error details:', JSON.stringify(error, null, 2))
-
-      let errorMessage = 'Failed to install update'
-
-      // Provide more helpful error messages
-      if (error.message) {
-        errorMessage = error.message
-      }
-
-      if (error.toString().includes('permission') || error.toString().includes('access')) {
-        errorMessage = 'Permission denied. Try closing the app and running the installer manually.'
-      } else if (error.toString().includes('download') || error.toString().includes('network')) {
-        errorMessage = 'Download failed. Check your internet connection and try again.'
-      } else if (error.toString().includes('signature') || error.toString().includes('verify')) {
-        errorMessage = 'Update signature verification failed. The update may be corrupted.'
-      } else if (error.toString().includes('already running')) {
-        errorMessage = 'Update already in progress. Please wait or restart the app.'
-      }
-
+      console.error('Failed to open download page:', error)
       setUpdateStatus({
         type: 'error',
-        message: errorMessage,
+        message: 'Failed to open download page. Visit: github.com/AnthonyRandom/commhub/releases',
       })
     }
   }
@@ -342,7 +278,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-grey-400 text-sm">Version</span>
-                  <span className="text-white text-sm font-mono">1.0.4</span>
+                  <span className="text-white text-sm font-mono">1.0.5</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-grey-400 text-sm">Product</span>
@@ -423,28 +359,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
                 {updateStatus.type === 'available' && (
                   <button
-                    onClick={handleInstallUpdate}
-                    className="flex-1 bg-blue-500 text-white border-2 border-blue-500 hover:bg-blue-600 font-bold py-3 px-4 transition-colors uppercase tracking-wide"
+                    onClick={handleDownloadUpdate}
+                    className="flex-1 bg-blue-500 text-white border-2 border-blue-500 hover:bg-blue-600 font-bold py-3 px-4 transition-colors uppercase tracking-wide flex items-center justify-center gap-2"
                   >
-                    Install Update
-                  </button>
-                )}
-
-                {updateStatus.type === 'downloading' && (
-                  <button
-                    disabled
-                    className="flex-1 bg-grey-700 text-grey-500 border-2 border-grey-700 font-bold py-3 px-4 uppercase tracking-wide cursor-not-allowed"
-                  >
-                    Downloading...
-                  </button>
-                )}
-
-                {updateStatus.type === 'installing' && (
-                  <button
-                    disabled
-                    className="flex-1 bg-grey-700 text-grey-500 border-2 border-grey-700 font-bold py-3 px-4 uppercase tracking-wide cursor-not-allowed"
-                  >
-                    Installing...
+                    <Download className="w-4 h-4" />
+                    Download Update
+                    <ExternalLink className="w-4 h-4" />
                   </button>
                 )}
               </div>

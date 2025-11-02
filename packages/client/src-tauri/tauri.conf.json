@@ -14,9 +14,6 @@
   "tauri": {
     "allowlist": {
       "all": false,
-      "updater": {
-        "active": true
-      },
       "shell": {
         "all": false,
         "open": true
@@ -78,8 +75,7 @@
       "endpoints": [
         "https://github.com/AnthonyRandom/commhub/releases/latest/download/latest.json"
       ],
-      "dialog": true,
-      "pubkey": ""
+      "dialog": true
     },
     "windows": [
       {

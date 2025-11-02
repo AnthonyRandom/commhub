@@ -10,10 +10,10 @@ import {
   Request,
   ParseIntPipe,
 } from '@nestjs/common';
-import { ServersService } from './servers.service';
-import { CreateServerDto } from './dto/create-server.dto';
-import { JoinServerDto } from './dto/join-server.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ServersService } from './servers.service.js';
+import { CreateServerDto } from './dto/create-server.dto.js';
+import { JoinServerDto } from './dto/join-server.dto.js';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 
 @Controller('servers')
 export class ServersController {

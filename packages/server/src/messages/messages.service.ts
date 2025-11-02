@@ -3,8 +3,8 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { CreateMessageDto } from './dto/create-message.dto';
+import { PrismaService } from '../prisma/prisma.service.js';
+import { CreateMessageDto } from './dto/create-message.dto.js';
 
 @Injectable()
 export class MessagesService {

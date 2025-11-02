@@ -4,9 +4,9 @@ import {
   ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { CreateServerDto } from './dto/create-server.dto';
-import { JoinServerDto } from './dto/join-server.dto';
+import { PrismaService } from '../prisma/prisma.service.js';
+import { CreateServerDto } from './dto/create-server.dto.js';
+import { JoinServerDto } from './dto/join-server.dto.js';
 
 @Injectable()
 export class ServersService {

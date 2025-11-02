@@ -1,13 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
-import { ThrottlerGuard } from '@nestjs/throttler';
-import { AppModule } from './app.module';
+import { ExpressAdapter } from '@nestjs/platform-express';
+import { AppModule } from './app.module.js';
 import helmet from 'helmet';
 import * as fs from 'fs';
 import * as path from 'path';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create(AppModule, new ExpressAdapter(), {
     httpsOptions: getHttpsOptions(),
   });
 
@@ -45,8 +45,7 @@ async function bootstrap() {
     maxAge: 86400, // 24 hours
   });
 
-  // Enable global throttling to prevent abuse
-  app.useGlobalGuards(new ThrottlerGuard());
+  // Note: ThrottlerGuard is automatically applied globally through ThrottlerModule configuration
 
   // Enable global validation with transformation and sanitization
   app.useGlobalPipes(

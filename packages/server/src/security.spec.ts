@@ -1,8 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
-import * as request from 'supertest';
-import { AppModule } from './app.module';
+import request from 'supertest';
+import { AppModule } from './app.module.js';
 
 describe('Security (e2e)', () => {
   let app: INestApplication;
@@ -168,18 +168,19 @@ describe('Security (e2e)', () => {
     });
   });
 
-  describe.skip('Rate Limiting', () => {
-    it('should enforce rate limiting', async () => {
+  describe('Rate Limiting', () => {
+    it('should enforce rate limiting on repeated requests', async () => {
       const agent = request.agent(app.getHttpServer());
 
-      // Make multiple requests quickly
+      // Make multiple requests quickly to trigger rate limiting
       const promises = [];
-      for (let i = 0; i < 15; i++) {
+      for (let i = 0; i < 12; i++) {
+        // Slightly above the 10 requests per minute limit
         promises.push(
           agent.post('/auth/register').send({
-            username: `testuser${i}`,
-            email: `test${i}@example.com`,
-            password: 'password123',
+            username: `testuser${i}_${Date.now()}`, // Unique username to avoid validation errors
+            email: `test${i}_${Date.now()}@example.com`, // Unique email
+            password: 'ValidPass123!',
           })
         );
       }
@@ -192,6 +193,12 @@ describe('Security (e2e)', () => {
       );
 
       expect(rateLimited).toBe(true);
+    });
+
+    it('should allow requests within rate limit', () => {
+      return request(app.getHttpServer())
+        .get('/auth/test-endpoint')
+        .expect(200);
     });
   });
 

@@ -10,8 +10,8 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Logger, Inject } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { MessagesService } from '../messages/messages.service';
-import { UsersService } from '../users/users.service';
+import { MessagesService } from '../messages/messages.service.js';
+import { UsersService } from '../users/users.service.js';
 
 interface AuthenticatedSocket extends Socket {
   userId?: number;

@@ -11,9 +11,9 @@ import {
   ParseIntPipe,
   Query,
 } from '@nestjs/common';
-import { MessagesService } from './messages.service';
-import { CreateMessageDto } from './dto/create-message.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { MessagesService } from './messages.service.js';
+import { CreateMessageDto } from './dto/create-message.dto.js';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 
 @Controller('messages')
 export class MessagesController {

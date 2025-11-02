@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
-import { ThrottlerModule } from '@nestjs/throttler';
-import { PrismaModule } from './prisma/prisma.module';
-import { AuthModule } from './auth/auth.module';
-import { UsersModule } from './users/users.module';
-import { ServersModule } from './servers/servers.module';
-import { ChannelsModule } from './channels/channels.module';
-import { MessagesModule } from './messages/messages.module';
-import { GatewayModule } from './gateway/gateway.module';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { PrismaModule } from './prisma/prisma.module.js';
+import { AuthModule } from './auth/auth.module.js';
+import { UsersModule } from './users/users.module.js';
+import { ServersModule } from './servers/servers.module.js';
+import { ChannelsModule } from './channels/channels.module.js';
+import { MessagesModule } from './messages/messages.module.js';
+import { GatewayModule } from './gateway/gateway.module.js';
 
 @Module({
   imports: [
@@ -28,6 +29,12 @@ import { GatewayModule } from './gateway/gateway.module';
     ChannelsModule,
     MessagesModule,
     GatewayModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

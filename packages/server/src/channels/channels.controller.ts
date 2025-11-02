@@ -11,10 +11,10 @@ import {
   ParseIntPipe,
   Query,
 } from '@nestjs/common';
-import { ChannelsService } from './channels.service';
-import { CreateChannelDto } from './dto/create-channel.dto';
-import { UpdateChannelDto } from './dto/update-channel.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ChannelsService } from './channels.service.js';
+import { CreateChannelDto } from './dto/create-channel.dto.js';
+import { UpdateChannelDto } from './dto/update-channel.dto.js';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 
 @Controller('channels')
 export class ChannelsController {

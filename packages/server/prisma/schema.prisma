@@ -1,0 +1,70 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  ownedServers Server[] @relation("ServerOwner")
+  servers      Server[] @relation("ServerMembers")
+  messages     Message[]
+  friends      User[]   @relation("UserFriends")
+  friendsOf    User[]   @relation("UserFriends")
+}
+
+model Server {
+  id          Int       @id @default(autoincrement())
+  name        String
+  description String?
+  inviteCode  String    @unique @default(cuid())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  ownerId   Int
+  owner     User      @relation("ServerOwner", fields: [ownerId], references: [id])
+  members   User[]    @relation("ServerMembers")
+  channels  Channel[]
+}
+
+model Channel {
+  id        Int       @id @default(autoincrement())
+  name      String
+  type      String    @default("text") // text or voice
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Relations
+  serverId Int
+  server   Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  messages Message[]
+}
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  content   String
+  createdAt DateTime @default(now())
+
+  // Relations
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  channelId Int
+  channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+}

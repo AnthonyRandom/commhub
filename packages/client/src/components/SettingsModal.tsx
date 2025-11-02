@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { X, Download, CheckCircle, AlertCircle, Bell, Volume2, Type, Clock } from 'lucide-react'
-import { checkUpdate, installUpdate } from '@tauri-apps/api/updater'
+import { checkUpdate, installUpdate, onUpdaterEvent } from '@tauri-apps/api/updater'
 import { relaunch } from '@tauri-apps/api/process'
+import type { UpdateManifest } from '@tauri-apps/api/updater'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -18,10 +19,12 @@ interface UserSettings {
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<{
-    type: 'idle' | 'checking' | 'available' | 'current' | 'error' | 'downloading'
+    type: 'idle' | 'checking' | 'available' | 'current' | 'error' | 'downloading' | 'installing'
     message: string
     version?: string
+    progress?: number
   }>({ type: 'idle', message: '' })
+  const [updateManifest, setUpdateManifest] = useState<UpdateManifest | null>(null)
 
   // User preferences state
   const [settings, setSettings] = useState<UserSettings>({
@@ -43,6 +46,35 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     }
   }, [])
 
+  // Set up updater event listeners
+  useEffect(() => {
+    const unlisten = onUpdaterEvent(({ error, status }) => {
+      console.log('Updater event:', status, error)
+
+      if (error) {
+        console.error('Updater error:', error)
+        setUpdateStatus({
+          type: 'error',
+          message: `Update failed: ${error}`,
+        })
+        return
+      }
+
+      // Handle status updates
+      if (status === 'UPTODATE') {
+        setUpdateStatus({ type: 'current', message: 'You are on the latest version' })
+      } else if (status === 'ERROR') {
+        setUpdateStatus({ type: 'error', message: error || 'Update failed' })
+      } else if (status === 'DONE') {
+        setUpdateStatus({ type: 'installing', message: 'Update complete! Restarting...' })
+      }
+    })
+
+    return () => {
+      unlisten.then((fn) => fn())
+    }
+  }, [])
+
   // Save settings to localStorage when they change
   const updateSetting = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
     const newSettings = { ...settings, [key]: value }
@@ -55,19 +87,24 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     setUpdateStatus({ type: 'checking', message: 'Checking for updates...' })
 
     try {
+      console.log('Checking for updates...')
       const { shouldUpdate, manifest } = await checkUpdate()
+      console.log('Update check result:', { shouldUpdate, manifest })
 
       if (shouldUpdate && manifest) {
+        setUpdateManifest(manifest)
         setUpdateStatus({
           type: 'available',
           message: `Update available: v${manifest.version}`,
           version: manifest.version,
         })
+        console.log('Update available:', manifest.version)
       } else {
         setUpdateStatus({
           type: 'current',
           message: 'You are on the latest version',
         })
+        console.log('Already on latest version')
       }
     } catch (error: any) {
       console.error('Update check error:', error)
@@ -96,33 +133,50 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   }
 
   const handleInstallUpdate = async () => {
-    setUpdateStatus({ type: 'downloading', message: 'Downloading update...' })
+    if (!updateManifest) {
+      console.error('No update manifest available')
+      setUpdateStatus({
+        type: 'error',
+        message: 'No update information available. Please check for updates first.',
+      })
+      return
+    }
+
+    setUpdateStatus({
+      type: 'downloading',
+      message: 'Downloading update... This may take a moment.',
+    })
 
     try {
-      console.log('Starting update installation...')
+      console.log('Starting update installation...', updateManifest)
+
+      // Install the update - this downloads and prepares it
       await installUpdate()
-      console.log('Update installed successfully')
+
+      console.log('Update download complete, preparing to restart...')
 
       setUpdateStatus({
-        type: 'current',
-        message: 'Update installed! Restarting in 3 seconds...',
+        type: 'installing',
+        message: 'Update ready! Restarting in 3 seconds...',
       })
 
-      // Relaunch the app to apply the update
+      // Give user time to see the message, then restart
       setTimeout(async () => {
         try {
-          console.log('Relaunching app...')
+          console.log('Relaunching application...')
           await relaunch()
         } catch (relaunchError: any) {
           console.error('Relaunch error:', relaunchError)
           setUpdateStatus({
             type: 'error',
-            message: 'Update installed but failed to restart. Please restart manually.',
+            message:
+              'Update ready but failed to restart. Please close and reopen the app manually.',
           })
         }
       }, 3000)
     } catch (error: any) {
       console.error('Installation error:', error)
+      console.error('Error details:', JSON.stringify(error, null, 2))
 
       let errorMessage = 'Failed to install update'
 
@@ -132,11 +186,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       }
 
       if (error.toString().includes('permission') || error.toString().includes('access')) {
-        errorMessage = 'Permission denied. Try running as administrator.'
-      } else if (error.toString().includes('download')) {
-        errorMessage = 'Download failed. Check your internet connection.'
-      } else if (error.toString().includes('signature')) {
-        errorMessage = 'Update signature verification failed.'
+        errorMessage = 'Permission denied. Try closing the app and running the installer manually.'
+      } else if (error.toString().includes('download') || error.toString().includes('network')) {
+        errorMessage = 'Download failed. Check your internet connection and try again.'
+      } else if (error.toString().includes('signature') || error.toString().includes('verify')) {
+        errorMessage = 'Update signature verification failed. The update may be corrupted.'
+      } else if (error.toString().includes('already running')) {
+        errorMessage = 'Update already in progress. Please wait or restart the app.'
       }
 
       setUpdateStatus({
@@ -286,7 +342,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-grey-400 text-sm">Version</span>
-                  <span className="text-white text-sm font-mono">1.0.3</span>
+                  <span className="text-white text-sm font-mono">1.0.4</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-grey-400 text-sm">Product</span>
@@ -380,6 +436,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                     className="flex-1 bg-grey-700 text-grey-500 border-2 border-grey-700 font-bold py-3 px-4 uppercase tracking-wide cursor-not-allowed"
                   >
                     Downloading...
+                  </button>
+                )}
+
+                {updateStatus.type === 'installing' && (
+                  <button
+                    disabled
+                    className="flex-1 bg-grey-700 text-grey-500 border-2 border-grey-700 font-bold py-3 px-4 uppercase tracking-wide cursor-not-allowed"
+                  >
+                    Installing...
                   </button>
                 )}
               </div>

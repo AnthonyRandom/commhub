@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "CommHub desktop client application",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -15,6 +16,7 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,scss,md}\""
   },
   "dependencies": {
+    "@tailwindcss/postcss": "^4.1.16",
     "@tauri-apps/api": "^1.0.0",
     "axios": "^1.0.0",
     "lucide-svelte": "^0.378.0",
@@ -22,7 +24,7 @@
     "zustand": "^4.0.0"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^3.0.0",
+    "@sveltejs/vite-plugin-svelte": "^4.0.4",
     "@tauri-apps/cli": "^1.0.0",
     "@tsconfig/svelte": "^4.0.0",
     "@types/lodash": "^4.0.0",
@@ -35,11 +37,11 @@
     "postcss": "^8.0.0",
     "prettier": "^3.0.0",
     "prettier-plugin-svelte": "^3.0.0",
-    "svelte": "^5.0.0",
+    "svelte": "^5.43.2",
     "svelte-check": "^4.0.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.0.0",
-    "vite": "^7.0.0",
+    "vite": "^5.4.21",
     "vitest": "^4.0.0"
   },
   "engines": {

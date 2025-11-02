@@ -51,7 +51,10 @@
   <!-- Channel Header -->
   <div class="h-12 bg-gray-700 flex items-center px-4 border-b border-gray-600">
     <Hash size={20} class="text-gray-400 mr-2" />
-    <h2 class="text-white font-semibold">{selectedChannel}</h2>
+    <div class="flex flex-col">
+      <span class="text-xs text-gray-400">{selectedServer}</span>
+      <h2 class="text-white font-semibold">{selectedChannel}</h2>
+    </div>
     <div class="ml-auto text-sm text-gray-400">
       {messages.length} messages
     </div>

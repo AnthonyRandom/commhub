@@ -98,6 +98,22 @@ temp/
 
 # Tauri
 packages/client/src-tauri/target/
+packages/client/src-tauri/gen/
+
+# Svelte
+.svelte-kit/
+
+# Vite
+.vite/
+
+# Tailwind CSS
+packages/client/.tailwindcss/
+
+# TypeScript
+*.tsbuildinfo
+
+# Tauri app bundles
+packages/client/src-tauri/bundle/
 
 # SSL certificates (development)
 packages/server/ssl/

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { apiService, type Server } from '../services/api'
+import { apiService, type Server, type User } from '../services/api'
 
 interface ServersState {
   servers: Server[]
@@ -14,6 +14,8 @@ interface ServersState {
   leaveServer: (serverId: number) => Promise<void>
   selectServer: (server: Server | null) => void
   getServerInviteCode: (serverId: number) => Promise<string>
+  addMemberToServer: (serverId: number, user: Pick<User, 'id' | 'username'>) => void
+  removeMemberFromServer: (serverId: number, userId: number) => void
   clearError: () => void
 }
 
@@ -127,6 +129,51 @@ export const useServersStore = create<ServersState>((set, get) => ({
       set({ error: errorMessage })
       throw error
     }
+  },
+
+  addMemberToServer: (serverId: number, user: Pick<User, 'id' | 'username'>) => {
+    set((state) => {
+      const servers = state.servers.map((server) => {
+        if (server.id === serverId) {
+          const memberExists = server.members?.some((m) => m.id === user.id)
+          if (!memberExists) {
+            return {
+              ...server,
+              members: [...(server.members || []), { ...user, email: '' }],
+            }
+          }
+        }
+        return server
+      })
+
+      const currentServer =
+        state.currentServer?.id === serverId
+          ? servers.find((s) => s.id === serverId) || state.currentServer
+          : state.currentServer
+
+      return { servers, currentServer }
+    })
+  },
+
+  removeMemberFromServer: (serverId: number, userId: number) => {
+    set((state) => {
+      const servers = state.servers.map((server) => {
+        if (server.id === serverId) {
+          return {
+            ...server,
+            members: server.members?.filter((m) => m.id !== userId) || [],
+          }
+        }
+        return server
+      })
+
+      const currentServer =
+        state.currentServer?.id === serverId
+          ? servers.find((s) => s.id === serverId) || state.currentServer
+          : state.currentServer
+
+      return { servers, currentServer }
+    })
   },
 
   clearError: () => {

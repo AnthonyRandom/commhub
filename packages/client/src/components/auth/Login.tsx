@@ -3,6 +3,7 @@ import { useAuthStore } from '../../stores/auth'
 
 interface LoginProps {
   onLoginSuccess: () => void
+  onSwitchToRegister: () => void
 }
 
 const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {

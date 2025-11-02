@@ -1,6 +1,7 @@
 import { wsService } from './websocket'
 import { apiService } from './api'
 import { useMessagesStore } from '../stores/messages'
+import { useServersStore } from '../stores/servers'
 
 class WebSocketManager {
   private isInitialized = false
@@ -14,9 +15,25 @@ class WebSocketManager {
 
     // Initialize WebSocket listeners
     useMessagesStore.getState().initializeWebSocketListeners()
+    this.initializeServerListeners()
 
     // Set up auth-based connection management
     this.checkAndConnect()
+  }
+
+  private initializeServerListeners() {
+    // Listen for users joining servers
+    wsService.onUserJoined((data) => {
+      useServersStore.getState().addMemberToServer(data.serverId, {
+        id: data.userId,
+        username: data.username,
+      })
+    })
+
+    // Listen for users leaving servers
+    wsService.onUserLeft((data) => {
+      useServersStore.getState().removeMemberFromServer(data.serverId, data.userId)
+    })
   }
 
   connect() {

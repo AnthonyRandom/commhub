@@ -1,7 +1,7 @@
 import { io, Socket } from 'socket.io-client'
 
 // WebSocket URL - adjust for production
-const WS_BASE_URL = 'http://localhost:3000/chat'
+const WS_BASE_URL = 'https://commhub-production.up.railway.app/chat'
 
 export interface WSMessage {
   id: number
@@ -19,11 +19,13 @@ export interface FriendPresence {
 }
 
 export interface UserJoined {
+  serverId: number
   userId: number
   username: string
 }
 
 export interface UserLeft {
+  serverId: number
   userId: number
   username: string
 }

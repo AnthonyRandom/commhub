@@ -2,7 +2,7 @@ import axios from 'axios'
 import type { AxiosInstance, AxiosResponse } from 'axios'
 
 // API Base URL - adjust for production
-const API_BASE_URL = 'http://localhost:3000'
+const API_BASE_URL = 'https://commhub-production.up.railway.app'
 
 // Types
 export interface User {
@@ -24,6 +24,7 @@ export interface Server {
   inviteCode: string
   createdAt: string
   updatedAt: string
+  members?: User[]
 }
 
 export interface Channel {

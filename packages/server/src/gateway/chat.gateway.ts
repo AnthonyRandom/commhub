@@ -93,6 +93,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     // Notify others in the server
     client.to(roomName).emit('user-joined', {
+      serverId: data.serverId,
       userId: client.userId,
       username: client.username,
     });
@@ -109,6 +110,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     // Notify others in the server
     client.to(roomName).emit('user-left', {
+      serverId: data.serverId,
       userId: client.userId,
       username: client.username,
     });

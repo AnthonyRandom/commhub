@@ -1,8 +1,15 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useAuthStore } from '../../stores/auth'
+import { Check, X } from 'lucide-react'
 
 interface RegisterProps {
   onRegisterSuccess: () => void
+  onSwitchToLogin: () => void
+}
+
+interface ValidationResult {
+  isValid: boolean
+  message: string
 }
 
 const Register: React.FC<RegisterProps> = ({ onRegisterSuccess }) => {
@@ -14,8 +21,46 @@ const Register: React.FC<RegisterProps> = ({ onRegisterSuccess }) => {
 
   const { error, register } = useAuthStore()
 
-  const passwordsMatch = password === confirmPassword
-  const canSubmit = username.trim() && email.trim() && password && passwordsMatch && !isSubmitting
+  // Username validation (must match server rules)
+  const usernameValidation = useMemo((): ValidationResult => {
+    if (!username) return { isValid: false, message: '' }
+    if (username.length < 3) return { isValid: false, message: 'At least 3 characters' }
+    if (username.length > 30) return { isValid: false, message: 'Max 30 characters' }
+    if (!/^[a-zA-Z0-9_]+$/.test(username))
+      return { isValid: false, message: 'Only letters, numbers, underscore' }
+    return { isValid: true, message: 'Valid username' }
+  }, [username])
+
+  // Email validation
+  const emailValidation = useMemo((): ValidationResult => {
+    if (!email) return { isValid: false, message: '' }
+    if (email.length > 254) return { isValid: false, message: 'Email too long' }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) return { isValid: false, message: 'Invalid email format' }
+    return { isValid: true, message: 'Valid email' }
+  }, [email])
+
+  // Password validation (server requires min 6 chars)
+  const passwordValidation = useMemo((): ValidationResult => {
+    if (!password) return { isValid: false, message: '' }
+    if (password.length < 6) return { isValid: false, message: 'At least 6 characters' }
+    if (password.length > 128) return { isValid: false, message: 'Max 128 characters' }
+    return { isValid: true, message: 'Valid password' }
+  }, [password])
+
+  // Confirm password validation
+  const confirmPasswordValidation = useMemo((): ValidationResult => {
+    if (!confirmPassword) return { isValid: false, message: '' }
+    if (password !== confirmPassword) return { isValid: false, message: 'Passwords do not match' }
+    return { isValid: true, message: 'Passwords match' }
+  }, [password, confirmPassword])
+
+  const allValid =
+    usernameValidation.isValid &&
+    emailValidation.isValid &&
+    passwordValidation.isValid &&
+    confirmPasswordValidation.isValid
+  const canSubmit = allValid && !isSubmitting
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -60,20 +105,41 @@ const Register: React.FC<RegisterProps> = ({ onRegisterSuccess }) => {
           >
             Username
           </label>
-          <input
-            id="username"
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            onKeyPress={handleKeyPress}
-            required
-            className="w-full px-4 py-3 bg-grey-850 border-2 border-grey-700 text-white placeholder-grey-600 focus:border-white transition-colors disabled:opacity-50"
-            placeholder="Choose username"
-            disabled={isSubmitting}
-          />
-          <p className="mt-1 text-xs text-grey-500 uppercase tracking-wide">
-            Letters, numbers, underscores
-          </p>
+          <div className="relative">
+            <input
+              id="username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              onKeyPress={handleKeyPress}
+              required
+              className={`w-full px-4 py-3 pr-10 bg-grey-850 border-2 text-white placeholder-grey-600 focus:border-white transition-colors disabled:opacity-50 ${
+                username && !usernameValidation.isValid
+                  ? 'border-red-500'
+                  : username && usernameValidation.isValid
+                    ? 'border-green-500'
+                    : 'border-grey-700'
+              }`}
+              placeholder="Choose username"
+              disabled={isSubmitting}
+            />
+            {username && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                {usernameValidation.isValid ? (
+                  <Check className="w-5 h-5 text-green-500" />
+                ) : (
+                  <X className="w-5 h-5 text-red-500" />
+                )}
+              </div>
+            )}
+          </div>
+          {username && usernameValidation.message && (
+            <p
+              className={`mt-1 text-xs font-bold uppercase tracking-wide ${usernameValidation.isValid ? 'text-green-400' : 'text-red-400'}`}
+            >
+              {usernameValidation.message}
+            </p>
+          )}
         </div>
 
         {/* Email Input */}
@@ -84,17 +150,41 @@ const Register: React.FC<RegisterProps> = ({ onRegisterSuccess }) => {
           >
             Email
           </label>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyPress={handleKeyPress}
-            required
-            className="w-full px-4 py-3 bg-grey-850 border-2 border-grey-700 text-white placeholder-grey-600 focus:border-white transition-colors disabled:opacity-50"
-            placeholder="Enter email"
-            disabled={isSubmitting}
-          />
+          <div className="relative">
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyPress={handleKeyPress}
+              required
+              className={`w-full px-4 py-3 pr-10 bg-grey-850 border-2 text-white placeholder-grey-600 focus:border-white transition-colors disabled:opacity-50 ${
+                email && !emailValidation.isValid
+                  ? 'border-red-500'
+                  : email && emailValidation.isValid
+                    ? 'border-green-500'
+                    : 'border-grey-700'
+              }`}
+              placeholder="Enter email"
+              disabled={isSubmitting}
+            />
+            {email && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                {emailValidation.isValid ? (
+                  <Check className="w-5 h-5 text-green-500" />
+                ) : (
+                  <X className="w-5 h-5 text-red-500" />
+                )}
+              </div>
+            )}
+          </div>
+          {email && emailValidation.message && (
+            <p
+              className={`mt-1 text-xs font-bold uppercase tracking-wide ${emailValidation.isValid ? 'text-green-400' : 'text-red-400'}`}
+            >
+              {emailValidation.message}
+            </p>
+          )}
         </div>
 
         {/* Password Input */}
@@ -105,20 +195,41 @@ const Register: React.FC<RegisterProps> = ({ onRegisterSuccess }) => {
           >
             Password
           </label>
-          <input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyPress={handleKeyPress}
-            required
-            className="w-full px-4 py-3 bg-grey-850 border-2 border-grey-700 text-white placeholder-grey-600 focus:border-white transition-colors disabled:opacity-50"
-            placeholder="Create password"
-            disabled={isSubmitting}
-          />
-          <p className="mt-1 text-xs text-grey-500 uppercase tracking-wide">
-            Min 8 chars, mixed case, number, special
-          </p>
+          <div className="relative">
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyPress={handleKeyPress}
+              required
+              className={`w-full px-4 py-3 pr-10 bg-grey-850 border-2 text-white placeholder-grey-600 focus:border-white transition-colors disabled:opacity-50 ${
+                password && !passwordValidation.isValid
+                  ? 'border-red-500'
+                  : password && passwordValidation.isValid
+                    ? 'border-green-500'
+                    : 'border-grey-700'
+              }`}
+              placeholder="Create password"
+              disabled={isSubmitting}
+            />
+            {password && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                {passwordValidation.isValid ? (
+                  <Check className="w-5 h-5 text-green-500" />
+                ) : (
+                  <X className="w-5 h-5 text-red-500" />
+                )}
+              </div>
+            )}
+          </div>
+          {password && passwordValidation.message && (
+            <p
+              className={`mt-1 text-xs font-bold uppercase tracking-wide ${passwordValidation.isValid ? 'text-green-400' : 'text-red-400'}`}
+            >
+              {passwordValidation.message}
+            </p>
+          )}
         </div>
 
         {/* Confirm Password Input */}
@@ -129,22 +240,39 @@ const Register: React.FC<RegisterProps> = ({ onRegisterSuccess }) => {
           >
             Confirm Password
           </label>
-          <input
-            id="confirmPassword"
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            onKeyPress={handleKeyPress}
-            required
-            className={`w-full px-4 py-3 bg-grey-850 border-2 text-white placeholder-grey-600 focus:border-white transition-colors disabled:opacity-50 ${
-              password && confirmPassword && !passwordsMatch ? 'border-red-500' : 'border-grey-700'
-            }`}
-            placeholder="Confirm password"
-            disabled={isSubmitting}
-          />
-          {password && confirmPassword && !passwordsMatch && (
-            <p className="mt-1 text-xs text-red-400 font-bold uppercase tracking-wide">
-              Passwords do not match
+          <div className="relative">
+            <input
+              id="confirmPassword"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              onKeyPress={handleKeyPress}
+              required
+              className={`w-full px-4 py-3 pr-10 bg-grey-850 border-2 text-white placeholder-grey-600 focus:border-white transition-colors disabled:opacity-50 ${
+                confirmPassword && !confirmPasswordValidation.isValid
+                  ? 'border-red-500'
+                  : confirmPassword && confirmPasswordValidation.isValid
+                    ? 'border-green-500'
+                    : 'border-grey-700'
+              }`}
+              placeholder="Confirm password"
+              disabled={isSubmitting}
+            />
+            {confirmPassword && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                {confirmPasswordValidation.isValid ? (
+                  <Check className="w-5 h-5 text-green-500" />
+                ) : (
+                  <X className="w-5 h-5 text-red-500" />
+                )}
+              </div>
+            )}
+          </div>
+          {confirmPassword && confirmPasswordValidation.message && (
+            <p
+              className={`mt-1 text-xs font-bold uppercase tracking-wide ${confirmPasswordValidation.isValid ? 'text-green-400' : 'text-red-400'}`}
+            >
+              {confirmPasswordValidation.message}
             </p>
           )}
         </div>

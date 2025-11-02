@@ -43,10 +43,7 @@ const MembersModal: React.FC<MembersModalProps> = ({ isOpen, onClose, server }) 
                     <div className="flex items-center gap-2">
                       <span className="text-white font-medium truncate">{member.username}</span>
                       {server.ownerId === member.id && (
-                        <Crown
-                          className="w-4 h-4 text-yellow-500 flex-shrink-0"
-                          title="Server Owner"
-                        />
+                        <Crown className="w-4 h-4 text-yellow-500 flex-shrink-0" />
                       )}
                     </div>
                     <p className="text-grey-400 text-sm truncate">

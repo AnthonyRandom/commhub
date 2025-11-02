@@ -55,10 +55,10 @@
       }
     },
     "bundle": {
-      "active": false,
+      "active": true,
       "targets": "all",
       "identifier": "com.commhub.app",
-      "icon": [],
+      "icon": ["icons/icon.ico"],
       "windows": {
         "certificateThumbprint": null,
         "digestAlgorithm": "sha256",

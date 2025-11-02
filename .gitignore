@@ -2,6 +2,11 @@
 PRD.md
 TODO.md
 TECHSTACK.md
+AUTO_UPDATE_SETUP.md
+
+# Keys
+packages/client/commhub.key
+packages/client/commhub.key.pub
 
 # Dependencies
 node_modules/

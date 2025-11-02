@@ -9,11 +9,14 @@
   },
   "package": {
     "productName": "CommHub",
-    "version": "1.0.0"
+    "version": "1.0.1"
   },
   "tauri": {
     "allowlist": {
       "all": false,
+      "updater": {
+        "active": true
+      },
       "shell": {
         "all": false,
         "open": true
@@ -69,6 +72,14 @@
     },
     "security": {
       "csp": null
+    },
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/AnthonyRandom/commhub/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "pubkey": ""
     },
     "windows": [
       {

@@ -11,6 +11,7 @@ interface SidebarProps {
   onCreateServer: () => void
   onCreateChannel: () => void
   onServerSettings: () => void
+  onAppSettings: () => void
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -21,6 +22,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onCreateServer,
   onCreateChannel,
   onServerSettings,
+  onAppSettings,
 }) => {
   return (
     <div className="flex h-full">
@@ -35,6 +37,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         onChannelSelect={onChannelSelect}
         onCreateChannel={onCreateChannel}
         onServerSettings={onServerSettings}
+        onAppSettings={onAppSettings}
       />
     </div>
   )

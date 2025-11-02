@@ -4,6 +4,7 @@ import ChatArea from './components/ChatArea'
 import Auth from './components/auth/Auth'
 import ServerModal from './components/ServerModal'
 import ChannelModal from './components/ChannelModal'
+import SettingsModal from './components/SettingsModal'
 import { useAuthStore } from './stores/auth'
 import { useServersStore } from './stores/servers'
 import { wsManager } from './services/websocket-manager'
@@ -16,6 +17,7 @@ function App() {
   const [showServerModal, setShowServerModal] = useState(false)
   const [showChannelModal, setShowChannelModal] = useState(false)
   const [showServerSettings, setShowServerSettings] = useState(false)
+  const [showAppSettings, setShowAppSettings] = useState(false)
 
   const { isAuthenticated, isLoading } = useAuthStore()
   const selectServer = useServersStore((state) => state.selectServer)
@@ -70,6 +72,10 @@ function App() {
     setShowServerSettings(true)
   }
 
+  const handleAppSettings = () => {
+    setShowAppSettings(true)
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-grey-950">
@@ -94,6 +100,7 @@ function App() {
             onCreateServer={handleCreateServer}
             onCreateChannel={handleCreateChannel}
             onServerSettings={handleServerSettings}
+            onAppSettings={handleAppSettings}
           />
           <ChatArea selectedChannel={selectedChannel} server={selectedServer} />
         </main>
@@ -105,6 +112,7 @@ function App() {
           serverId={selectedServer?.id || null}
           onClose={() => setShowChannelModal(false)}
         />
+        <SettingsModal isOpen={showAppSettings} onClose={() => setShowAppSettings(false)} />
 
         {/* Server Settings Modal - Placeholder */}
         {showServerSettings && selectedServer && (

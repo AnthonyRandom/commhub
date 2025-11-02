@@ -11,6 +11,7 @@ interface ChannelListProps {
   onChannelSelect: (channel: Channel) => void
   onCreateChannel: () => void
   onServerSettings: () => void
+  onAppSettings: () => void
 }
 
 const ChannelList: React.FC<ChannelListProps> = ({
@@ -19,6 +20,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
   onChannelSelect,
   onCreateChannel,
   onServerSettings,
+  onAppSettings,
 }) => {
   const getChannelsByServer = useChannelsStore((state) => state.getChannelsByServer)
   const fetchChannels = useChannelsStore((state) => state.fetchChannels)
@@ -259,13 +261,22 @@ const ChannelList: React.FC<ChannelListProps> = ({
             <p className="text-grey-500 text-xs truncate">{user?.email}</p>
           </div>
         </div>
-        <button
-          onClick={handleLogout}
-          className="p-2 text-grey-400 hover:text-white hover:bg-grey-800 transition-colors border-2 border-transparent hover:border-grey-700 flex-shrink-0"
-          title="Logout"
-        >
-          <LogOut className="w-4 h-4" />
-        </button>
+        <div className="flex gap-1 flex-shrink-0">
+          <button
+            onClick={onAppSettings}
+            className="p-2 text-grey-400 hover:text-white hover:bg-grey-800 transition-colors border-2 border-transparent hover:border-grey-700"
+            title="Settings"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleLogout}
+            className="p-2 text-grey-400 hover:text-white hover:bg-grey-800 transition-colors border-2 border-transparent hover:border-grey-700"
+            title="Logout"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -95,7 +95,7 @@ function App() {
             onCreateChannel={handleCreateChannel}
             onServerSettings={handleServerSettings}
           />
-          <ChatArea selectedChannel={selectedChannel} />
+          <ChatArea selectedChannel={selectedChannel} server={selectedServer} />
         </main>
 
         {/* Modals */}

@@ -3,14 +3,17 @@ import { Hash, Send, Users } from 'lucide-react'
 import { useMessagesStore } from '../stores/messages'
 import { wsManager } from '../services/websocket-manager'
 import { useAuthStore } from '../stores/auth'
-import type { Channel } from '../services/api'
+import MembersModal from './MembersModal'
+import type { Channel, Server } from '../services/api'
 
 interface ChatAreaProps {
   selectedChannel: Channel | null
+  server: Server | null
 }
 
-const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel }) => {
+const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   const [messageInput, setMessageInput] = useState('')
+  const [showMembersModal, setShowMembersModal] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -107,6 +110,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel }) => {
           <h2 className="font-bold text-white text-lg">{selectedChannel.name}</h2>
         </div>
         <button
+          onClick={() => setShowMembersModal(true)}
           className="p-2 text-grey-400 hover:text-white hover:bg-grey-850 transition-colors border-2 border-transparent hover:border-grey-700"
           title="Members"
         >
@@ -204,6 +208,13 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel }) => {
         </form>
         <p className="text-grey-600 text-xs mt-2">Press Enter to send, Shift+Enter for new line</p>
       </div>
+
+      {/* Members Modal */}
+      <MembersModal
+        isOpen={showMembersModal}
+        onClose={() => setShowMembersModal(false)}
+        server={server}
+      />
     </div>
   )
 }

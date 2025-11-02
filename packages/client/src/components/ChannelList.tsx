@@ -20,7 +20,6 @@ const ChannelList: React.FC<ChannelListProps> = ({
   onCreateChannel,
   onServerSettings,
 }) => {
-  const channels = useChannelsStore((state) => state.channels)
   const getChannelsByServer = useChannelsStore((state) => state.getChannelsByServer)
   const fetchChannels = useChannelsStore((state) => state.fetchChannels)
   const leaveServer = useServersStore((state) => state.leaveServer)

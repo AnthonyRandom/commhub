@@ -6,13 +6,19 @@ WORKDIR /app
 
 # Install dependencies first (for better caching)
 COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
+RUN npm install --legacy-peer-deps && npm cache clean --force
 
 # Copy source code
 COPY . .
 
 # Build the application
 RUN npm run build
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Remove dev dependencies to reduce image size
+RUN npm prune --production
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \

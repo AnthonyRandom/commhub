@@ -17,6 +17,9 @@ RUN npm run build
 # Generate Prisma client
 RUN npx prisma generate
 
+# Fix rxjs/operators compatibility issue for NestJS
+RUN mkdir -p node_modules/rxjs/operators && cp rxjs-operators-fix.js node_modules/rxjs/operators/index.js
+
 # Remove dev dependencies to reduce image size
 RUN npm prune --production
 

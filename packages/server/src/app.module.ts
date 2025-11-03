@@ -8,6 +8,8 @@ import { ServersModule } from './servers/servers.module.js';
 import { ChannelsModule } from './channels/channels.module.js';
 import { MessagesModule } from './messages/messages.module.js';
 import { GatewayModule } from './gateway/gateway.module.js';
+import { FriendRequestsModule } from './friend-requests/friend-requests.module.js';
+import { DirectMessagesModule } from './direct-messages/direct-messages.module.js';
 
 @Module({
   imports: [
@@ -29,6 +31,8 @@ import { GatewayModule } from './gateway/gateway.module.js';
     ChannelsModule,
     MessagesModule,
     GatewayModule,
+    FriendRequestsModule,
+    DirectMessagesModule,
   ],
   providers: [
     {

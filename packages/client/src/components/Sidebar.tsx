@@ -1,0 +1,52 @@
+import React from 'react'
+import ServerList from './ServerList'
+import ChannelList from './ChannelList'
+import type { Server, Channel } from '../services/api'
+
+interface SidebarProps {
+  selectedServer: Server | null
+  selectedChannel: Channel | null
+  onChannelSelect: (channel: Channel) => void
+  onServerSelect: (server: Server | null) => void
+  onCreateServer: () => void
+  onCreateChannel: () => void
+  onServerSettings: () => void
+  onAppSettings: () => void
+  onShowFriends: () => void
+  showFriendsPanel: boolean
+}
+
+const Sidebar: React.FC<SidebarProps> = ({
+  selectedServer,
+  selectedChannel,
+  onChannelSelect,
+  onServerSelect,
+  onCreateServer,
+  onCreateChannel,
+  onServerSettings,
+  onAppSettings,
+  onShowFriends,
+  showFriendsPanel,
+}) => {
+  return (
+    <div className="flex h-full">
+      <ServerList
+        selectedServer={selectedServer}
+        onServerSelect={onServerSelect}
+        onCreateServer={onCreateServer}
+        onShowFriends={onShowFriends}
+        showFriendsPanel={showFriendsPanel}
+      />
+      <ChannelList
+        server={selectedServer}
+        selectedChannel={selectedChannel}
+        onChannelSelect={onChannelSelect}
+        onCreateChannel={onCreateChannel}
+        onServerSettings={onServerSettings}
+        onAppSettings={onAppSettings}
+      />
+    </div>
+  )
+}
+
+export default Sidebar

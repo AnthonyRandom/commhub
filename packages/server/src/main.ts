@@ -38,6 +38,7 @@ async function bootstrap() {
     origin: process.env.ALLOWED_ORIGINS?.split(',') || [
       'http://localhost:3000',
       'http://localhost:5173',
+      'http://localhost:1420', // Add Vite dev server port
     ], // Default for development
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization'],

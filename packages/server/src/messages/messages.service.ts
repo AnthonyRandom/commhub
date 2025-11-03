@@ -61,6 +61,9 @@ export class MessagesService {
   }
 
   async findAll(channelId?: number, userId?: number, limit = 50, offset = 0) {
+    // Enforce maximum limit to prevent DOS
+    const maxLimit = 100;
+    const safeLimit = Math.min(limit, maxLimit);
     const where: any = {};
 
     if (channelId) {
@@ -107,9 +110,9 @@ export class MessagesService {
         },
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: 'asc',
       },
-      take: limit,
+      take: safeLimit,
       skip: offset,
     });
   }
@@ -161,6 +164,7 @@ export class MessagesService {
       where: { id },
       select: {
         userId: true,
+        createdAt: true,
         channel: {
           select: {
             server: {
@@ -189,9 +193,22 @@ export class MessagesService {
       throw new ForbiddenException('You are not a member of this server');
     }
 
+    // Prevent editing messages older than 15 minutes
+    const timeSinceCreation =
+      Date.now() - new Date(message.createdAt).getTime();
+    const fifteenMinutes = 15 * 60 * 1000;
+
+    if (timeSinceCreation > fifteenMinutes) {
+      throw new ForbiddenException(
+        'Cannot edit messages older than 15 minutes'
+      );
+    }
+
     return this.prisma.message.update({
       where: { id },
-      data: { content },
+      data: {
+        content,
+      },
       include: {
         user: {
           select: {
@@ -262,6 +279,9 @@ export class MessagesService {
     limit = 50,
     offset = 0
   ) {
+    // Enforce maximum limit to prevent DOS
+    const maxLimit = 100;
+    const safeLimit = Math.min(limit, maxLimit);
     // Check if channel exists and user has access
     const channel = await this.prisma.channel.findUnique({
       where: { id: channelId },
@@ -297,9 +317,9 @@ export class MessagesService {
         },
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: 'asc',
       },
-      take: limit,
+      take: safeLimit,
       skip: offset,
     });
   }

@@ -120,7 +120,7 @@ export class ChannelsService {
         messages: {
           take: 50, // Last 50 messages
           orderBy: {
-            createdAt: 'desc',
+            createdAt: 'asc',
           },
           include: {
             user: {
@@ -248,6 +248,9 @@ export class ChannelsService {
     limit = 50,
     offset = 0
   ) {
+    // Enforce maximum limit to prevent DOS
+    const maxLimit = 100;
+    const safeLimit = Math.min(limit, maxLimit);
     // Check if channel exists and user has access
     const channel = await this.prisma.channel.findUnique({
       where: { id: channelId },
@@ -283,9 +286,9 @@ export class ChannelsService {
         },
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: 'asc',
       },
-      take: limit,
+      take: safeLimit,
       skip: offset,
     });
   }

@@ -1,7 +1,29 @@
-# Documentation files
+# Keys and sensitive files
+packages/client/commhub.key
+packages/client/commhub.key.pub
+packages/client/commhub.key.*
+
+# Private documentation and setup files
 PRD.md
 TODO.md
 TECHSTACK.md
+AUTO_UPDATE_SETUP.md
+packages/client/UI_OVERVIEW.md
+README.md
+packages/server/README.md
+
+# Setup scripts and deployment configs
+setup-server.bat
+setup-server.sh
+docker-compose.yml
+docker.env.example
+packages/server/env.example
+packages/server/Dockerfile
+railway.json
+packages/server/railway.json
+
+# Prototypes and research
+prototypes/
 
 # Dependencies
 node_modules/
@@ -20,6 +42,11 @@ target/
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
 
 # IDE
 .vscode/
@@ -98,6 +125,22 @@ temp/
 
 # Tauri
 packages/client/src-tauri/target/
+packages/client/src-tauri/gen/
+
+# Svelte
+.svelte-kit/
+
+# Vite
+.vite/
+
+# Tailwind CSS
+packages/client/.tailwindcss/
+
+# TypeScript
+*.tsbuildinfo
+
+# Tauri app bundles
+packages/client/src-tauri/bundle/
 
 # SSL certificates (development)
 packages/server/ssl/

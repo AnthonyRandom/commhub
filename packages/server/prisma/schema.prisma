@@ -9,8 +9,8 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -22,11 +22,17 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Relations
-  ownedServers Server[] @relation("ServerOwner")
-  servers      Server[] @relation("ServerMembers")
-  messages     Message[]
-  friends      User[]   @relation("UserFriends")
-  friendsOf    User[]   @relation("UserFriends")
+  ownedServers       Server[]         @relation("ServerOwner")
+  servers            Server[]         @relation("ServerMembers")
+  messages           Message[]
+  friends            User[]           @relation("UserFriends")
+  friendsOf          User[]           @relation("UserFriends")
+  blockedUsers       User[]           @relation("BlockedUsers")
+  blockedBy          User[]           @relation("BlockedUsers")
+  sentFriendRequests FriendRequest[]  @relation("FriendRequestSender")
+  receivedFriendRequests FriendRequest[] @relation("FriendRequestReceiver")
+  sentDirectMessages DirectMessage[]  @relation("DirectMessageSender")
+  receivedDirectMessages DirectMessage[] @relation("DirectMessageReceiver")
 }
 
 model Server {
@@ -58,13 +64,53 @@ model Channel {
 }
 
 model Message {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   content   String
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
+  editedAt  DateTime?
+  isEdited  Boolean   @default(false)
 
   // Relations
   userId    Int
   user      User     @relation(fields: [userId], references: [id])
   channelId Int
   channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@index([channelId, createdAt])
+  @@index([userId])
+}
+
+model FriendRequest {
+  id        Int      @id @default(autoincrement())
+  status    String   @default("pending") // pending, accepted, rejected
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  senderId   Int
+  sender     User @relation("FriendRequestSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId Int
+  receiver   User @relation("FriendRequestReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+  @@index([receiverId, status])
+}
+
+model DirectMessage {
+  id        Int       @id @default(autoincrement())
+  content   String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  editedAt  DateTime?
+  isEdited  Boolean   @default(false)
+  isRead    Boolean   @default(false)
+
+  // Relations
+  senderId   Int
+  sender     User @relation("DirectMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId Int
+  receiver   User @relation("DirectMessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, receiverId])
 }

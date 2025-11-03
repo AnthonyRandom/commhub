@@ -1,6 +1,6 @@
 {
   "name": "commhub",
-  "version": "1.0.0",
+  "version": "1.0.7",
   "description": "A cross-platform communication application for Windows and Linux",
   "private": true,
   "workspaces": [

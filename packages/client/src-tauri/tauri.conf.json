@@ -1,0 +1,93 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "build": {
+    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run dev",
+    "devPath": "http://localhost:1420",
+    "distDir": "../dist",
+    "withGlobalTauri": false
+  },
+  "package": {
+    "productName": "CommHub",
+    "version": "1.0.9"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "all": false,
+        "open": true
+      },
+      "dialog": {
+        "all": false,
+        "ask": true,
+        "confirm": true,
+        "message": true,
+        "open": true,
+        "save": true
+      },
+      "http": {
+        "all": false,
+        "request": true,
+        "scope": ["https://*", "http://*"]
+      },
+      "path": {
+        "all": true
+      },
+      "fs": {
+        "all": true,
+        "readFile": true,
+        "writeFile": true,
+        "readDir": true,
+        "copyFile": true,
+        "createDir": true,
+        "removeDir": true,
+        "removeFile": true,
+        "renameFile": true,
+        "exists": true,
+        "scope": ["$APPDATA/*", "$DOCUMENT/*", "$DESKTOP/*"]
+      },
+      "os": {
+        "all": true
+      },
+      "notification": {
+        "all": true
+      }
+    },
+    "bundle": {
+      "active": true,
+      "targets": "all",
+      "identifier": "com.commhub.app",
+      "icon": ["icons/icon.ico"],
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": null
+      },
+      "longDescription": "A lightweight, cross-platform communication application for real-time text and voice chats.",
+      "shortDescription": "Real-time communication app"
+    },
+    "security": {
+      "csp": null
+    },
+    "updater": {
+      "active": false,
+      "endpoints": [
+        "https://github.com/AnthonyRandom/commhub/releases/latest/download/latest.json"
+      ],
+      "dialog": false,
+      "pubkey": ""
+    },
+    "windows": [
+      {
+        "fullscreen": false,
+        "resizable": true,
+        "title": "CommHub",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600
+      }
+    ]
+  }
+}

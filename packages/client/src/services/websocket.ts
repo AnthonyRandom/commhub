@@ -33,6 +33,25 @@ export interface UserLeft {
   username: string
 }
 
+export interface DirectMessageWS {
+  id: number
+  content: string
+  senderId: number
+  receiverId: number
+  createdAt: string
+  isEdited: boolean
+  editedAt?: string
+  isRead: boolean
+  sender: {
+    id: number
+    username: string
+  }
+  receiver: {
+    id: number
+    username: string
+  }
+}
+
 class WebSocketService {
   private socket: Socket | null = null
   private reconnectAttempts = 0
@@ -44,6 +63,7 @@ class WebSocketService {
   private userJoinedListeners: ((data: UserJoined) => void)[] = []
   private userLeftListeners: ((data: UserLeft) => void)[] = []
   private onlineFriendsListeners: ((friends: any[]) => void)[] = []
+  private directMessageListeners: ((message: DirectMessageWS) => void)[] = []
   private errorListeners: ((error: any) => void)[] = []
 
   connect(token: string): void {
@@ -112,6 +132,10 @@ class WebSocketService {
 
     this.socket.on('online-friends', (friends: any[]) => {
       this.onlineFriendsListeners.forEach((listener) => listener(friends))
+    })
+
+    this.socket.on('direct-message', (message: DirectMessageWS) => {
+      this.directMessageListeners.forEach((listener) => listener(message))
     })
 
     this.socket.on('error', (error: any) => {
@@ -240,6 +264,16 @@ class WebSocketService {
       const index = this.errorListeners.indexOf(listener)
       if (index > -1) {
         this.errorListeners.splice(index, 1)
+      }
+    }
+  }
+
+  onDirectMessage(listener: (message: DirectMessageWS) => void): () => void {
+    this.directMessageListeners.push(listener)
+    return () => {
+      const index = this.directMessageListeners.indexOf(listener)
+      if (index > -1) {
+        this.directMessageListeners.splice(index, 1)
       }
     }
   }

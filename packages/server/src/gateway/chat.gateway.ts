@@ -434,15 +434,24 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const receiverSocketId = this.onlineUsers.get(data.receiverId);
       const senderSocketId = this.onlineUsers.get(client.userId);
 
+      // Send the full message object to both sender and receiver
       const messageData = {
         id: directMessage.id,
         content: directMessage.content,
-        senderId: client.userId,
-        senderUsername: client.username,
-        receiverId: data.receiverId,
+        senderId: directMessage.senderId,
+        receiverId: directMessage.receiverId,
         createdAt: directMessage.createdAt,
         isEdited: directMessage.isEdited,
         editedAt: directMessage.editedAt,
+        isRead: false, // New messages are unread
+        sender: {
+          id: directMessage.sender.id,
+          username: directMessage.sender.username,
+        },
+        receiver: {
+          id: directMessage.receiver.id,
+          username: directMessage.receiver.username,
+        },
       };
 
       if (receiverSocketId) {

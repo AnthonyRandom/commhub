@@ -180,8 +180,12 @@ export const useDirectMessagesStore = create<DirectMessagesState>((set, get) => 
 
   addMessage: (message: DirectMessage) => {
     const currentUser = useAuthStore.getState().user
-    const otherUserId =
-      message.senderId === get().activeConversation ? message.receiverId : message.senderId
+    if (!currentUser) return
+
+    // For DMs, otherUserId is the person we're chatting with
+    // If we're the sender, otherUserId is the receiver
+    // If we're the receiver, otherUserId is the sender
+    const otherUserId = message.senderId === currentUser.id ? message.receiverId : message.senderId
 
     set((state) => {
       const conversationMessages = state.messages[otherUserId] || []
@@ -193,7 +197,7 @@ export const useDirectMessagesStore = create<DirectMessagesState>((set, get) => 
       }
 
       // Check if this message is from the current user (replace optimistic message)
-      if (currentUser && message.senderId === currentUser.id) {
+      if (message.senderId === currentUser.id) {
         const optimisticMessageIndex = conversationMessages.findIndex(
           (m) => m.senderId === 0 && m.content === message.content
         )

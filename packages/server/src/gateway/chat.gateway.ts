@@ -36,7 +36,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private logger: Logger = new Logger('ChatGateway');
   private onlineUsers: Map<number, string> = new Map(); // userId -> socketId
-  private voiceChannelUsers: Map<number, Set<number>> = new Map(); // channelId -> Set of userIds
+  private voiceChannelUsers: Map<number, Map<number, string>> = new Map(); // channelId -> Map of userId -> username
   private userVoiceChannels: Map<number, number> = new Map(); // userId -> channelId
 
   constructor(
@@ -90,6 +90,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           usersInChannel.delete(client.userId);
           if (usersInChannel.size === 0) {
             this.voiceChannelUsers.delete(voiceChannelId);
+            this.logger.log(
+              `[Voice] Channel ${voiceChannelId} is now empty, removed from tracking`
+            );
           }
         }
         this.userVoiceChannels.delete(client.userId);
@@ -559,39 +562,28 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       // Add user to voice channel tracking
       if (!this.voiceChannelUsers.has(data.channelId)) {
-        this.voiceChannelUsers.set(data.channelId, new Set());
+        this.voiceChannelUsers.set(data.channelId, new Map());
       }
-      this.voiceChannelUsers.get(data.channelId).add(client.userId);
+      this.voiceChannelUsers
+        .get(data.channelId)
+        .set(client.userId, client.username);
       this.userVoiceChannels.set(client.userId, data.channelId);
 
       // Get list of users already in the voice channel from tracking
-      const userIdsInChannel = this.voiceChannelUsers.get(data.channelId);
+      const usersInChannelMap = this.voiceChannelUsers.get(data.channelId);
       const usersInChannel: Array<{ userId: number; username: string }> = [];
 
       this.logger.log(
-        `[Voice] Channel ${data.channelId} has ${userIdsInChannel.size} users in tracking`
+        `[Voice] Channel ${data.channelId} has ${usersInChannelMap.size} users in tracking`
       );
 
-      // Fetch user details for each user in the channel (excluding the joining user)
-      for (const userId of userIdsInChannel) {
+      // Build list of users (excluding the joining user)
+      for (const [userId, username] of usersInChannelMap.entries()) {
         if (userId !== client.userId) {
-          const userSocketId = this.onlineUsers.get(userId);
-          if (userSocketId) {
-            const userSocket =
-              await this.server.sockets.sockets.get(userSocketId);
-            if (userSocket) {
-              const authSocket = userSocket as any as AuthenticatedSocket;
-              if (authSocket.username) {
-                usersInChannel.push({
-                  userId: authSocket.userId,
-                  username: authSocket.username,
-                });
-                this.logger.log(
-                  `[Voice] Found user in channel: ${authSocket.username} (${authSocket.userId})`
-                );
-              }
-            }
-          }
+          usersInChannel.push({ userId, username });
+          this.logger.log(
+            `[Voice] Found user in channel: ${username} (${userId})`
+          );
         }
       }
 

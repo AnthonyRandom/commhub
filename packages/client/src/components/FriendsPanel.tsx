@@ -71,6 +71,21 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
     setConversationMessages(newMessages)
   }, [messages, selectedDMUserId])
 
+  // Poll for new messages when DM conversation is active
+  useEffect(() => {
+    if (!selectedDMUserId) return
+
+    const pollInterval = setInterval(async () => {
+      try {
+        await fetchConversation(selectedDMUserId)
+      } catch (error) {
+        console.error('Error polling for DM messages:', error)
+      }
+    }, 2000) // Poll every 2 seconds
+
+    return () => clearInterval(pollInterval)
+  }, [selectedDMUserId, fetchConversation])
+
   useEffect(() => {
     if (user) {
       fetchFriends(user.id)

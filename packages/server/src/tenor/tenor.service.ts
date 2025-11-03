@@ -1,5 +1,4 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 
 export interface TenorGif {
   id: string;
@@ -24,8 +23,8 @@ export class TenorService {
   private readonly clientKey = 'commhub';
   private readonly baseUrl = 'https://tenor.googleapis.com/v2';
 
-  constructor(private configService: ConfigService) {
-    this.apiKey = this.configService.get<string>('TENOR_API_KEY');
+  constructor() {
+    this.apiKey = process.env.TENOR_API_KEY;
     if (!this.apiKey) {
       throw new Error('TENOR_API_KEY environment variable is not set');
     }

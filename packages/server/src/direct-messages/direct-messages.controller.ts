@@ -28,13 +28,13 @@ export class DirectMessagesController {
   ) {
     return this.directMessagesService.create(
       createDirectMessageDto,
-      req.user.userId
+      req.user.id
     );
   }
 
   @Get('conversations')
   findAllConversations(@Request() req) {
-    return this.directMessagesService.findAllConversations(req.user.userId);
+    return this.directMessagesService.findAllConversations(req.user.id);
   }
 
   @Get('conversation/:userId')
@@ -45,7 +45,7 @@ export class DirectMessagesController {
     @Request() req
   ) {
     return this.directMessagesService.findConversation(
-      req.user.userId,
+      req.user.id,
       otherUserId,
       limit ? +limit : 50,
       offset ? +offset : 0
@@ -58,12 +58,12 @@ export class DirectMessagesController {
     @Body() updateDto: UpdateDirectMessageDto,
     @Request() req
   ) {
-    return this.directMessagesService.update(id, updateDto, req.user.userId);
+    return this.directMessagesService.update(id, updateDto, req.user.id);
   }
 
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number, @Request() req) {
-    return this.directMessagesService.remove(id, req.user.userId);
+    return this.directMessagesService.remove(id, req.user.id);
   }
 
   @Post('conversation/:userId/read')
@@ -73,7 +73,7 @@ export class DirectMessagesController {
   ) {
     return this.directMessagesService.markAsRead(
       conversationUserId,
-      req.user.userId
+      req.user.id
     );
   }
 }

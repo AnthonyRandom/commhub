@@ -107,7 +107,7 @@ export class MessagesService {
         },
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: 'asc',
       },
       take: limit,
       skip: offset,
@@ -297,7 +297,7 @@ export class MessagesService {
         },
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: 'asc',
       },
       take: limit,
       skip: offset,

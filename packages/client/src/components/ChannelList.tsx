@@ -10,12 +10,13 @@ import {
   Edit2,
   Trash2,
   PhoneCall,
+  MessageSquare,
 } from 'lucide-react'
 import { useChannelsStore } from '../stores/channels'
 import { useServersStore } from '../stores/servers'
 import { useAuthStore } from '../stores/auth'
 import { useVoiceStore } from '../stores/voice'
-import { apiService } from '../services/api'
+import { apiService, type Conversation } from '../services/api'
 import type { Channel, Server } from '../services/api'
 
 interface ChannelListProps {
@@ -25,6 +26,9 @@ interface ChannelListProps {
   onCreateChannel: () => void
   onServerSettings: () => void
   onAppSettings: () => void
+  dmConversations?: Conversation[]
+  onDMSelect?: (userId: number) => void
+  onDeleteDM?: (userId: number) => void
 }
 
 const ChannelList: React.FC<ChannelListProps> = ({
@@ -34,6 +38,9 @@ const ChannelList: React.FC<ChannelListProps> = ({
   onCreateChannel,
   onServerSettings,
   onAppSettings,
+  dmConversations = [],
+  onDMSelect,
+  onDeleteDM,
 }) => {
   const getChannelsByServer = useChannelsStore((state) => state.getChannelsByServer)
   const fetchChannels = useChannelsStore((state) => state.fetchChannels)
@@ -49,6 +56,8 @@ const ChannelList: React.FC<ChannelListProps> = ({
   const [editingChannel, setEditingChannel] = React.useState<Channel | null>(null)
   const [editChannelName, setEditChannelName] = React.useState('')
   const [deletingChannel, setDeletingChannel] = React.useState<Channel | null>(null)
+  const [contextMenuDMId, setContextMenuDMId] = React.useState<number | null>(null)
+  const [deletingDM, setDeletingDM] = React.useState<Conversation | null>(null)
 
   useEffect(() => {
     fetchChannels()
@@ -127,6 +136,22 @@ const ChannelList: React.FC<ChannelListProps> = ({
       setDeletingChannel(null)
     } catch (error) {
       console.error('Failed to delete channel:', error)
+    }
+  }
+
+  const handleDeleteDM = (conversation: Conversation) => {
+    setDeletingDM(conversation)
+    setContextMenuDMId(null)
+  }
+
+  const confirmDeleteDM = async () => {
+    if (!deletingDM || !onDeleteDM) return
+
+    try {
+      onDeleteDM(deletingDM.user.id)
+      setDeletingDM(null)
+    } catch (error) {
+      console.error('Failed to delete DM conversation:', error)
     }
   }
 
@@ -344,8 +369,106 @@ const ChannelList: React.FC<ChannelListProps> = ({
             </div>
           </>
         ) : (
-          <div className="text-center text-grey-500 py-8 px-4">
-            <p className="text-sm">Select a server or create one to get started</p>
+          <div className="space-y-2">
+            {/* Direct Messages Header */}
+            <div className="flex items-center justify-between px-2 py-1 mb-1">
+              <h3 className="text-grey-400 text-xs font-bold uppercase tracking-wider">
+                Direct Messages
+              </h3>
+            </div>
+
+            {/* DM Conversations */}
+            {dmConversations.length === 0 ? (
+              <div className="text-center py-12 px-4">
+                <MessageSquare className="w-12 h-12 text-grey-700 mx-auto mb-3 opacity-50" />
+                <p className="text-grey-500 mb-2">No conversations yet</p>
+                <p className="text-grey-600 text-sm">
+                  Friends will appear here when you start chatting
+                </p>
+              </div>
+            ) : (
+              dmConversations.map((conversation) => {
+                const hasUnread = conversation.unreadCount > 0
+                const lastMessage = conversation.lastMessage
+
+                return (
+                  <div key={conversation.user.id} className="relative group">
+                    <button
+                      onClick={() => onDMSelect?.(conversation.user.id)}
+                      className="w-full flex items-center gap-3 p-3 bg-grey-850 border-2 border-grey-800 hover:border-grey-700 transition-colors text-left"
+                    >
+                      <div className="w-10 h-10 bg-white flex-shrink-0 flex items-center justify-center">
+                        <span className="text-black font-bold">
+                          {conversation.user.username.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <p
+                            className={`font-bold truncate ${hasUnread ? 'text-white' : 'text-grey-300'}`}
+                          >
+                            {conversation.user.username}
+                          </p>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {lastMessage && (
+                              <span className="text-grey-500 text-xs">
+                                {new Date(lastMessage.createdAt).toLocaleTimeString('en-US', {
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                })}
+                              </span>
+                            )}
+                            {hasUnread && (
+                              <div className="bg-white text-black text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5">
+                                {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {lastMessage && (
+                          <p
+                            className={`text-sm truncate ${hasUnread ? 'text-grey-300 font-medium' : 'text-grey-500'}`}
+                          >
+                            {lastMessage.senderId === user?.id && 'You: '}
+                            {lastMessage.content.length > 40
+                              ? lastMessage.content.substring(0, 40) + '...'
+                              : lastMessage.content}
+                          </p>
+                        )}
+                      </div>
+                    </button>
+
+                    {/* DM Context Menu */}
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setContextMenuDMId(
+                            contextMenuDMId === conversation.user.id ? null : conversation.user.id
+                          )
+                        }}
+                        className="p-2 bg-grey-800 text-grey-400 hover:text-white hover:bg-grey-900 transition-colors border-2 border-grey-700 hover:border-grey-600"
+                        title="More options"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {contextMenuDMId === conversation.user.id && (
+                      <div className="absolute right-0 top-full mt-1 bg-grey-900 border-2 border-grey-700 z-50 min-w-[140px] animate-fade-in shadow-lg">
+                        <button
+                          onClick={() => handleDeleteDM(conversation)}
+                          className="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-grey-800 flex items-center gap-3 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          Delete Chat
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })
+            )}
           </div>
         )}
 
@@ -418,6 +541,41 @@ const ChannelList: React.FC<ChannelListProps> = ({
                   className="px-4 py-2 bg-red-900 text-white border-2 border-red-700 hover:border-red-500 transition-colors font-bold"
                 >
                   Delete Channel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete DM Modal */}
+        {deletingDM && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 animate-fade-in">
+            <div className="bg-grey-900 border-2 border-white w-96 animate-slide-up">
+              <div className="border-b-2 border-grey-800 p-4">
+                <h3 className="font-bold text-white text-lg">Delete Conversation</h3>
+              </div>
+              <div className="p-4">
+                <p className="text-grey-300 text-sm mb-4">
+                  Are you sure you want to delete your conversation with{' '}
+                  <strong className="text-white">{deletingDM.user.username}</strong>?
+                </p>
+                <p className="text-red-400 text-sm">
+                  This action cannot be undone. You will no longer see this conversation in your
+                  Direct Messages.
+                </p>
+              </div>
+              <div className="border-t-2 border-grey-800 p-4 flex justify-end gap-2">
+                <button
+                  onClick={() => setDeletingDM(null)}
+                  className="px-4 py-2 bg-grey-850 text-white border-2 border-grey-700 hover:border-white transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteDM}
+                  className="px-4 py-2 bg-red-900 text-white border-2 border-red-700 hover:border-red-500 transition-colors font-bold"
+                >
+                  Delete Conversation
                 </button>
               </div>
             </div>

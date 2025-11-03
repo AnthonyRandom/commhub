@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { apiService, type DirectMessage, type Conversation } from '../services/api'
+import { useAuthStore } from './auth'
 
 interface DirectMessagesState {
   conversations: Conversation[]
@@ -15,6 +16,7 @@ interface DirectMessagesState {
   editDirectMessage: (messageId: number, content: string) => Promise<void>
   deleteDirectMessage: (messageId: number, senderId: number, receiverId: number) => Promise<void>
   markConversationAsRead: (userId: number) => Promise<void>
+  deleteConversation: (userId: number) => Promise<void>
   setActiveConversation: (userId: number | null) => void
   addMessage: (message: DirectMessage) => void
   clearError: () => void
@@ -58,6 +60,33 @@ export const useDirectMessagesStore = create<DirectMessagesState>((set, get) => 
   sendDirectMessage: async (receiverId: number, content: string) => {
     set({ error: null })
     try {
+      // Optimistically add message to UI
+      const tempMessage: DirectMessage = {
+        id: Date.now(), // Temporary ID
+        content,
+        senderId: 0, // Will be set by server
+        receiverId,
+        createdAt: new Date().toISOString(),
+        isEdited: false,
+        editedAt: undefined,
+        isRead: false,
+        sender: {
+          id: 0,
+          username: 'You',
+        },
+        receiver: {
+          id: receiverId,
+          username: 'Friend', // Will be replaced by real data
+        },
+      }
+
+      set((state) => ({
+        messages: {
+          ...state.messages,
+          [receiverId]: [...(state.messages[receiverId] || []), tempMessage],
+        },
+      }))
+
       await apiService.sendDirectMessage(receiverId, content)
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Failed to send message'
@@ -135,22 +164,55 @@ export const useDirectMessagesStore = create<DirectMessagesState>((set, get) => 
     }
   },
 
+  deleteConversation: async (userId: number) => {
+    set((state) => ({
+      conversations: state.conversations.filter((conv) => conv.user.id !== userId),
+      messages: {
+        ...state.messages,
+        [userId]: [], // Clear messages for this conversation
+      },
+    }))
+  },
+
   setActiveConversation: (userId: number | null) => {
     set({ activeConversation: userId })
   },
 
   addMessage: (message: DirectMessage) => {
+    const currentUser = useAuthStore.getState().user
     const otherUserId =
       message.senderId === get().activeConversation ? message.receiverId : message.senderId
 
     set((state) => {
       const conversationMessages = state.messages[otherUserId] || []
 
+      // Check if message already exists (to avoid duplicates)
       const messageExists = conversationMessages.some((m) => m.id === message.id)
       if (messageExists) {
         return state
       }
 
+      // Check if this message is from the current user (replace optimistic message)
+      if (currentUser && message.senderId === currentUser.id) {
+        const optimisticMessageIndex = conversationMessages.findIndex(
+          (m) => m.senderId === 0 && m.content === message.content
+        )
+
+        if (optimisticMessageIndex !== -1) {
+          // Replace optimistic message with real message
+          const updatedMessages = [...conversationMessages]
+          updatedMessages[optimisticMessageIndex] = message
+
+          return {
+            messages: {
+              ...state.messages,
+              [otherUserId]: updatedMessages,
+            },
+          }
+        }
+      }
+
+      // Add new message normally
       return {
         messages: {
           ...state.messages,

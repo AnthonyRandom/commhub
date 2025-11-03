@@ -1,7 +1,7 @@
 import React from 'react'
 import ServerList from './ServerList'
 import ChannelList from './ChannelList'
-import type { Server, Channel } from '../services/api'
+import type { Server, Channel, Conversation } from '../services/api'
 
 interface SidebarProps {
   selectedServer: Server | null
@@ -14,6 +14,9 @@ interface SidebarProps {
   onAppSettings: () => void
   onShowFriends: () => void
   showFriendsPanel: boolean
+  dmConversations?: Conversation[]
+  onDMSelect?: (userId: number) => void
+  onDeleteDM?: (userId: number) => void
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -27,6 +30,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   onAppSettings,
   onShowFriends,
   showFriendsPanel,
+  dmConversations = [],
+  onDMSelect,
+  onDeleteDM,
 }) => {
   return (
     <div className="flex h-full">
@@ -44,6 +50,9 @@ const Sidebar: React.FC<SidebarProps> = ({
         onCreateChannel={onCreateChannel}
         onServerSettings={onServerSettings}
         onAppSettings={onAppSettings}
+        dmConversations={dmConversations}
+        onDMSelect={onDMSelect}
+        onDeleteDM={onDeleteDM}
       />
     </div>
   )

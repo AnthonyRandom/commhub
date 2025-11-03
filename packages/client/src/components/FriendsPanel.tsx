@@ -17,7 +17,11 @@ import { useAuthStore } from '../stores/auth'
 import { useDirectMessagesStore } from '../stores/directMessages'
 import { apiService, type DirectMessage } from '../services/api'
 
-const FriendsPanel: React.FC = () => {
+interface FriendsPanelProps {
+  selectedDMUserId?: number | null
+}
+
+const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
   const { user } = useAuthStore()
   const {
     friends,
@@ -48,7 +52,6 @@ const FriendsPanel: React.FC = () => {
   } = useDirectMessagesStore()
 
   const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'blocked' | 'messages'>('all')
-  const [selectedDMUserId, setSelectedDMUserId] = useState<number | null>(null)
   const [messageInput, setMessageInput] = useState('')
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
   const [editContent, setEditContent] = useState('')
@@ -82,6 +85,7 @@ const FriendsPanel: React.FC = () => {
   useEffect(() => {
     if (selectedDMUserId) {
       setActiveConversation(selectedDMUserId)
+      setActiveTab('messages')
       fetchConversation(selectedDMUserId)
       markConversationAsRead(selectedDMUserId)
     }
@@ -148,7 +152,8 @@ const FriendsPanel: React.FC = () => {
 
   const handleStartDM = async (friendId: number) => {
     try {
-      setSelectedDMUserId(friendId)
+      // This function is now handled by the parent component
+      // The selectedDMUserId is passed as a prop
       setActiveTab('messages')
       await fetchConversation(friendId)
       await fetchConversations()
@@ -159,7 +164,7 @@ const FriendsPanel: React.FC = () => {
   }
 
   const handleBackFromDM = () => {
-    setSelectedDMUserId(null)
+    // This is now handled by the parent component
     setActiveTab('all')
   }
 
@@ -516,7 +521,6 @@ const FriendsPanel: React.FC = () => {
         <button
           onClick={() => {
             setActiveTab('all')
-            setSelectedDMUserId(null)
           }}
           className={`px-4 py-3 font-bold transition-colors ${
             activeTab === 'all'
@@ -529,7 +533,6 @@ const FriendsPanel: React.FC = () => {
         <button
           onClick={() => {
             setActiveTab('messages')
-            setSelectedDMUserId(null)
           }}
           className={`px-4 py-3 font-bold transition-colors ${
             activeTab === 'messages'
@@ -547,7 +550,6 @@ const FriendsPanel: React.FC = () => {
         <button
           onClick={() => {
             setActiveTab('pending')
-            setSelectedDMUserId(null)
           }}
           className={`px-4 py-3 font-bold transition-colors ${
             activeTab === 'pending'
@@ -560,7 +562,6 @@ const FriendsPanel: React.FC = () => {
         <button
           onClick={() => {
             setActiveTab('blocked')
-            setSelectedDMUserId(null)
           }}
           className={`px-4 py-3 font-bold transition-colors ${
             activeTab === 'blocked'

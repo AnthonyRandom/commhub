@@ -9,6 +9,7 @@ import ServerSettingsModal from './components/ServerSettingsModal'
 import FriendsPanel from './components/FriendsPanel'
 import { useAuthStore } from './stores/auth'
 import { useServersStore } from './stores/servers'
+import { useDirectMessagesStore } from './stores/directMessages'
 import { wsManager } from './services/websocket-manager'
 import type { Server, Channel } from './services/api'
 import './app.css'
@@ -16,6 +17,7 @@ import './app.css'
 function App() {
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
   const [selectedServer, setSelectedServer] = useState<Server | null>(null)
+  const [selectedDMUserId, setSelectedDMUserId] = useState<number | null>(null)
   const [showServerModal, setShowServerModal] = useState(false)
   const [showChannelModal, setShowChannelModal] = useState(false)
   const [showServerSettings, setShowServerSettings] = useState(false)
@@ -24,6 +26,7 @@ function App() {
 
   const { isAuthenticated, isLoading } = useAuthStore()
   const selectServer = useServersStore((state) => state.selectServer)
+  const { conversations, fetchConversations, deleteConversation } = useDirectMessagesStore()
 
   // Initialize WebSocket manager and check auth on mount
   useEffect(() => {
@@ -68,6 +71,28 @@ function App() {
     setShowFriendsPanel(true)
     setSelectedServer(null)
     setSelectedChannel(null)
+    setSelectedDMUserId(null)
+  }
+
+  const handleDMSelect = (userId: number) => {
+    setSelectedDMUserId(userId)
+    setShowFriendsPanel(true)
+    setSelectedServer(null)
+    setSelectedChannel(null)
+  }
+
+  const handleDeleteDM = async (userId: number) => {
+    try {
+      await deleteConversation(userId)
+      // If the deleted conversation was currently selected, deselect it
+      if (selectedDMUserId === userId) {
+        setSelectedDMUserId(null)
+      }
+      // Refresh conversations
+      await fetchConversations()
+    } catch (error) {
+      console.error('Failed to delete DM conversation:', error)
+    }
   }
 
   const handleCreateServer = () => {
@@ -113,9 +138,12 @@ function App() {
             onAppSettings={handleAppSettings}
             onShowFriends={handleShowFriends}
             showFriendsPanel={showFriendsPanel}
+            dmConversations={conversations}
+            onDMSelect={handleDMSelect}
+            onDeleteDM={handleDeleteDM}
           />
           {showFriendsPanel ? (
-            <FriendsPanel />
+            <FriendsPanel selectedDMUserId={selectedDMUserId} />
           ) : (
             <ChatArea selectedChannel={selectedChannel} server={selectedServer} />
           )}

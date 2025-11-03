@@ -613,16 +613,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               </p>
 
               {/* Update Status */}
-              {updateStatus.type !== 'idle' && (
+              {updateStatus.type !== 'idle' && updateStatus.type !== 'available' && (
                 <div
-                  className={`p-3 border-2 ${
+                  className={`p-4 border-2 ${
                     updateStatus.type === 'error'
                       ? 'bg-red-900/20 border-red-500'
-                      : updateStatus.type === 'available'
-                        ? 'bg-blue-900/20 border-blue-500'
-                        : updateStatus.type === 'current'
-                          ? 'bg-green-900/20 border-green-500'
-                          : 'bg-grey-800 border-grey-600'
+                      : updateStatus.type === 'current'
+                        ? 'bg-green-900/20 border-green-500'
+                        : 'bg-grey-800 border-grey-600'
                   }`}
                 >
                   <div className="flex items-start gap-3">
@@ -632,9 +630,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                     {updateStatus.type === 'current' && (
                       <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
                     )}
-                    {updateStatus.type === 'available' && (
-                      <Download className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-                    )}
                     {(updateStatus.type === 'checking' || updateStatus.type === 'downloading') && (
                       <div className="w-5 h-5 border-2 border-white border-t-transparent animate-spin flex-shrink-0 mt-0.5"></div>
                     )}
@@ -643,17 +638,41 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                         className={`text-sm font-medium ${
                           updateStatus.type === 'error'
                             ? 'text-red-300'
-                            : updateStatus.type === 'available'
-                              ? 'text-blue-300'
-                              : updateStatus.type === 'current'
-                                ? 'text-green-300'
-                                : 'text-grey-300'
+                            : updateStatus.type === 'current'
+                              ? 'text-green-300'
+                              : 'text-grey-300'
                         }`}
                       >
                         {updateStatus.message}
                       </p>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Update Available Section */}
+              {updateStatus.type === 'available' && (
+                <div className="bg-grey-800 border-2 border-grey-700 p-4 space-y-4">
+                  <div className="flex items-start gap-3">
+                    <Download className="w-5 h-5 text-white flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h5 className="text-white font-bold text-sm mb-1 uppercase tracking-wider">
+                        Update Available
+                      </h5>
+                      <p className="text-grey-300 text-xs">
+                        Version {updateStatus.version} is ready to download
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleDownloadUpdate}
+                    className="w-full bg-white text-black border-2 border-white hover:bg-grey-100 font-bold py-3 px-4 transition-colors uppercase tracking-wide flex items-center justify-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download Update
+                    <ExternalLink className="w-4 h-4" />
+                  </button>
                 </div>
               )}
 
@@ -670,17 +689,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 >
                   {isCheckingUpdate ? 'Checking...' : 'Check for Updates'}
                 </button>
-
-                {updateStatus.type === 'available' && (
-                  <button
-                    onClick={handleDownloadUpdate}
-                    className="flex-1 bg-blue-500 text-white border-2 border-blue-500 hover:bg-blue-600 font-bold py-3 px-4 transition-colors uppercase tracking-wide flex items-center justify-center gap-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    Download Update
-                    <ExternalLink className="w-4 h-4" />
-                  </button>
-                )}
               </div>
             </div>
           </div>

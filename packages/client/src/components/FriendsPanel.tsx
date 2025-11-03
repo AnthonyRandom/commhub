@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import {
   UserPlus,
   Check,
@@ -62,6 +62,9 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
   const [isSearching, setIsSearching] = useState(false)
   const [error, setError] = useState('')
   const [conversationMessages, setConversationMessages] = useState<DirectMessage[]>([])
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const [isNearBottom, setIsNearBottom] = useState(true)
 
   const selectedFriend = friends.find((f) => f.id === selectedDMUserId)
 
@@ -70,6 +73,40 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
     const newMessages = selectedDMUserId ? messages[selectedDMUserId] || [] : []
     setConversationMessages(newMessages)
   }, [messages, selectedDMUserId])
+
+  // Handle scroll events to track if user is near bottom
+  const handleScroll = () => {
+    if (messagesContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+      setIsNearBottom(distanceFromBottom < 100) // Consider "near bottom" if within 100px
+    }
+  }
+
+  // Auto-scroll to bottom when conversation messages change (only if user is near bottom)
+  const scrollToBottom = () => {
+    if (isNearBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [conversationMessages, isNearBottom])
+
+  // Set up scroll listener
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    if (container) {
+      container.addEventListener('scroll', handleScroll)
+      return () => container.removeEventListener('scroll', handleScroll)
+    }
+  }, [])
+
+  // Reset scroll position tracking when switching conversations
+  useEffect(() => {
+    setIsNearBottom(true)
+  }, [selectedDMUserId])
 
   // Poll for new messages when DM conversation is active
   useEffect(() => {
@@ -341,7 +378,7 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4">
           {conversationMessages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <div className="w-16 h-16 bg-white flex items-center justify-center mb-4">
@@ -499,6 +536,8 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
               ))}
             </div>
           )}
+          {/* Invisible element to scroll to */}
+          <div ref={messagesEndRef} />
         </div>
 
         {/* Message Input */}

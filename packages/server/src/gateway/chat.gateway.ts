@@ -513,28 +513,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         `[Voice] ${client.username} joined voice channel room: ${roomName}`
       );
 
-      // Get list of users already in the voice channel
-      const room = this.server.sockets.adapter.rooms.get(roomName);
+      // Get list of users already in the voice channel using Socket.IO v5 method
+      const socketsInRoom = await this.server.in(roomName).fetchSockets();
       const usersInChannel: Array<{ userId: number; username: string }> = [];
 
-      if (room) {
-        this.logger.log(`[Voice] Room ${roomName} has ${room.size} users`);
-        for (const socketId of room) {
-          const socket = this.server.sockets.sockets.get(
-            socketId
-          ) as AuthenticatedSocket;
-          if (socket && socket.userId !== client.userId) {
-            usersInChannel.push({
-              userId: socket.userId,
-              username: socket.username,
-            });
-            this.logger.log(
-              `[Voice] Found user in channel: ${socket.username} (${socket.userId})`
-            );
-          }
+      this.logger.log(
+        `[Voice] Room ${roomName} has ${socketsInRoom.length} sockets`
+      );
+
+      for (const socket of socketsInRoom) {
+        const authSocket = socket as any as AuthenticatedSocket;
+        if (authSocket.userId && authSocket.userId !== client.userId) {
+          usersInChannel.push({
+            userId: authSocket.userId,
+            username: authSocket.username,
+          });
+          this.logger.log(
+            `[Voice] Found user in channel: ${authSocket.username} (${authSocket.userId})`
+          );
         }
-      } else {
-        this.logger.log(`[Voice] Room ${roomName} is new (first user)`);
       }
 
       this.logger.log(

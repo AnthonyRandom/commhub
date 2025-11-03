@@ -1,6 +1,6 @@
 [package]
 name = "commhub-client"
-version = "1.0.0"
+version = "1.0.8"
 description = "CommHub desktop client application"
 authors = ["you"]
 license = ""

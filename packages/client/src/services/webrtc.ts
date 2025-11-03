@@ -5,6 +5,7 @@ interface PeerConnection {
   peer: SimplePeer.Instance
   userId: number
   username: string
+  audioElement?: HTMLAudioElement
 }
 
 class WebRTCService {
@@ -153,8 +154,12 @@ class WebRTCService {
       useVoiceStore.getState().updateUserStream(userId, stream)
       onStream(stream)
 
-      // Play the audio
-      this.playAudioStream(stream)
+      // Play the audio and store reference
+      const audioElement = this.playAudioStream(stream, userId, username)
+      const peerConnection = this.peers.get(userId)
+      if (peerConnection) {
+        peerConnection.audioElement = audioElement
+      }
     })
 
     // Handle connection errors
@@ -180,13 +185,65 @@ class WebRTCService {
   /**
    * Play remote audio stream
    */
-  private playAudioStream(stream: MediaStream) {
-    const audio = new Audio()
+  private playAudioStream(stream: MediaStream, userId: number, username: string): HTMLAudioElement {
+    console.log(`[WebRTC] Setting up audio playback for ${username} (${userId})`)
+
+    // Create audio element
+    const audio = document.createElement('audio')
     audio.srcObject = stream
     audio.autoplay = true
-    audio.play().catch((error) => {
-      console.error('Failed to play audio stream:', error)
+
+    // Set audio element properties for better compatibility
+    audio.setAttribute('data-user-id', userId.toString())
+    audio.setAttribute('data-username', username)
+
+    // Add to DOM (required for some browsers)
+    audio.style.display = 'none'
+    document.body.appendChild(audio)
+
+    // Attempt to play with detailed error handling
+    audio
+      .play()
+      .then(() => {
+        console.log(`[WebRTC] ✅ Audio playback started for ${username}`)
+      })
+      .catch((error) => {
+        console.error(`[WebRTC] ❌ Failed to play audio for ${username}:`, error)
+        console.error('[WebRTC] Error details:', {
+          name: error.name,
+          message: error.message,
+          autoplay: audio.autoplay,
+          muted: audio.muted,
+          paused: audio.paused,
+          readyState: audio.readyState,
+          networkState: audio.networkState,
+        })
+
+        // Try unmuting and playing again (some browsers require this)
+        audio.muted = false
+        audio.play().catch((retryError) => {
+          console.error(`[WebRTC] ❌ Retry failed for ${username}:`, retryError)
+        })
+      })
+
+    // Add event listeners for debugging
+    audio.addEventListener('loadedmetadata', () => {
+      console.log(`[WebRTC] Audio metadata loaded for ${username}`)
     })
+
+    audio.addEventListener('canplay', () => {
+      console.log(`[WebRTC] Audio can play for ${username}`)
+    })
+
+    audio.addEventListener('playing', () => {
+      console.log(`[WebRTC] Audio is playing for ${username}`)
+    })
+
+    audio.addEventListener('error', (event) => {
+      console.error(`[WebRTC] Audio element error for ${username}:`, event)
+    })
+
+    return audio
   }
 
   /**
@@ -214,6 +271,17 @@ class WebRTCService {
       } catch (error) {
         console.error('Error destroying peer:', error)
       }
+
+      // Remove audio element from DOM
+      if (peerConnection.audioElement) {
+        console.log(`[WebRTC] Removing audio element for user ${userId}`)
+        peerConnection.audioElement.pause()
+        peerConnection.audioElement.srcObject = null
+        if (peerConnection.audioElement.parentNode) {
+          peerConnection.audioElement.parentNode.removeChild(peerConnection.audioElement)
+        }
+      }
+
       this.peers.delete(userId)
       useVoiceStore.getState().removeConnectedUser(userId)
     }
@@ -261,15 +329,26 @@ class WebRTCService {
    * Clean up all connections and streams
    */
   cleanup() {
+    console.log('[WebRTC] Cleaning up all connections and streams')
+
     // Stop speaking detection
     this.stopSpeakingCheck()
 
-    // Destroy all peer connections
-    this.peers.forEach((peerConnection) => {
+    // Destroy all peer connections and remove audio elements
+    this.peers.forEach((peerConnection, userId) => {
       try {
         peerConnection.peer.destroy()
+
+        // Remove audio element
+        if (peerConnection.audioElement) {
+          peerConnection.audioElement.pause()
+          peerConnection.audioElement.srcObject = null
+          if (peerConnection.audioElement.parentNode) {
+            peerConnection.audioElement.parentNode.removeChild(peerConnection.audioElement)
+          }
+        }
       } catch (error) {
-        console.error('Error destroying peer:', error)
+        console.error(`Error destroying peer ${userId}:`, error)
       }
     })
     this.peers.clear()
@@ -277,6 +356,7 @@ class WebRTCService {
     // Stop local stream
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => {
+        console.log('[WebRTC] Stopping local track:', track.kind)
         track.stop()
       })
       this.localStream = null
@@ -293,6 +373,8 @@ class WebRTCService {
 
     // Reset voice store
     useVoiceStore.getState().reset()
+
+    console.log('[WebRTC] Cleanup complete')
   }
 
   /**

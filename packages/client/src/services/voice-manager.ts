@@ -97,10 +97,12 @@ class VoiceManager {
     channelId: number
     users: Array<{ userId: number; username: string }>
   }) {
-    console.log('Users in voice channel:', data.users)
+    console.log(`[VoiceManager] 📋 Users already in voice channel ${data.channelId}:`, data.users)
+    console.log(`[VoiceManager] Creating ${data.users.length} peer connection(s) as initiator`)
 
     // Create peer connections to all existing users (we are the initiator)
     data.users.forEach((user) => {
+      console.log(`[VoiceManager] 🤝 Initiating connection to ${user.username} (${user.userId})`)
       this.createPeerConnection(user.userId, user.username, true)
     })
   }
@@ -109,7 +111,7 @@ class VoiceManager {
    * Handle new user joining voice channel
    */
   private handleVoiceUserJoined(data: { channelId: number; userId: number; username: string }) {
-    console.log('User joined voice channel:', data.username)
+    console.log(`[VoiceManager] ➕ User joined voice channel: ${data.username} (${data.userId})`)
 
     // Add user to voice store
     useVoiceStore.getState().addConnectedUser({
@@ -119,6 +121,7 @@ class VoiceManager {
       isMuted: false,
     })
 
+    console.log(`[VoiceManager] ⏳ Waiting for offer from ${data.username}`)
     // Don't create peer connection here - wait for them to send us an offer
   }
 
@@ -141,7 +144,9 @@ class VoiceManager {
     fromUsername: string
     offer: SimplePeer.SignalData
   }) {
-    console.log('Received voice offer from:', data.fromUsername)
+    console.log(
+      `[VoiceManager] 📨 Received WebRTC offer from: ${data.fromUsername} (${data.fromUserId})`
+    )
 
     // Create peer connection (we are not the initiator)
     this.createPeerConnection(data.fromUserId, data.fromUsername, false, data.offer)
@@ -156,7 +161,9 @@ class VoiceManager {
     fromUsername: string
     answer: SimplePeer.SignalData
   }) {
-    console.log('Received voice answer from:', data.fromUsername)
+    console.log(
+      `[VoiceManager] 📨 Received WebRTC answer from: ${data.fromUsername} (${data.fromUserId})`
+    )
 
     // Signal the peer with the answer
     webrtcService.signal(data.fromUserId, data.answer)
@@ -170,6 +177,8 @@ class VoiceManager {
     fromUserId: number
     candidate: SimplePeer.SignalData
   }) {
+    console.log(`[VoiceManager] 🧊 Received ICE candidate from user ${data.fromUserId}`)
+
     // Signal the peer with the ICE candidate
     webrtcService.signal(data.fromUserId, data.candidate)
   }
@@ -185,8 +194,13 @@ class VoiceManager {
   ) {
     const channelId = webrtcService.getCurrentChannelId()
     if (!channelId) {
+      console.error('[VoiceManager] ❌ Cannot create peer connection: no channel ID')
       return
     }
+
+    console.log(
+      `[VoiceManager] 🔗 Creating peer connection to ${username} (${userId}) - Initiator: ${isInitiator}`
+    )
 
     // Add user to voice store if not already there
     const voiceStore = useVoiceStore.getState()
@@ -213,8 +227,13 @@ class VoiceManager {
               ? 'voice-answer'
               : 'voice-ice-candidate'
 
+        console.log(`[VoiceManager] 📤 Sending ${eventName} to ${username}`)
+
         const socket = wsService.getSocket()
-        if (!socket) return
+        if (!socket) {
+          console.error('[VoiceManager] ❌ No socket connection')
+          return
+        }
 
         if (eventName === 'voice-offer') {
           socket.emit('voice-offer', {
@@ -237,16 +256,17 @@ class VoiceManager {
         }
       },
       () => {
-        console.log('Received stream from:', username)
+        console.log(`[VoiceManager] 🎵 Stream received from ${username}`)
       },
       () => {
-        console.log('Peer connection closed:', username)
+        console.log(`[VoiceManager] ❌ Peer connection closed: ${username}`)
         voiceStore.removeConnectedUser(userId)
       }
     )
 
     // If we received an initial signal (offer), signal it to the peer
     if (initialSignal) {
+      console.log(`[VoiceManager] 📥 Signaling initial ${initialSignal.type} to peer`)
       peer.signal(initialSignal)
     }
   }

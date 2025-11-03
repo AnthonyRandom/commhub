@@ -492,12 +492,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: AuthenticatedSocket
   ) {
     try {
+      this.logger.log(
+        `[Voice] Join request from ${client.username} (${client.userId}) for channel ${data.channelId}`
+      );
+
       // Validate input
       if (
         !data.channelId ||
         typeof data.channelId !== 'number' ||
         data.channelId <= 0
       ) {
+        this.logger.error(`[Voice] Invalid channel ID: ${data.channelId}`);
         client.emit('error', { message: 'Invalid channel ID' });
         return;
       }
@@ -505,7 +510,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const roomName = `voice-${data.channelId}`;
       client.join(roomName);
       this.logger.log(
-        `${client.username} joined voice channel room: ${roomName}`
+        `[Voice] ${client.username} joined voice channel room: ${roomName}`
       );
 
       // Get list of users already in the voice channel
@@ -513,6 +518,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const usersInChannel: Array<{ userId: number; username: string }> = [];
 
       if (room) {
+        this.logger.log(`[Voice] Room ${roomName} has ${room.size} users`);
         for (const socketId of room) {
           const socket = this.server.sockets.sockets.get(
             socketId
@@ -522,9 +528,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
               userId: socket.userId,
               username: socket.username,
             });
+            this.logger.log(
+              `[Voice] Found user in channel: ${socket.username} (${socket.userId})`
+            );
           }
         }
+      } else {
+        this.logger.log(`[Voice] Room ${roomName} is new (first user)`);
       }
+
+      this.logger.log(
+        `[Voice] Sending voice-channel-users to ${client.username} with ${usersInChannel.length} users`
+      );
 
       // Notify the joining user about existing users
       client.emit('voice-channel-users', {
@@ -532,14 +547,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         users: usersInChannel,
       });
 
+      this.logger.log(
+        `[Voice] Broadcasting voice-user-joined to room ${roomName}`
+      );
+
       // Notify other users in the channel about the new user
       client.to(roomName).emit('voice-user-joined', {
         channelId: data.channelId,
         userId: client.userId,
         username: client.username,
       });
+
+      this.logger.log(
+        `[Voice] Successfully completed join for ${client.username}`
+      );
     } catch (error) {
-      this.logger.error('Error joining voice channel:', error.message);
+      this.logger.error(
+        `[Voice] Error joining voice channel: ${error.message}`
+      );
+      this.logger.error(`[Voice] Error stack: ${error.stack}`);
       client.emit('error', { message: 'Failed to join voice channel' });
     }
   }

@@ -1,9 +1,16 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    nodePolyfills({
+      // Whether to polyfill `node:` protocol imports.
+      protocolImports: true,
+    }),
+  ],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   // prevent vite from obscuring rust errors
@@ -21,25 +28,6 @@ export default defineConfig({
   define: {
     global: 'globalThis',
     'process.env': {},
-  },
-
-  // Resolve Node.js modules for browser
-  resolve: {
-    alias: {
-      util: 'rollup-plugin-node-polyfills/polyfills/util',
-      stream: 'rollup-plugin-node-polyfills/polyfills/stream',
-      buffer: 'rollup-plugin-node-polyfills/polyfills/buffer-es6',
-      process: 'rollup-plugin-node-polyfills/polyfills/process-es6',
-    },
-  },
-
-  // Optimize dependencies
-  optimizeDeps: {
-    esbuildOptions: {
-      define: {
-        global: 'globalThis',
-      },
-    },
   },
 
   build: {

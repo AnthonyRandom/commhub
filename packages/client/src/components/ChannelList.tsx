@@ -10,6 +10,7 @@ import {
   Edit2,
   Trash2,
   PhoneCall,
+  PhoneOff,
   MessageSquare,
   Users,
 } from 'lucide-react'
@@ -19,6 +20,7 @@ import { useAuthStore } from '../stores/auth'
 import { useVoiceStore } from '../stores/voice'
 import { apiService, type Conversation } from '../services/api'
 import { wsService } from '../services/websocket'
+import { voiceManager } from '../services/voice-manager'
 import type { Channel, Server } from '../services/api'
 
 interface ChannelListProps {
@@ -437,20 +439,32 @@ const ChannelList: React.FC<ChannelListProps> = ({
                         </div>
                       </button>
 
-                      {/* List of usernames below the channel name */}
+                      {/* Voice Channel Members List */}
                       {hasMember && channelMembers.length > 0 && (
-                        <div className="ml-6 mt-1 space-y-0.5">
+                        <div className="ml-6 mt-1 space-y-1">
                           {channelMembers.slice(0, 5).map((member) => (
-                            <div key={member.userId} className="flex items-center gap-1.5">
-                              <div className="w-3 h-3 bg-grey-700 flex items-center justify-center flex-shrink-0">
-                                <span className="text-grey-300 text-xs font-bold">
+                            <div key={member.userId} className="flex items-center gap-2">
+                              <div
+                                className={`w-4 h-4 border flex items-center justify-center flex-shrink-0 transition-colors ${
+                                  selectedChannel?.id === channel.id
+                                    ? 'bg-white border-white'
+                                    : 'bg-grey-700 border-grey-600'
+                                }`}
+                              >
+                                <span
+                                  className={`text-xs font-bold ${
+                                    selectedChannel?.id === channel.id
+                                      ? 'text-black'
+                                      : 'text-grey-300'
+                                  }`}
+                                >
                                   {member.username.charAt(0).toUpperCase()}
                                 </span>
                               </div>
                               <span
-                                className={`text-xs truncate ${
+                                className={`text-xs truncate flex-1 ${
                                   selectedChannel?.id === channel.id
-                                    ? 'text-black'
+                                    ? 'text-white'
                                     : 'text-grey-400'
                                 }`}
                               >
@@ -460,8 +474,10 @@ const ChannelList: React.FC<ChannelListProps> = ({
                           ))}
                           {channelMembers.length > 5 && (
                             <div
-                              className={`text-xs ml-4 ${
-                                selectedChannel?.id === channel.id ? 'text-black' : 'text-grey-500'
+                              className={`text-xs ml-6 ${
+                                selectedChannel?.id === channel.id
+                                  ? 'text-grey-300'
+                                  : 'text-grey-500'
                               }`}
                             >
                               +{channelMembers.length - 5} more
@@ -715,6 +731,27 @@ const ChannelList: React.FC<ChannelListProps> = ({
         )}
       </div>
 
+      {/* Current Voice Channel Status */}
+      {currentVoiceChannel && (
+        <div className="border-t-2 border-grey-800 bg-grey-900 p-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <Volume2 className="w-4 h-4 text-grey-400 flex-shrink-0" />
+              <span className="text-grey-300 text-sm font-medium truncate">
+                {currentVoiceChannel.name}
+              </span>
+            </div>
+            <button
+              onClick={() => voiceManager.leaveVoiceChannel()}
+              className="p-1.5 text-grey-400 hover:text-red-400 hover:bg-grey-800 transition-colors border-2 border-transparent hover:border-red-700 flex-shrink-0"
+              title="Disconnect from voice"
+            >
+              <PhoneOff className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* User Info Footer */}
       <div className="border-t-2 border-grey-800 bg-grey-950 p-3 flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -724,14 +761,6 @@ const ChannelList: React.FC<ChannelListProps> = ({
             </span>
           </div>
           <div className="min-w-0 flex-1">
-            {currentVoiceChannel && (
-              <div className="flex items-center gap-1 mb-1">
-                <Volume2 className="w-3 h-3 text-grey-400 flex-shrink-0" />
-                <p className="text-grey-400 text-xs truncate font-medium">
-                  {currentVoiceChannel.name}
-                </p>
-              </div>
-            )}
             <p className="text-white font-medium text-sm truncate">{user?.username}</p>
             <p className="text-grey-500 text-xs truncate">{user?.email}</p>
           </div>

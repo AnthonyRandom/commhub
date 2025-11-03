@@ -33,16 +33,14 @@ interface ChatAreaProps {
   server: Server | null
 }
 
-// CSS for speaking animation (South Park Canadian style - subtle jump and tilt)
+// CSS for speaking animation (subtle jump up and down)
 const speakingAnimationStyle = `
   @keyframes speakingJump {
-    0%, 100% { transform: translateY(0) rotate(0deg); }
-    25% { transform: translateY(-3px) rotate(1deg); }
-    50% { transform: translateY(-6px) rotate(0deg); }
-    75% { transform: translateY(-3px) rotate(-1deg); }
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
   }
   .speaking-animation {
-    animation: speakingJump 0.6s ease-in-out infinite;
+    animation: speakingJump 1.5s ease-in-out infinite;
   }
 `
 
@@ -74,10 +72,11 @@ const VoiceChannelParticipants: React.FC = () => {
   }
 
   const connectedUsersArray = Array.from(connectedUsers.values())
+  const currentUserVoiceState = user ? connectedUsers.get(user.id) : null
   const currentUser = {
     userId: user?.id || 0,
     username: user?.username || 'You',
-    isSpeaking: false,
+    isSpeaking: currentUserVoiceState?.isSpeaking || false,
     isMuted,
     isDeafened,
   }
@@ -135,7 +134,7 @@ const VoiceChannelParticipants: React.FC = () => {
             <div
               className={`w-32 h-32 flex items-center justify-center transition-all duration-300 border-4 border-grey-800 ${
                 currentUser.isSpeaking
-                  ? 'bg-white ring-4 ring-white ring-offset-4 ring-offset-grey-900 scale-105'
+                  ? 'bg-white ring-4 ring-white ring-offset-2 ring-offset-grey-900 scale-105'
                   : 'bg-white'
               }`}
             >
@@ -188,7 +187,7 @@ const VoiceChannelParticipants: React.FC = () => {
                 <div
                   className={`w-32 h-32 flex items-center justify-center transition-all duration-300 border-4 border-grey-800 ${
                     participant.isSpeaking
-                      ? 'bg-white ring-4 ring-white ring-offset-4 ring-offset-grey-900 scale-105'
+                      ? 'bg-white ring-4 ring-white ring-offset-2 ring-offset-grey-900 scale-105'
                       : 'bg-grey-800 hover:bg-grey-750'
                   } ${isSelected ? 'ring-2 ring-grey-600' : ''}`}
                 >

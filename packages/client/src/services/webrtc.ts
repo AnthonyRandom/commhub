@@ -1,6 +1,7 @@
 import SimplePeer from 'simple-peer'
 import { useVoiceStore } from '../stores/voice'
 import { wsService } from './websocket'
+import { useAuthStore } from '../stores/auth'
 
 interface PeerConnection {
   peer: SimplePeer.Instance
@@ -135,6 +136,12 @@ class WebRTCService {
 
     this.speakingCheckInterval = window.setInterval(() => {
       const isSpeaking = this.checkIfSpeaking()
+
+      // Update local user's speaking status immediately
+      const user = useAuthStore.getState().user
+      if (user) {
+        useVoiceStore.getState().updateUserSpeaking(user.id, isSpeaking)
+      }
 
       // Only emit when speaking state changes to reduce network traffic
       if (isSpeaking !== lastSpeakingState && this.currentChannelId) {

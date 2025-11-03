@@ -18,6 +18,7 @@ import { useServersStore } from '../stores/servers'
 import { useAuthStore } from '../stores/auth'
 import { useVoiceStore } from '../stores/voice'
 import { apiService, type Conversation } from '../services/api'
+import { wsService } from '../services/websocket'
 import type { Channel, Server } from '../services/api'
 
 interface ChannelListProps {
@@ -67,6 +68,22 @@ const ChannelList: React.FC<ChannelListProps> = ({
     fetchChannels()
   }, [fetchChannels])
 
+  // Poll for voice channel member updates when in a server
+  useEffect(() => {
+    if (!server) return
+
+    const pollInterval = setInterval(async () => {
+      try {
+        // Emit event to request voice channel member updates
+        wsService.getSocket()?.emit('get-voice-channel-members', { serverId: server.id })
+      } catch (error) {
+        console.error('Error polling for voice channel members:', error)
+      }
+    }, 5000) // Poll every 5 seconds (more sparingly than DM polling)
+
+    return () => clearInterval(pollInterval)
+  }, [server])
+
   // Listen for voice channel member updates
   useEffect(() => {
     const handleVoiceChannelMembersUpdate = (event: CustomEvent) => {
@@ -98,6 +115,11 @@ const ChannelList: React.FC<ChannelListProps> = ({
   const serverChannels = server ? getChannelsByServer(server.id) : []
   const textChannels = serverChannels.filter((ch) => ch.type === 'text')
   const voiceChannels = serverChannels.filter((ch) => ch.type === 'voice')
+
+  // Find the current voice channel the user is connected to
+  const currentVoiceChannel = connectedChannelId
+    ? serverChannels.find((ch) => ch.id === connectedChannelId && ch.type === 'voice')
+    : null
 
   const handleLogout = async () => {
     try {
@@ -400,7 +422,13 @@ const ChannelList: React.FC<ChannelListProps> = ({
                         </span>
                         <div className="flex items-center gap-1 flex-shrink-0">
                           {hasMember && (
-                            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-grey-800 border border-grey-700">
+                            <div
+                              className={`flex items-center gap-1 px-1.5 py-0.5 border ${
+                                selectedChannel?.id === channel.id
+                                  ? 'bg-white text-black border-white'
+                                  : 'bg-grey-800 text-grey-300 border-grey-700'
+                              }`}
+                            >
                               <Users className="w-3 h-3" />
                               <span className="text-xs font-bold">{channelMembers.length}</span>
                             </div>
@@ -409,7 +437,40 @@ const ChannelList: React.FC<ChannelListProps> = ({
                         </div>
                       </button>
 
-                      {/* Show connected users when hovering */}
+                      {/* List of usernames below the channel name */}
+                      {hasMember && channelMembers.length > 0 && (
+                        <div className="ml-6 mt-1 space-y-0.5">
+                          {channelMembers.slice(0, 5).map((member) => (
+                            <div key={member.userId} className="flex items-center gap-1.5">
+                              <div className="w-3 h-3 bg-grey-700 flex items-center justify-center flex-shrink-0">
+                                <span className="text-grey-300 text-xs font-bold">
+                                  {member.username.charAt(0).toUpperCase()}
+                                </span>
+                              </div>
+                              <span
+                                className={`text-xs truncate ${
+                                  selectedChannel?.id === channel.id
+                                    ? 'text-black'
+                                    : 'text-grey-400'
+                                }`}
+                              >
+                                {member.username}
+                              </span>
+                            </div>
+                          ))}
+                          {channelMembers.length > 5 && (
+                            <div
+                              className={`text-xs ml-4 ${
+                                selectedChannel?.id === channel.id ? 'text-black' : 'text-grey-500'
+                              }`}
+                            >
+                              +{channelMembers.length - 5} more
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Show connected users when hovering (keep for additional info) */}
                       {hasMember && !isConnected && (
                         <div className="absolute left-full top-0 ml-2 z-50 hidden group-hover:block">
                           <div className="bg-grey-900 border-2 border-grey-700 p-2 min-w-[150px] animate-fade-in">
@@ -663,6 +724,14 @@ const ChannelList: React.FC<ChannelListProps> = ({
             </span>
           </div>
           <div className="min-w-0 flex-1">
+            {currentVoiceChannel && (
+              <div className="flex items-center gap-1 mb-1">
+                <Volume2 className="w-3 h-3 text-grey-400 flex-shrink-0" />
+                <p className="text-grey-400 text-xs truncate font-medium">
+                  {currentVoiceChannel.name}
+                </p>
+              </div>
+            )}
             <p className="text-white font-medium text-sm truncate">{user?.username}</p>
             <p className="text-grey-500 text-xs truncate">{user?.email}</p>
           </div>

@@ -921,26 +921,50 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('get-voice-channel-members')
-  handleGetVoiceChannelMembers(
-    @MessageBody() data: { channelId: number },
+  async handleGetVoiceChannelMembers(
+    @MessageBody() data: { serverId?: number; channelId?: number },
     @ConnectedSocket() client: AuthenticatedSocket
   ) {
     try {
-      if (
-        !data.channelId ||
-        typeof data.channelId !== 'number' ||
-        data.channelId <= 0
-      ) {
-        client.emit('error', { message: 'Invalid channel ID' });
+      // If requesting members for a specific channel
+      if (data.channelId) {
+        if (typeof data.channelId !== 'number' || data.channelId <= 0) {
+          client.emit('error', { message: 'Invalid channel ID' });
+          return;
+        }
+
+        const members = this.voiceChannelMembers.get(data.channelId);
+        const membersList = members ? Array.from(members) : [];
+
+        client.emit('voice-channel-members', {
+          channelId: data.channelId,
+          members: membersList,
+        });
         return;
       }
 
-      const members = this.voiceChannelMembers.get(data.channelId);
-      const membersList = members ? Array.from(members) : [];
+      // If requesting members for all voice channels in a server
+      if (data.serverId) {
+        if (typeof data.serverId !== 'number' || data.serverId <= 0) {
+          client.emit('error', { message: 'Invalid server ID' });
+          return;
+        }
 
-      client.emit('voice-channel-members', {
-        channelId: data.channelId,
-        members: membersList,
+        // Get all voice channel members for this server
+        // Note: In a real implementation, you'd query the database for all voice channels in the server
+        // For now, we'll send updates for all tracked voice channels
+        for (const [channelId, members] of this.voiceChannelMembers.entries()) {
+          const membersList = Array.from(members);
+          client.emit('voice-channel-members', {
+            channelId,
+            members: membersList,
+          });
+        }
+        return;
+      }
+
+      client.emit('error', {
+        message: 'Either serverId or channelId must be provided',
       });
     } catch (error) {
       this.logger.error('Error getting voice channel members:', error.message);

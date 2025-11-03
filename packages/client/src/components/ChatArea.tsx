@@ -33,12 +33,35 @@ interface ChatAreaProps {
   server: Server | null
 }
 
+// CSS for speaking animation (South Park Canadian style - subtle jump and tilt)
+const speakingAnimationStyle = `
+  @keyframes speakingJump {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    25% { transform: translateY(-3px) rotate(1deg); }
+    50% { transform: translateY(-6px) rotate(0deg); }
+    75% { transform: translateY(-3px) rotate(-1deg); }
+  }
+  .speaking-animation {
+    animation: speakingJump 0.6s ease-in-out infinite;
+  }
+`
+
 // Twitter Spaces-style voice participant grid
 const VoiceChannelParticipants: React.FC = () => {
   const { connectedUsers, isMuted, isDeafened, isConnecting } = useVoiceStore()
   const { user } = useAuthStore()
   const [selectedUser, setSelectedUser] = useState<number | null>(null)
   const [showVolumeSlider, setShowVolumeSlider] = useState<number | null>(null)
+
+  // Inject speaking animation CSS
+  React.useEffect(() => {
+    const style = document.createElement('style')
+    style.textContent = speakingAnimationStyle
+    document.head.appendChild(style)
+    return () => {
+      document.head.removeChild(style)
+    }
+  }, [])
 
   if (isConnecting) {
     return (
@@ -99,7 +122,9 @@ const VoiceChannelParticipants: React.FC = () => {
         {/* Current User - always first/centered */}
         <div
           key={currentUser.userId}
-          className="flex flex-col items-center gap-3 animate-slide-up"
+          className={`flex flex-col items-center gap-3 animate-slide-up ${
+            currentUser.isSpeaking ? 'speaking-animation' : ''
+          }`}
           style={{
             gridColumn: connectedUsersArray.length === 0 ? '1 / -1' : 'auto',
             justifySelf: connectedUsersArray.length === 0 ? 'center' : 'auto',
@@ -138,8 +163,7 @@ const VoiceChannelParticipants: React.FC = () => {
 
           {/* Username */}
           <div className="text-center">
-            <p className="text-white font-bold text-base">You</p>
-            <p className="text-grey-500 text-xs">Host</p>
+            <p className="text-white font-bold text-base">{currentUser.username}</p>
           </div>
         </div>
 
@@ -151,7 +175,9 @@ const VoiceChannelParticipants: React.FC = () => {
           return (
             <div
               key={participant.userId}
-              className="flex flex-col items-center gap-3 relative cursor-pointer animate-slide-up"
+              className={`flex flex-col items-center gap-3 relative cursor-pointer animate-slide-up ${
+                participant.isSpeaking ? 'speaking-animation' : ''
+              }`}
               style={{
                 animationDelay: `${index * 50}ms`,
               }}
@@ -195,9 +221,6 @@ const VoiceChannelParticipants: React.FC = () => {
               {/* Username */}
               <div className="text-center">
                 <p className="text-white font-bold text-sm">{participant.username}</p>
-                <p className="text-grey-500 text-xs">
-                  {participant.isSpeaking ? 'Speaking' : 'Listening'}
-                </p>
               </div>
 
               {/* Controls panel - shown when selected */}

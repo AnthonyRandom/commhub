@@ -20,8 +20,14 @@ interface TenorGif {
   content_description: string
 }
 
-const TENOR_API_KEY = 'AIzaSyAQY8xoVCWmqP7kqP8kGcjZ-3qVqXBDHxk'
+const TENOR_API_KEY = import.meta.env.VITE_TENOR_API_KEY
 const TENOR_CLIENT_KEY = 'commhub'
+
+if (!TENOR_API_KEY) {
+  console.error(
+    'VITE_TENOR_API_KEY environment variable is not set. GIF functionality will not work.'
+  )
+}
 
 const GifPicker: React.FC<GifPickerProps> = ({ isOpen, onClose, onSelectGif }) => {
   const [searchQuery, setSearchQuery] = useState('')

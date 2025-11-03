@@ -16,6 +16,13 @@ export default defineConfig({
   // to make use of `TAURI_DEBUG` and other env variables
   // https://tauri.studio/v1/api/config#buildconfig.defines
   envPrefix: ['VITE_', 'TAURI_'],
+
+  // Define global variables for browser compatibility with Node.js libraries
+  define: {
+    global: 'globalThis',
+    'process.env': {},
+  },
+
   build: {
     // Tauri supports es2021
     target: process.env.TAURI_PLATFORM == 'windows' ? 'chrome105' : 'safari15',

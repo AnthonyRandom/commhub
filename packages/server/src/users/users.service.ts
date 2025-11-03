@@ -34,13 +34,55 @@ export class UsersService {
       select: {
         id: true,
         username: true,
-        email: true,
         createdAt: true,
       },
     });
   }
 
   async findOne(id: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        username: true,
+        createdAt: true,
+        ownedServers: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          },
+        },
+        servers: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          },
+        },
+        friends: {
+          select: {
+            id: true,
+            username: true,
+          },
+        },
+        friendsOf: {
+          select: {
+            id: true,
+            username: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user;
+  }
+
+  async getProfile(id: number) {
     const user = await this.prisma.user.findUnique({
       where: { id },
       select: {
@@ -90,7 +132,6 @@ export class UsersService {
       select: {
         id: true,
         username: true,
-        email: true,
         createdAt: true,
       },
     });
@@ -215,7 +256,6 @@ export class UsersService {
           select: {
             id: true,
             username: true,
-            email: true,
           },
         },
       },
@@ -329,7 +369,6 @@ export class UsersService {
           select: {
             id: true,
             username: true,
-            email: true,
           },
         },
       },

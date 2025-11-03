@@ -204,7 +204,6 @@ export class DirectMessagesService {
           select: {
             id: true,
             username: true,
-            email: true,
           },
         });
 

@@ -130,7 +130,6 @@ export class FriendRequestsService {
           select: {
             id: true,
             username: true,
-            email: true,
           },
         },
       },
@@ -151,7 +150,6 @@ export class FriendRequestsService {
           select: {
             id: true,
             username: true,
-            email: true,
           },
         },
       },

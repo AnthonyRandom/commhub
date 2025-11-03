@@ -5,9 +5,9 @@ services:
     container_name: commhub-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: commhub
-      POSTGRES_USER: commhub_user
-      POSTGRES_PASSWORD: commhub_password
+      POSTGRES_DB: ${POSTGRES_DB:-commhub}
+      POSTGRES_USER: ${POSTGRES_USER:-commhub_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env file}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./packages/server/prisma/migrations:/docker-entrypoint-initdb.d/migrations
@@ -30,11 +30,11 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://commhub_user:commhub_password@postgres:5432/commhub?schema=public
-      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production}
-      - PORT=3000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-commhub_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-commhub}?schema=public
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env file}
+      - PORT=${PORT:-3000}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173,http://localhost:1420}
-      - HTTPS_ENABLED=false
+      - HTTPS_ENABLED=${HTTPS_ENABLED:-false}
     ports:
       - '3000:3000'
     depends_on:

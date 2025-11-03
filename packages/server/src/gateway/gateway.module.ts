@@ -8,7 +8,7 @@ import { UsersModule } from '../users/users.module';
   imports: [
     // @ts-ignore - Monorepo TypeScript compatibility issue
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'your-secret-key', // Use environment variable in production
+      secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '24h' },
     }),
     MessagesModule,

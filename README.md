@@ -35,6 +35,17 @@ CommHub is currently in active development, focusing on delivering a solid MVP w
 - [x] Cross-platform installer packages
 - [x] Self-hosting capabilities
 
+## 🔒 Security
+
+CommHub is built with security as a priority. See `SECURITY.md` for:
+
+- Required environment variables and setup
+- Security measures implemented
+- Deployment security checklist
+- How to report security issues
+
+**⚠️ Important**: Before deploying, you MUST configure `JWT_SECRET` and database credentials. Never use default values in production.
+
 ## 🏠 Self-Hosting
 
 CommHub supports self-hosting for users who prefer to run their own server. The server can be deployed using Docker for easy setup and management.
@@ -42,11 +53,25 @@ CommHub supports self-hosting for users who prefer to run their own server. The 
 ### Quick Setup (Windows/Linux)
 
 1. **Prerequisites**: Install Docker and Docker Compose
-2. **Run the setup script**:
+2. **Configure environment**:
+
+   ```bash
+   # For Docker Compose (recommended)
+   cp docker.env.example .env
+   # Then edit .env and set POSTGRES_PASSWORD and JWT_SECRET
+
+   # OR for standalone server
+   cd packages/server
+   cp env.example .env
+   # Then edit .env with your settings
+   ```
+
+3. **Run the setup script**:
    - **Windows**: Double-click `setup-server.bat` or run it from command prompt
    - **Linux/macOS**: Run `./setup-server.sh` from terminal
-3. **Configure**: Edit `packages/server/.env` with your settings
 4. **Access**: Server runs at `http://localhost:3000`
+
+**⚠️ Security Note**: Always set strong values for `POSTGRES_PASSWORD` and `JWT_SECRET` before starting the server!
 
 ### Manual Setup
 

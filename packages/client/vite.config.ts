@@ -23,6 +23,25 @@ export default defineConfig({
     'process.env': {},
   },
 
+  // Resolve Node.js modules for browser
+  resolve: {
+    alias: {
+      util: 'rollup-plugin-node-polyfills/polyfills/util',
+      stream: 'rollup-plugin-node-polyfills/polyfills/stream',
+      buffer: 'rollup-plugin-node-polyfills/polyfills/buffer-es6',
+      process: 'rollup-plugin-node-polyfills/polyfills/process-es6',
+    },
+  },
+
+  // Optimize dependencies
+  optimizeDeps: {
+    esbuildOptions: {
+      define: {
+        global: 'globalThis',
+      },
+    },
+  },
+
   build: {
     // Tauri supports es2021
     target: process.env.TAURI_PLATFORM == 'windows' ? 'chrome105' : 'safari15',

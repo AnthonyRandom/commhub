@@ -452,15 +452,28 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 </div>
                 <select
                   value={settings.audioInputDeviceId || 'default'}
-                  onChange={(e) => updateSetting('audioInputDeviceId', e.target.value)}
+                  onChange={(e) => {
+                    console.log('[Settings] Input device dropdown changed:', e.target.value)
+                    console.log(
+                      '[Settings] Available options:',
+                      Array.from(e.target.options).map((o) => ({
+                        value: o.value,
+                        text: o.text,
+                        selected: o.selected,
+                      }))
+                    )
+                    updateSetting('audioInputDeviceId', e.target.value)
+                  }}
                   className="w-full bg-grey-800 border-2 border-grey-700 px-3 py-2 text-white focus:border-white"
                 >
-                  <option value="default">Default Microphone</option>
                   {audioInputDevices.map((device) => (
                     <option key={device.deviceId} value={device.deviceId}>
                       {device.label}
                     </option>
                   ))}
+                  {audioInputDevices.length === 0 && (
+                    <option value="default">No devices found - check permissions</option>
+                  )}
                 </select>
               </div>
 
@@ -474,15 +487,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 </div>
                 <select
                   value={settings.audioOutputDeviceId || 'default'}
-                  onChange={(e) => updateSetting('audioOutputDeviceId', e.target.value)}
+                  onChange={(e) => {
+                    console.log('[Settings] Output device dropdown changed:', e.target.value)
+                    updateSetting('audioOutputDeviceId', e.target.value)
+                  }}
                   className="w-full bg-grey-800 border-2 border-grey-700 px-3 py-2 text-white focus:border-white"
                 >
-                  <option value="default">Default Speakers</option>
                   {audioOutputDevices.map((device) => (
                     <option key={device.deviceId} value={device.deviceId}>
                       {device.label}
                     </option>
                   ))}
+                  {audioOutputDevices.length === 0 && (
+                    <option value="default">No devices found - check permissions</option>
+                  )}
                 </select>
                 <p className="text-grey-500 text-xs mt-2">
                   Note: Output device selection may not be supported in all browsers

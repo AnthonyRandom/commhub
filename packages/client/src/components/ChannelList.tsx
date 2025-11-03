@@ -248,11 +248,11 @@ const ChannelList: React.FC<ChannelListProps> = ({
               </div>
               <div className="space-y-1">
                 {textChannels.map((channel) => (
-                  <div key={channel.id} className="group relative">
+                  <div key={channel.id} className="group relative flex items-center">
                     <button
                       onClick={() => onChannelSelect(channel)}
                       className={`
-                        w-full px-2 py-2 flex items-center gap-2
+                        flex-1 px-2 py-2 flex items-center gap-2
                         border-2 transition-all duration-100
                         ${
                           selectedChannel?.id === channel.id
@@ -265,7 +265,11 @@ const ChannelList: React.FC<ChannelListProps> = ({
                       <span className="truncate text-sm font-medium flex-1 text-left">
                         {channel.name}
                       </span>
-                      {isOwner && (
+                    </button>
+                    {isOwner && (
+                      <div
+                        className={`absolute right-2 ${selectedChannel?.id === channel.id ? 'text-black' : 'text-white'}`}
+                      >
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
@@ -277,8 +281,8 @@ const ChannelList: React.FC<ChannelListProps> = ({
                         >
                           <MoreVertical className="w-3 h-3" />
                         </button>
-                      )}
-                    </button>
+                      </div>
+                    )}
                     {contextMenuChannelId === channel.id && isOwner && (
                       <div className="absolute right-0 top-full bg-grey-900 border-2 border-grey-700 z-50 min-w-[150px] animate-fade-in">
                         <button

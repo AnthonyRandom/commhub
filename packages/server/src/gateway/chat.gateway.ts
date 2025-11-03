@@ -483,4 +483,187 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.emit('error', { message: 'Failed to get online friends' });
     }
   }
+
+  // WebRTC Voice Chat Signaling
+
+  @SubscribeMessage('join-voice-channel')
+  async handleJoinVoiceChannel(
+    @MessageBody() data: { channelId: number },
+    @ConnectedSocket() client: AuthenticatedSocket
+  ) {
+    try {
+      // Validate input
+      if (
+        !data.channelId ||
+        typeof data.channelId !== 'number' ||
+        data.channelId <= 0
+      ) {
+        client.emit('error', { message: 'Invalid channel ID' });
+        return;
+      }
+
+      const roomName = `voice-${data.channelId}`;
+      client.join(roomName);
+      this.logger.log(
+        `${client.username} joined voice channel room: ${roomName}`
+      );
+
+      // Get list of users already in the voice channel
+      const room = this.server.sockets.adapter.rooms.get(roomName);
+      const usersInChannel: Array<{ userId: number; username: string }> = [];
+
+      if (room) {
+        for (const socketId of room) {
+          const socket = this.server.sockets.sockets.get(
+            socketId
+          ) as AuthenticatedSocket;
+          if (socket && socket.userId !== client.userId) {
+            usersInChannel.push({
+              userId: socket.userId,
+              username: socket.username,
+            });
+          }
+        }
+      }
+
+      // Notify the joining user about existing users
+      client.emit('voice-channel-users', {
+        channelId: data.channelId,
+        users: usersInChannel,
+      });
+
+      // Notify other users in the channel about the new user
+      client.to(roomName).emit('voice-user-joined', {
+        channelId: data.channelId,
+        userId: client.userId,
+        username: client.username,
+      });
+    } catch (error) {
+      this.logger.error('Error joining voice channel:', error.message);
+      client.emit('error', { message: 'Failed to join voice channel' });
+    }
+  }
+
+  @SubscribeMessage('leave-voice-channel')
+  handleLeaveVoiceChannel(
+    @MessageBody() data: { channelId: number },
+    @ConnectedSocket() client: AuthenticatedSocket
+  ) {
+    const roomName = `voice-${data.channelId}`;
+    client.leave(roomName);
+    this.logger.log(`${client.username} left voice channel room: ${roomName}`);
+
+    // Notify others in the voice channel
+    client.to(roomName).emit('voice-user-left', {
+      channelId: data.channelId,
+      userId: client.userId,
+      username: client.username,
+    });
+  }
+
+  @SubscribeMessage('voice-offer')
+  handleVoiceOffer(
+    @MessageBody()
+    data: { channelId: number; targetUserId: number; offer: any },
+    @ConnectedSocket() client: AuthenticatedSocket
+  ) {
+    try {
+      // Validate input
+      if (
+        !data.channelId ||
+        !data.targetUserId ||
+        !data.offer ||
+        typeof data.channelId !== 'number' ||
+        typeof data.targetUserId !== 'number'
+      ) {
+        client.emit('error', { message: 'Invalid voice offer data' });
+        return;
+      }
+
+      const targetSocketId = this.onlineUsers.get(data.targetUserId);
+      if (targetSocketId) {
+        this.server.to(targetSocketId).emit('voice-offer', {
+          channelId: data.channelId,
+          fromUserId: client.userId,
+          fromUsername: client.username,
+          offer: data.offer,
+        });
+        this.logger.log(
+          `Voice offer from ${client.username} to user ${data.targetUserId}`
+        );
+      }
+    } catch (error) {
+      this.logger.error('Error handling voice offer:', error.message);
+      client.emit('error', { message: 'Failed to send voice offer' });
+    }
+  }
+
+  @SubscribeMessage('voice-answer')
+  handleVoiceAnswer(
+    @MessageBody()
+    data: { channelId: number; targetUserId: number; answer: any },
+    @ConnectedSocket() client: AuthenticatedSocket
+  ) {
+    try {
+      // Validate input
+      if (
+        !data.channelId ||
+        !data.targetUserId ||
+        !data.answer ||
+        typeof data.channelId !== 'number' ||
+        typeof data.targetUserId !== 'number'
+      ) {
+        client.emit('error', { message: 'Invalid voice answer data' });
+        return;
+      }
+
+      const targetSocketId = this.onlineUsers.get(data.targetUserId);
+      if (targetSocketId) {
+        this.server.to(targetSocketId).emit('voice-answer', {
+          channelId: data.channelId,
+          fromUserId: client.userId,
+          fromUsername: client.username,
+          answer: data.answer,
+        });
+        this.logger.log(
+          `Voice answer from ${client.username} to user ${data.targetUserId}`
+        );
+      }
+    } catch (error) {
+      this.logger.error('Error handling voice answer:', error.message);
+      client.emit('error', { message: 'Failed to send voice answer' });
+    }
+  }
+
+  @SubscribeMessage('voice-ice-candidate')
+  handleVoiceIceCandidate(
+    @MessageBody()
+    data: { channelId: number; targetUserId: number; candidate: any },
+    @ConnectedSocket() client: AuthenticatedSocket
+  ) {
+    try {
+      // Validate input
+      if (
+        !data.channelId ||
+        !data.targetUserId ||
+        !data.candidate ||
+        typeof data.channelId !== 'number' ||
+        typeof data.targetUserId !== 'number'
+      ) {
+        client.emit('error', { message: 'Invalid ICE candidate data' });
+        return;
+      }
+
+      const targetSocketId = this.onlineUsers.get(data.targetUserId);
+      if (targetSocketId) {
+        this.server.to(targetSocketId).emit('voice-ice-candidate', {
+          channelId: data.channelId,
+          fromUserId: client.userId,
+          candidate: data.candidate,
+        });
+      }
+    } catch (error) {
+      this.logger.error('Error handling ICE candidate:', error.message);
+    }
+  }
 }

@@ -9,10 +9,12 @@ import {
   MoreVertical,
   Edit2,
   Trash2,
+  PhoneCall,
 } from 'lucide-react'
 import { useChannelsStore } from '../stores/channels'
 import { useServersStore } from '../stores/servers'
 import { useAuthStore } from '../stores/auth'
+import { useVoiceStore } from '../stores/voice'
 import { apiService } from '../services/api'
 import type { Channel, Server } from '../services/api'
 
@@ -38,6 +40,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
   const leaveServer = useServersStore((state) => state.leaveServer)
   const getServerInviteCode = useServersStore((state) => state.getServerInviteCode)
   const { user, logout } = useAuthStore()
+  const { connectedChannelId } = useVoiceStore()
 
   const [showServerMenu, setShowServerMenu] = React.useState(false)
   const [inviteCode, setInviteCode] = React.useState<string | null>(null)
@@ -307,24 +310,32 @@ const ChannelList: React.FC<ChannelListProps> = ({
                 </h3>
               </div>
               <div className="space-y-1">
-                {voiceChannels.map((channel) => (
-                  <button
-                    key={channel.id}
-                    onClick={() => onChannelSelect(channel)}
-                    className={`
-                      w-full px-2 py-2 flex items-center gap-2
-                      border-2 transition-all duration-100
-                      ${
-                        selectedChannel?.id === channel.id
-                          ? 'bg-white text-black border-white'
-                          : 'bg-transparent text-grey-300 border-transparent hover:border-grey-700 hover:bg-grey-850'
-                      }
-                    `}
-                  >
-                    <Volume2 className="w-4 h-4 flex-shrink-0" />
-                    <span className="truncate text-sm font-medium">{channel.name}</span>
-                  </button>
-                ))}
+                {voiceChannels.map((channel) => {
+                  const isConnected = connectedChannelId === channel.id
+                  return (
+                    <button
+                      key={channel.id}
+                      onClick={() => onChannelSelect(channel)}
+                      className={`
+                        w-full px-2 py-2 flex items-center gap-2
+                        border-2 transition-all duration-100
+                        ${
+                          selectedChannel?.id === channel.id
+                            ? 'bg-white text-black border-white'
+                            : isConnected
+                              ? 'bg-grey-850 text-white border-grey-700'
+                              : 'bg-transparent text-grey-300 border-transparent hover:border-grey-700 hover:bg-grey-850'
+                        }
+                      `}
+                    >
+                      <Volume2 className="w-4 h-4 flex-shrink-0" />
+                      <span className="truncate text-sm font-medium flex-1 text-left">
+                        {channel.name}
+                      </span>
+                      {isConnected && <PhoneCall className="w-3 h-3 flex-shrink-0 animate-pulse" />}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           </>

@@ -6,6 +6,7 @@ import ServerModal from './components/ServerModal'
 import ChannelModal from './components/ChannelModal'
 import SettingsModal from './components/SettingsModal'
 import ServerSettingsModal from './components/ServerSettingsModal'
+import FriendsPanel from './components/FriendsPanel'
 import { useAuthStore } from './stores/auth'
 import { useServersStore } from './stores/servers'
 import { wsManager } from './services/websocket-manager'
@@ -19,6 +20,7 @@ function App() {
   const [showChannelModal, setShowChannelModal] = useState(false)
   const [showServerSettings, setShowServerSettings] = useState(false)
   const [showAppSettings, setShowAppSettings] = useState(false)
+  const [showFriendsPanel, setShowFriendsPanel] = useState(false)
 
   const { isAuthenticated, isLoading } = useAuthStore()
   const selectServer = useServersStore((state) => state.selectServer)
@@ -59,6 +61,13 @@ function App() {
   const handleServerSelect = (server: Server | null) => {
     setSelectedServer(server)
     setSelectedChannel(null) // Clear channel selection when switching servers
+    setShowFriendsPanel(false) // Close friends panel when selecting server
+  }
+
+  const handleShowFriends = () => {
+    setShowFriendsPanel(true)
+    setSelectedServer(null)
+    setSelectedChannel(null)
   }
 
   const handleCreateServer = () => {
@@ -102,8 +111,14 @@ function App() {
             onCreateChannel={handleCreateChannel}
             onServerSettings={handleServerSettings}
             onAppSettings={handleAppSettings}
+            onShowFriends={handleShowFriends}
+            showFriendsPanel={showFriendsPanel}
           />
-          <ChatArea selectedChannel={selectedChannel} server={selectedServer} />
+          {showFriendsPanel ? (
+            <FriendsPanel />
+          ) : (
+            <ChatArea selectedChannel={selectedChannel} server={selectedServer} />
+          )}
         </main>
 
         {/* Modals */}

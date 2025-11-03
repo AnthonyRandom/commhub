@@ -27,13 +27,14 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.2.0",
     "@tauri-apps/cli": "^1.0.0",
+    "@types/lodash": "^4.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
-    "@types/lodash": "^4.0.0",
+    "@types/simple-peer": "^9.11.9",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
+    "@vitejs/plugin-react": "^4.2.0",
     "autoprefixer": "^10.0.0",
     "eslint": "^8.57.0",
     "eslint-plugin-react-hooks": "^4.6.0",

@@ -229,6 +229,11 @@ class WebSocketService {
   get isConnected(): boolean {
     return this.socket?.connected ?? false
   }
+
+  // Get socket instance (for voice manager)
+  getSocket() {
+    return this.socket
+  }
 }
 
 // Create and export a singleton instance

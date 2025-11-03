@@ -272,6 +272,12 @@ class ApiService {
     await this.axiosInstance.delete(`/channels/${channelId}`)
   }
 
+  // User search methods
+  async findAll(): Promise<User[]> {
+    const response: AxiosResponse<User[]> = await this.axiosInstance.get('/users')
+    return response.data
+  }
+
   // Friend methods
   async getFriends(userId: number): Promise<Friend[]> {
     const response: AxiosResponse<Friend[]> = await this.axiosInstance.get(

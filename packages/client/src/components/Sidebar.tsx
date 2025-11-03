@@ -12,6 +12,8 @@ interface SidebarProps {
   onCreateChannel: () => void
   onServerSettings: () => void
   onAppSettings: () => void
+  onShowFriends: () => void
+  showFriendsPanel: boolean
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -23,6 +25,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   onCreateChannel,
   onServerSettings,
   onAppSettings,
+  onShowFriends,
+  showFriendsPanel,
 }) => {
   return (
     <div className="flex h-full">
@@ -30,6 +34,8 @@ const Sidebar: React.FC<SidebarProps> = ({
         selectedServer={selectedServer}
         onServerSelect={onServerSelect}
         onCreateServer={onCreateServer}
+        onShowFriends={onShowFriends}
+        showFriendsPanel={showFriendsPanel}
       />
       <ChannelList
         server={selectedServer}

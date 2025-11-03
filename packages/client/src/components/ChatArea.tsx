@@ -1,9 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Hash, Send, Users, MoreVertical, Edit2, Trash2 } from 'lucide-react'
+import { Hash, Send, Users, MoreVertical, Edit2, Trash2, Volume2, PhoneCall } from 'lucide-react'
 import { useMessagesStore } from '../stores/messages'
 import { wsManager } from '../services/websocket-manager'
 import { useAuthStore } from '../stores/auth'
+import { useVoiceStore } from '../stores/voice'
+import { voiceManager } from '../services/voice-manager'
 import MembersModal from './MembersModal'
+import VoiceControls from './VoiceControls'
 import type { Channel, Server, Message } from '../services/api'
 
 interface ChatAreaProps {
@@ -29,9 +32,13 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   const deleteMessage = useMessagesStore((state) => state.deleteMessage)
   const { user } = useAuthStore()
 
-  // Fetch messages when channel changes
+  const { connectedChannelId, isConnecting } = useVoiceStore()
+  const isVoiceChannel = selectedChannel?.type === 'voice'
+  const isConnectedToVoice = connectedChannelId === selectedChannel?.id
+
+  // Fetch messages when channel changes (text channels only)
   useEffect(() => {
-    if (selectedChannel) {
+    if (selectedChannel && selectedChannel.type === 'text') {
       fetchMessages(selectedChannel.id)
       wsManager.joinChannel(selectedChannel.id)
 
@@ -40,6 +47,11 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
       }
     }
   }, [selectedChannel, fetchMessages])
+
+  // Initialize voice manager
+  useEffect(() => {
+    voiceManager.initialize()
+  }, [])
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -70,6 +82,16 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSendMessage(e)
+    }
+  }
+
+  const handleJoinVoice = async () => {
+    if (!selectedChannel || selectedChannel.type !== 'voice') return
+
+    try {
+      await voiceManager.joinVoiceChannel(selectedChannel.id)
+    } catch (error) {
+      console.error('Failed to join voice channel:', error)
     }
   }
 
@@ -165,6 +187,81 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
       </div>
     )
   }
+
+  // Voice Channel UI
+  if (isVoiceChannel) {
+    return (
+      <div className="flex-1 bg-grey-900 flex flex-col h-full">
+        {/* Channel Header */}
+        <div className="h-14 border-b-2 border-grey-800 px-4 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <Volume2 className="w-5 h-5 text-grey-400" />
+            <h2 className="font-bold text-white text-lg">{selectedChannel.name}</h2>
+          </div>
+          <button
+            onClick={() => setShowMembersModal(true)}
+            className="p-2 text-grey-400 hover:text-white hover:bg-grey-850 transition-colors border-2 border-transparent hover:border-grey-700"
+            title="Members"
+          >
+            <Users className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Voice Channel Content */}
+        <div className="flex-1 flex items-center justify-center p-8">
+          {!isConnectedToVoice && !isConnecting ? (
+            <div className="text-center max-w-md">
+              <div className="w-24 h-24 bg-grey-850 border-2 border-grey-700 flex items-center justify-center mx-auto mb-6">
+                <Volume2 className="w-12 h-12 text-grey-600" />
+              </div>
+              <h2 className="text-white text-2xl font-bold mb-3">{selectedChannel.name}</h2>
+              <p className="text-grey-400 mb-6">
+                Join this voice channel to talk with others in real-time. Make sure your microphone
+                is working.
+              </p>
+              <button
+                onClick={handleJoinVoice}
+                className="px-6 py-3 bg-white text-black border-2 border-white hover:bg-grey-100 transition-colors font-bold flex items-center gap-2 mx-auto"
+              >
+                <PhoneCall className="w-5 h-5" />
+                Join Voice Channel
+              </button>
+            </div>
+          ) : (
+            <div className="text-center">
+              {isConnecting ? (
+                <>
+                  <div className="w-16 h-16 border-4 border-white border-t-transparent animate-spin mx-auto mb-4"></div>
+                  <p className="text-white text-lg font-bold">Connecting to voice...</p>
+                  <p className="text-grey-400 text-sm mt-2">Requesting microphone access...</p>
+                </>
+              ) : (
+                <>
+                  <div className="w-24 h-24 bg-white border-2 border-white flex items-center justify-center mx-auto mb-6">
+                    <Volume2 className="w-12 h-12 text-black" />
+                  </div>
+                  <h2 className="text-white text-2xl font-bold mb-3">Voice Connected</h2>
+                  <p className="text-grey-400">You are now in the voice channel</p>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Voice Controls (shown when connected) */}
+        {isConnectedToVoice && <VoiceControls channel={selectedChannel} />}
+
+        {/* Members Modal */}
+        <MembersModal
+          isOpen={showMembersModal}
+          onClose={() => setShowMembersModal(false)}
+          server={server}
+        />
+      </div>
+    )
+  }
+
+  // Text Channel UI (existing code continues below)
 
   return (
     <div className="flex-1 bg-grey-900 flex flex-col h-full">

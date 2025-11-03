@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react'
-import { Plus, Hash } from 'lucide-react'
+import { Plus, Users } from 'lucide-react'
 import { useServersStore } from '../stores/servers'
 import type { Server } from '../services/api'
 
@@ -7,12 +7,16 @@ interface ServerListProps {
   selectedServer: Server | null
   onServerSelect: (server: Server | null) => void
   onCreateServer: () => void
+  onShowFriends: () => void
+  showFriendsPanel: boolean
 }
 
 const ServerList: React.FC<ServerListProps> = ({
   selectedServer,
   onServerSelect,
   onCreateServer,
+  onShowFriends,
+  showFriendsPanel,
 }) => {
   const servers = useServersStore((state) => state.servers)
   const fetchServers = useServersStore((state) => state.fetchServers)
@@ -33,22 +37,25 @@ const ServerList: React.FC<ServerListProps> = ({
 
   return (
     <div className="w-20 bg-grey-950 border-r-2 border-grey-800 flex flex-col items-center py-4 gap-3">
-      {/* Home/Direct Messages Button */}
+      {/* Friends Button */}
       <button
-        onClick={() => onServerSelect(null)}
+        onClick={onShowFriends}
         className={`
           w-14 h-14 flex items-center justify-center
           border-2 transition-all duration-100
           ${
-            !selectedServer
+            showFriendsPanel
               ? 'bg-white text-black border-white'
               : 'bg-grey-900 text-white border-grey-700 hover:border-white'
           }
         `}
-        title="Direct Messages"
+        title="Friends"
       >
-        <Hash className="w-6 h-6" />
+        <Users className="w-6 h-6" />
       </button>
+
+      {/* Divider */}
+      <div className="w-full border-t-2 border-grey-800" />
 
       {/* Server List */}
       <div className="w-full flex flex-col items-center gap-3 overflow-y-auto flex-1">

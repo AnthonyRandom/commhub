@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { X, Search, TrendingUp } from 'lucide-react'
+import { apiService } from '../services/api'
 
 interface GifPickerProps {
   isOpen: boolean
@@ -18,15 +19,6 @@ interface TenorGif {
     }
   }
   content_description: string
-}
-
-const TENOR_API_KEY = import.meta.env.VITE_TENOR_API_KEY
-const TENOR_CLIENT_KEY = 'commhub'
-
-if (!TENOR_API_KEY) {
-  console.error(
-    'VITE_TENOR_API_KEY environment variable is not set. GIF functionality will not work.'
-  )
 }
 
 const GifPicker: React.FC<GifPickerProps> = ({ isOpen, onClose, onSelectGif }) => {
@@ -75,13 +67,12 @@ const GifPicker: React.FC<GifPickerProps> = ({ isOpen, onClose, onSelectGif }) =
   const fetchTrendingGifs = async () => {
     setIsLoading(true)
     try {
-      const response = await fetch(
-        `https://tenor.googleapis.com/v2/featured?key=${TENOR_API_KEY}&client_key=${TENOR_CLIENT_KEY}&limit=20`
-      )
-      const data = await response.json()
-      setGifs(data.results || [])
+      // Use the server proxy endpoint instead of direct Tenor API
+      const gifs = await apiService.getTrendingGifs()
+      setGifs(gifs)
     } catch (error) {
       console.error('Error fetching trending gifs:', error)
+      setGifs([])
     } finally {
       setIsLoading(false)
     }
@@ -90,15 +81,12 @@ const GifPicker: React.FC<GifPickerProps> = ({ isOpen, onClose, onSelectGif }) =
   const searchGifs = async (query: string) => {
     setIsLoading(true)
     try {
-      const response = await fetch(
-        `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(
-          query
-        )}&key=${TENOR_API_KEY}&client_key=${TENOR_CLIENT_KEY}&limit=20`
-      )
-      const data = await response.json()
-      setGifs(data.results || [])
+      // Use the server proxy endpoint instead of direct Tenor API
+      const gifs = await apiService.searchGifs(query)
+      setGifs(gifs)
     } catch (error) {
       console.error('Error searching gifs:', error)
+      setGifs([])
     } finally {
       setIsLoading(false)
     }

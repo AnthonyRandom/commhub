@@ -9,6 +9,7 @@ import { MessagesModule } from './messages/messages.module';
 import { GatewayModule } from './gateway/gateway.module';
 import { FriendRequestsModule } from './friend-requests/friend-requests.module';
 import { DirectMessagesModule } from './direct-messages/direct-messages.module';
+import { TenorModule } from './tenor/tenor.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { DirectMessagesModule } from './direct-messages/direct-messages.module';
     GatewayModule,
     FriendRequestsModule,
     DirectMessagesModule,
+    TenorModule,
   ],
 })
 export class AppModule {}

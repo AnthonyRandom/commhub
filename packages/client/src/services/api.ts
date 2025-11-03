@@ -402,6 +402,21 @@ class ApiService {
     await this.axiosInstance.post(`/direct-messages/conversation/${userId}/read`)
   }
 
+  // Tenor GIF methods
+  async getTrendingGifs(limit: number = 20): Promise<any[]> {
+    const response: AxiosResponse<any[]> = await this.axiosInstance.get(
+      `/tenor/trending?limit=${limit}`
+    )
+    return response.data
+  }
+
+  async searchGifs(query: string, limit: number = 20): Promise<any[]> {
+    const response: AxiosResponse<any[]> = await this.axiosInstance.get(
+      `/tenor/search?q=${encodeURIComponent(query)}&limit=${limit}`
+    )
+    return response.data
+  }
+
   // Utility methods
   setAuthToken(token: string): void {
     localStorage.setItem('auth_token', token)

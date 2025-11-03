@@ -58,21 +58,24 @@ export const useDirectMessagesStore = create<DirectMessagesState>((set, get) => 
   },
 
   sendDirectMessage: async (receiverId: number, content: string) => {
+    const currentUser = useAuthStore.getState().user
+    if (!currentUser) return
+
     set({ error: null })
     try {
       // Optimistically add message to UI
       const tempMessage: DirectMessage = {
         id: Date.now(), // Temporary ID
         content,
-        senderId: 0, // Will be set by server
+        senderId: currentUser.id, // Use actual sender ID
         receiverId,
         createdAt: new Date().toISOString(),
         isEdited: false,
         editedAt: undefined,
         isRead: false,
         sender: {
-          id: 0,
-          username: 'You',
+          id: currentUser.id,
+          username: currentUser.username,
         },
         receiver: {
           id: receiverId,
@@ -199,7 +202,10 @@ export const useDirectMessagesStore = create<DirectMessagesState>((set, get) => 
       // Check if this message is from the current user (replace optimistic message)
       if (message.senderId === currentUser.id) {
         const optimisticMessageIndex = conversationMessages.findIndex(
-          (m) => m.senderId === 0 && m.content === message.content
+          (m) =>
+            m.senderId === currentUser.id &&
+            m.content === message.content &&
+            m.id > Date.now() - 10000 // Within last 10 seconds
         )
 
         if (optimisticMessageIndex !== -1) {

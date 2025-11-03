@@ -1,8 +1,50 @@
 import React from 'react'
-import { Mic, MicOff, Headphones, VolumeX, PhoneOff, Volume2 } from 'lucide-react'
+import {
+  Mic,
+  MicOff,
+  Headphones,
+  VolumeX,
+  PhoneOff,
+  Volume2,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+} from 'lucide-react'
 import { useVoiceStore } from '../stores/voice'
 import { voiceManager } from '../services/voice-manager'
 import type { Channel } from '../services/api'
+import type { ConnectionStatus } from '../stores/voice'
+
+const ConnectionStatusIndicator: React.FC<{ status: ConnectionStatus }> = ({ status }) => {
+  switch (status) {
+    case 'connecting':
+      return (
+        <span title="Connecting...">
+          <Loader2 className="w-3 h-3 text-yellow-400 animate-spin" />
+        </span>
+      )
+    case 'connected':
+      return (
+        <span title="Connected">
+          <CheckCircle2 className="w-3 h-3 text-green-400" />
+        </span>
+      )
+    case 'failed':
+      return (
+        <span title="Connection Failed">
+          <XCircle className="w-3 h-3 text-red-400" />
+        </span>
+      )
+    case 'disconnected':
+      return (
+        <span title="Disconnected">
+          <XCircle className="w-3 h-3 text-grey-400" />
+        </span>
+      )
+    default:
+      return null
+  }
+}
 
 interface VoiceControlsProps {
   channel: Channel
@@ -100,7 +142,10 @@ const VoiceControls: React.FC<VoiceControlsProps> = ({ channel }) => {
                   </span>
                 </div>
                 <span className="text-grey-200 text-sm flex-1 truncate">{user.username}</span>
-                {user.isMuted && <MicOff className="w-3 h-3 text-red-400" />}
+                <div className="flex items-center gap-1">
+                  <ConnectionStatusIndicator status={user.connectionStatus} />
+                  {user.isMuted && <MicOff className="w-3 h-3 text-red-400" />}
+                </div>
               </div>
             ))}
           </div>

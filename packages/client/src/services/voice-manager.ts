@@ -119,6 +119,7 @@ class VoiceManager {
       username: data.username,
       isSpeaking: false,
       isMuted: false,
+      connectionStatus: 'connecting',
     })
 
     console.log(`[VoiceManager] ⏳ Waiting for offer from ${data.username}`)
@@ -210,7 +211,11 @@ class VoiceManager {
         username,
         isSpeaking: false,
         isMuted: false,
+        connectionStatus: 'connecting',
       })
+    } else {
+      // Update status to connecting
+      voiceStore.updateUserConnectionStatus(userId, 'connecting')
     }
 
     // Create peer connection
@@ -257,6 +262,8 @@ class VoiceManager {
       },
       () => {
         console.log(`[VoiceManager] 🎵 Stream received from ${username}`)
+        // Mark as connected when stream is received
+        useVoiceStore.getState().updateUserConnectionStatus(userId, 'connected')
       },
       () => {
         console.log(`[VoiceManager] ❌ Peer connection closed: ${username}`)

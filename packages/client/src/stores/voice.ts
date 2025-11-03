@@ -1,10 +1,13 @@
 import { create } from 'zustand'
 
+export type ConnectionStatus = 'connecting' | 'connected' | 'failed' | 'disconnected'
+
 export interface VoiceUser {
   userId: number
   username: string
   isSpeaking: boolean
   isMuted: boolean
+  connectionStatus: ConnectionStatus
   stream?: MediaStream
 }
 
@@ -34,6 +37,7 @@ interface VoiceState {
   updateUserSpeaking: (userId: number, isSpeaking: boolean) => void
   updateUserMuted: (userId: number, isMuted: boolean) => void
   updateUserStream: (userId: number, stream: MediaStream) => void
+  updateUserConnectionStatus: (userId: number, status: ConnectionStatus) => void
   clearConnectedUsers: () => void
   reset: () => void
 }
@@ -122,6 +126,16 @@ export const useVoiceStore = create<VoiceState>((set) => ({
       const user = newUsers.get(userId)
       if (user) {
         newUsers.set(userId, { ...user, stream })
+      }
+      return { connectedUsers: newUsers }
+    }),
+
+  updateUserConnectionStatus: (userId, status) =>
+    set((state) => {
+      const newUsers = new Map(state.connectedUsers)
+      const user = newUsers.get(userId)
+      if (user) {
+        newUsers.set(userId, { ...user, connectionStatus: status })
       }
       return { connectedUsers: newUsers }
     }),

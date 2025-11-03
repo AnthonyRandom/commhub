@@ -39,9 +39,10 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
     blockUser,
     unblockUser,
   } = useFriendsStore()
+  const messages = useDirectMessagesStore((state) => state.messages)
+  const conversations = useDirectMessagesStore((state) => state.conversations)
+
   const {
-    messages,
-    conversations,
     setActiveConversation,
     fetchConversation,
     fetchConversations,
@@ -60,9 +61,15 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [error, setError] = useState('')
+  const [conversationMessages, setConversationMessages] = useState<DirectMessage[]>([])
 
-  const conversationMessages = selectedDMUserId ? messages[selectedDMUserId] || [] : []
   const selectedFriend = friends.find((f) => f.id === selectedDMUserId)
+
+  // Update conversation messages when messages or selectedDMUserId changes
+  useEffect(() => {
+    const newMessages = selectedDMUserId ? messages[selectedDMUserId] || [] : []
+    setConversationMessages(newMessages)
+  }, [messages, selectedDMUserId])
 
   useEffect(() => {
     if (user) {

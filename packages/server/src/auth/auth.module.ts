@@ -12,7 +12,7 @@ import { PrismaModule } from '../prisma/prisma.module';
     PassportModule,
     // @ts-ignore - Monorepo TypeScript compatibility issue
     JwtModule.register({
-      secret: process.env.JWT_SECRET,
+      secret: process.env.JWT_SECRET || 'INSECURE_DEFAULT_SECRET',
       signOptions: { expiresIn: '24h' },
     }),
   ],
@@ -20,4 +20,12 @@ import { PrismaModule } from '../prisma/prisma.module';
   providers: [AuthService, JwtStrategy],
   exports: [AuthService],
 })
-export class AuthModule {}
+export class AuthModule {
+  constructor() {
+    if (!process.env.JWT_SECRET) {
+      console.error(
+        'CRITICAL: JWT_SECRET is not set! Using insecure default. Set JWT_SECRET in production!'
+      );
+    }
+  }
+}

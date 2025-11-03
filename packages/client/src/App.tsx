@@ -5,6 +5,7 @@ import Auth from './components/auth/Auth'
 import ServerModal from './components/ServerModal'
 import ChannelModal from './components/ChannelModal'
 import SettingsModal from './components/SettingsModal'
+import ServerSettingsModal from './components/ServerSettingsModal'
 import { useAuthStore } from './stores/auth'
 import { useServersStore } from './stores/servers'
 import { wsManager } from './services/websocket-manager'
@@ -114,30 +115,12 @@ function App() {
         />
         <SettingsModal isOpen={showAppSettings} onClose={() => setShowAppSettings(false)} />
 
-        {/* Server Settings Modal - Placeholder */}
-        {showServerSettings && selectedServer && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 animate-fade-in">
-            <div className="bg-grey-900 border-2 border-white w-96 animate-slide-up">
-              <div className="border-b-2 border-grey-800 p-4">
-                <h3 className="font-bold text-white text-lg">Server Settings</h3>
-              </div>
-              <div className="p-4">
-                <p className="text-grey-300 text-sm mb-4">
-                  Server settings for {selectedServer.name}
-                </p>
-                <p className="text-grey-500 text-xs">Coming soon...</p>
-              </div>
-              <div className="border-t-2 border-grey-800 p-4 flex justify-end">
-                <button
-                  onClick={() => setShowServerSettings(false)}
-                  className="px-4 py-2 bg-grey-850 text-white border-2 border-grey-700 hover:border-white transition-colors"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Server Settings Modal */}
+        <ServerSettingsModal
+          isOpen={showServerSettings}
+          onClose={() => setShowServerSettings(false)}
+          server={selectedServer}
+        />
       </>
     )
   }

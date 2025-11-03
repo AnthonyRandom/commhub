@@ -137,6 +137,11 @@ export class UsersService {
   }
 
   async addFriend(userId: number, friendId: number) {
+    // Prevent self-friending
+    if (userId === friendId) {
+      throw new NotFoundException('Cannot add yourself as a friend');
+    }
+
     // Check if users exist
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     const friend = await this.prisma.user.findUnique({
@@ -175,6 +180,21 @@ export class UsersService {
   }
 
   async removeFriend(userId: number, friendId: number) {
+    // Prevent self-removal
+    if (userId === friendId) {
+      throw new NotFoundException('Invalid operation');
+    }
+
+    // Verify user and friend exist
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const friend = await this.prisma.user.findUnique({
+      where: { id: friendId },
+    });
+
+    if (!user || !friend) {
+      throw new NotFoundException('User not found');
+    }
+
     await this.prisma.user.update({
       where: { id: userId },
       data: {
@@ -206,5 +226,119 @@ export class UsersService {
     }
 
     return user.friends;
+  }
+
+  async blockUser(userId: number, blockedUserId: number) {
+    if (userId === blockedUserId) {
+      throw new NotFoundException('Cannot block yourself');
+    }
+
+    const blockedUser = await this.prisma.user.findUnique({
+      where: { id: blockedUserId },
+    });
+
+    if (!blockedUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    const existingBlock = await this.prisma.user.findFirst({
+      where: {
+        id: userId,
+        blockedUsers: {
+          some: { id: blockedUserId },
+        },
+      },
+    });
+
+    if (existingBlock) {
+      throw new NotFoundException('User is already blocked');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        blockedUsers: {
+          connect: { id: blockedUserId },
+        },
+        friends: {
+          disconnect: { id: blockedUserId },
+        },
+      },
+    });
+
+    await this.prisma.user.update({
+      where: { id: blockedUserId },
+      data: {
+        friends: {
+          disconnect: { id: userId },
+        },
+      },
+    });
+
+    await this.prisma.friendRequest.deleteMany({
+      where: {
+        OR: [
+          { senderId: userId, receiverId: blockedUserId },
+          { senderId: blockedUserId, receiverId: userId },
+        ],
+      },
+    });
+
+    return { message: 'User blocked successfully' };
+  }
+
+  async unblockUser(userId: number, blockedUserId: number) {
+    const blockedUser = await this.prisma.user.findUnique({
+      where: { id: blockedUserId },
+    });
+
+    if (!blockedUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    const existingBlock = await this.prisma.user.findFirst({
+      where: {
+        id: userId,
+        blockedUsers: {
+          some: { id: blockedUserId },
+        },
+      },
+    });
+
+    if (!existingBlock) {
+      throw new NotFoundException('User is not blocked');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        blockedUsers: {
+          disconnect: { id: blockedUserId },
+        },
+      },
+    });
+
+    return { message: 'User unblocked successfully' };
+  }
+
+  async getBlockedUsers(userId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        blockedUsers: {
+          select: {
+            id: true,
+            username: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user.blockedUsers;
   }
 }

@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Hash, Send, Users } from 'lucide-react'
+import { Hash, Send, Users, MoreVertical, Edit2, Trash2 } from 'lucide-react'
 import { useMessagesStore } from '../stores/messages'
 import { wsManager } from '../services/websocket-manager'
 import { useAuthStore } from '../stores/auth'
 import MembersModal from './MembersModal'
-import type { Channel, Server } from '../services/api'
+import type { Channel, Server, Message } from '../services/api'
 
 interface ChatAreaProps {
   selectedChannel: Channel | null
@@ -14,13 +14,19 @@ interface ChatAreaProps {
 const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   const [messageInput, setMessageInput] = useState('')
   const [showMembersModal, setShowMembersModal] = useState(false)
+  const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
+  const [editContent, setEditContent] = useState('')
+  const [contextMenuMessageId, setContextMenuMessageId] = useState<number | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const editInputRef = useRef<HTMLTextAreaElement>(null)
 
   const allMessages = useMessagesStore((state) => state.messages)
   const messages = selectedChannel ? allMessages[selectedChannel.id] || [] : []
   const sendMessage = useMessagesStore((state) => state.sendMessage)
   const fetchMessages = useMessagesStore((state) => state.fetchMessages)
+  const editMessage = useMessagesStore((state) => state.editMessage)
+  const deleteMessage = useMessagesStore((state) => state.deleteMessage)
   const { user } = useAuthStore()
 
   // Fetch messages when channel changes
@@ -66,6 +72,65 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
       handleSendMessage(e)
     }
   }
+
+  const handleEditMessage = async (messageId: number) => {
+    if (!editContent.trim()) return
+
+    try {
+      await editMessage(messageId, editContent.trim())
+      setEditingMessageId(null)
+      setEditContent('')
+    } catch (error) {
+      console.error('Failed to edit message:', error)
+    }
+  }
+
+  const handleDeleteMessage = async (messageId: number) => {
+    if (!selectedChannel) return
+
+    try {
+      await deleteMessage(selectedChannel.id, messageId)
+      setContextMenuMessageId(null)
+    } catch (error) {
+      console.error('Failed to delete message:', error)
+    }
+  }
+
+  const startEditingMessage = (message: Message) => {
+    setEditingMessageId(message.id)
+    setEditContent(message.content)
+    setContextMenuMessageId(null)
+  }
+
+  const cancelEditing = () => {
+    setEditingMessageId(null)
+    setEditContent('')
+  }
+
+  const handleEditKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>, messageId: number) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleEditMessage(messageId)
+    } else if (e.key === 'Escape') {
+      cancelEditing()
+    }
+  }
+
+  const canEditOrDelete = (message: Message) => {
+    if (!user) return false
+    const isOwner = message.user?.id === user.id
+    const timeSinceCreation = Date.now() - new Date(message.createdAt).getTime()
+    const fifteenMinutes = 15 * 60 * 1000
+    return isOwner && timeSinceCreation <= fifteenMinutes
+  }
+
+  const isServerOwner = server && user && server.ownerId === user.id
+
+  useEffect(() => {
+    if (editingMessageId && editInputRef.current) {
+      editInputRef.current.focus()
+    }
+  }, [editingMessageId])
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp)
@@ -136,9 +201,12 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
           messages.map((message, index) => {
             const isOwnMessage = message.user?.id === user?.id
             const showUserInfo = index === 0 || messages[index - 1]?.user?.id !== message.user?.id
+            const canModify = canEditOrDelete(message)
+            const canDelete = isOwnMessage || isServerOwner
+            const isEditing = editingMessageId === message.id
 
             return (
-              <div key={message.id} className="message-enter">
+              <div key={message.id} className="message-enter group relative">
                 {showUserInfo ? (
                   <div className="flex gap-3">
                     <div className="w-10 h-10 bg-white flex items-center justify-center flex-shrink-0">
@@ -155,21 +223,155 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
                         </span>
                         <span className="text-grey-500 text-xs">
                           {formatTimestamp(message.createdAt)}
+                          {message.isEdited && <span className="ml-1 text-grey-600">(edited)</span>}
                         </span>
                       </div>
-                      <p className="text-grey-100 break-words">{message.content}</p>
+                      {isEditing ? (
+                        <div className="flex flex-col gap-2">
+                          <textarea
+                            ref={editInputRef}
+                            value={editContent}
+                            onChange={(e) => setEditContent(e.target.value)}
+                            onKeyDown={(e) => handleEditKeyDown(e, message.id)}
+                            className="w-full bg-grey-800 border-2 border-grey-700 px-3 py-2 text-white resize-none focus:border-white"
+                            rows={2}
+                            maxLength={2000}
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleEditMessage(message.id)}
+                              className="px-3 py-1 bg-white text-black text-sm font-bold hover:bg-grey-200 transition-colors"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={cancelEditing}
+                              className="px-3 py-1 bg-grey-800 text-white text-sm border-2 border-grey-700 hover:border-white transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-grey-100 break-words">{message.content}</p>
+                      )}
                     </div>
+                    {!isEditing && (canModify || canDelete) && (
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() =>
+                            setContextMenuMessageId(
+                              contextMenuMessageId === message.id ? null : message.id
+                            )
+                          }
+                          className="p-1 hover:bg-grey-800 text-grey-400 hover:text-white transition-colors"
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                        {contextMenuMessageId === message.id && (
+                          <div className="absolute right-0 top-8 bg-grey-900 border-2 border-grey-700 z-10 min-w-[150px] animate-fade-in">
+                            {canModify && (
+                              <button
+                                onClick={() => startEditingMessage(message)}
+                                className="w-full px-4 py-2 text-left text-white hover:bg-grey-800 flex items-center gap-2 transition-colors"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                                Edit
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button
+                                onClick={() => handleDeleteMessage(message.id)}
+                                className="w-full px-4 py-2 text-left text-red-400 hover:bg-grey-800 flex items-center gap-2 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="flex gap-3 hover:bg-grey-850/30 -mx-2 px-2 py-0.5">
                     <div className="w-10 flex-shrink-0 flex items-center justify-center">
-                      <span className="text-grey-600 text-xs opacity-0 hover:opacity-100 transition-opacity">
+                      <span className="text-grey-600 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
                         {formatTimestamp(message.createdAt)}
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-grey-100 break-words">{message.content}</p>
+                      {isEditing ? (
+                        <div className="flex flex-col gap-2">
+                          <textarea
+                            ref={editInputRef}
+                            value={editContent}
+                            onChange={(e) => setEditContent(e.target.value)}
+                            onKeyDown={(e) => handleEditKeyDown(e, message.id)}
+                            className="w-full bg-grey-800 border-2 border-grey-700 px-3 py-2 text-white resize-none focus:border-white"
+                            rows={2}
+                            maxLength={2000}
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleEditMessage(message.id)}
+                              className="px-3 py-1 bg-white text-black text-sm font-bold hover:bg-grey-200 transition-colors"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={cancelEditing}
+                              className="px-3 py-1 bg-grey-800 text-white text-sm border-2 border-grey-700 hover:border-white transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="text-grey-100 break-words inline">{message.content}</p>
+                          {message.isEdited && (
+                            <span className="text-grey-600 text-xs ml-2">(edited)</span>
+                          )}
+                        </>
+                      )}
                     </div>
+                    {!isEditing && (canModify || canDelete) && (
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity relative">
+                        <button
+                          onClick={() =>
+                            setContextMenuMessageId(
+                              contextMenuMessageId === message.id ? null : message.id
+                            )
+                          }
+                          className="p-1 hover:bg-grey-800 text-grey-400 hover:text-white transition-colors"
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                        {contextMenuMessageId === message.id && (
+                          <div className="absolute right-0 top-8 bg-grey-900 border-2 border-grey-700 z-10 min-w-[150px] animate-fade-in">
+                            {canModify && (
+                              <button
+                                onClick={() => startEditingMessage(message)}
+                                className="w-full px-4 py-2 text-left text-white hover:bg-grey-800 flex items-center gap-2 transition-colors"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                                Edit
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button
+                                onClick={() => handleDeleteMessage(message.id)}
+                                className="w-full px-4 py-2 text-left text-red-400 hover:bg-grey-800 flex items-center gap-2 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

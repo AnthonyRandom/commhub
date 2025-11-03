@@ -1,8 +1,19 @@
 import React, { useEffect } from 'react'
-import { Hash, Volume2, Plus, Settings, LogOut, Copy } from 'lucide-react'
+import {
+  Hash,
+  Volume2,
+  Plus,
+  Settings,
+  LogOut,
+  Copy,
+  MoreVertical,
+  Edit2,
+  Trash2,
+} from 'lucide-react'
 import { useChannelsStore } from '../stores/channels'
 import { useServersStore } from '../stores/servers'
 import { useAuthStore } from '../stores/auth'
+import { apiService } from '../services/api'
 import type { Channel, Server } from '../services/api'
 
 interface ChannelListProps {
@@ -31,6 +42,10 @@ const ChannelList: React.FC<ChannelListProps> = ({
   const [showServerMenu, setShowServerMenu] = React.useState(false)
   const [inviteCode, setInviteCode] = React.useState<string | null>(null)
   const [copySuccess, setCopySuccess] = React.useState(false)
+  const [contextMenuChannelId, setContextMenuChannelId] = React.useState<number | null>(null)
+  const [editingChannel, setEditingChannel] = React.useState<Channel | null>(null)
+  const [editChannelName, setEditChannelName] = React.useState('')
+  const [deletingChannel, setDeletingChannel] = React.useState<Channel | null>(null)
 
   useEffect(() => {
     fetchChannels()
@@ -75,6 +90,44 @@ const ChannelList: React.FC<ChannelListProps> = ({
       setTimeout(() => setCopySuccess(false), 2000)
     }
   }
+
+  const handleEditChannel = (channel: Channel) => {
+    setEditingChannel(channel)
+    setEditChannelName(channel.name)
+    setContextMenuChannelId(null)
+  }
+
+  const handleSaveChannelEdit = async () => {
+    if (!editingChannel || !editChannelName.trim()) return
+
+    try {
+      await apiService.updateChannel(editingChannel.id, { name: editChannelName.trim() })
+      await fetchChannels()
+      setEditingChannel(null)
+      setEditChannelName('')
+    } catch (error) {
+      console.error('Failed to update channel:', error)
+    }
+  }
+
+  const handleDeleteChannel = (channel: Channel) => {
+    setDeletingChannel(channel)
+    setContextMenuChannelId(null)
+  }
+
+  const confirmDeleteChannel = async () => {
+    if (!deletingChannel) return
+
+    try {
+      await apiService.deleteChannel(deletingChannel.id)
+      await fetchChannels()
+      setDeletingChannel(null)
+    } catch (error) {
+      console.error('Failed to delete channel:', error)
+    }
+  }
+
+  const isOwner = server && user && server.ownerId === user.id
 
   return (
     <div className="w-60 bg-grey-900 border-r-2 border-grey-800 flex flex-col h-full">
@@ -192,22 +245,56 @@ const ChannelList: React.FC<ChannelListProps> = ({
               </div>
               <div className="space-y-1">
                 {textChannels.map((channel) => (
-                  <button
-                    key={channel.id}
-                    onClick={() => onChannelSelect(channel)}
-                    className={`
-                      w-full px-2 py-2 flex items-center gap-2
-                      border-2 transition-all duration-100
-                      ${
-                        selectedChannel?.id === channel.id
-                          ? 'bg-white text-black border-white'
-                          : 'bg-transparent text-grey-300 border-transparent hover:border-grey-700 hover:bg-grey-850'
-                      }
-                    `}
-                  >
-                    <Hash className="w-4 h-4 flex-shrink-0" />
-                    <span className="truncate text-sm font-medium">{channel.name}</span>
-                  </button>
+                  <div key={channel.id} className="group relative">
+                    <button
+                      onClick={() => onChannelSelect(channel)}
+                      className={`
+                        w-full px-2 py-2 flex items-center gap-2
+                        border-2 transition-all duration-100
+                        ${
+                          selectedChannel?.id === channel.id
+                            ? 'bg-white text-black border-white'
+                            : 'bg-transparent text-grey-300 border-transparent hover:border-grey-700 hover:bg-grey-850'
+                        }
+                      `}
+                    >
+                      <Hash className="w-4 h-4 flex-shrink-0" />
+                      <span className="truncate text-sm font-medium flex-1 text-left">
+                        {channel.name}
+                      </span>
+                      {isOwner && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setContextMenuChannelId(
+                              contextMenuChannelId === channel.id ? null : channel.id
+                            )
+                          }}
+                          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-grey-800 transition-opacity"
+                        >
+                          <MoreVertical className="w-3 h-3" />
+                        </button>
+                      )}
+                    </button>
+                    {contextMenuChannelId === channel.id && isOwner && (
+                      <div className="absolute right-0 top-full bg-grey-900 border-2 border-grey-700 z-50 min-w-[150px] animate-fade-in">
+                        <button
+                          onClick={() => handleEditChannel(channel)}
+                          className="w-full px-4 py-2 text-left text-white hover:bg-grey-800 flex items-center gap-2"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteChannel(channel)}
+                          className="w-full px-4 py-2 text-left text-red-400 hover:bg-grey-800 flex items-center gap-2"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
@@ -244,6 +331,81 @@ const ChannelList: React.FC<ChannelListProps> = ({
         ) : (
           <div className="text-center text-grey-500 py-8 px-4">
             <p className="text-sm">Select a server or create one to get started</p>
+          </div>
+        )}
+
+        {/* Edit Channel Modal */}
+        {editingChannel && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 animate-fade-in">
+            <div className="bg-grey-900 border-2 border-white w-96 animate-slide-up">
+              <div className="border-b-2 border-grey-800 p-4">
+                <h3 className="font-bold text-white text-lg">Edit Channel</h3>
+              </div>
+              <div className="p-4">
+                <label className="block text-grey-300 text-sm font-bold mb-2">Channel Name</label>
+                <input
+                  type="text"
+                  value={editChannelName}
+                  onChange={(e) => setEditChannelName(e.target.value)}
+                  className="w-full bg-grey-850 border-2 border-grey-700 px-4 py-2 text-white focus:border-white"
+                  maxLength={50}
+                  autoFocus
+                />
+              </div>
+              <div className="border-t-2 border-grey-800 p-4 flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    setEditingChannel(null)
+                    setEditChannelName('')
+                  }}
+                  className="px-4 py-2 bg-grey-850 text-white border-2 border-grey-700 hover:border-white transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveChannelEdit}
+                  disabled={!editChannelName.trim()}
+                  className="px-4 py-2 bg-white text-black font-bold hover:bg-grey-100 disabled:bg-grey-700 disabled:text-grey-500 disabled:cursor-not-allowed transition-colors"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Channel Modal */}
+        {deletingChannel && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 animate-fade-in">
+            <div className="bg-grey-900 border-2 border-white w-96 animate-slide-up">
+              <div className="border-b-2 border-grey-800 p-4">
+                <h3 className="font-bold text-white text-lg">Delete Channel</h3>
+              </div>
+              <div className="p-4">
+                <p className="text-grey-300 text-sm mb-4">
+                  Are you sure you want to delete{' '}
+                  <strong className="text-white">#{deletingChannel.name}</strong>?
+                </p>
+                <p className="text-red-400 text-sm">
+                  This action cannot be undone. All messages in this channel will be permanently
+                  deleted.
+                </p>
+              </div>
+              <div className="border-t-2 border-grey-800 p-4 flex justify-end gap-2">
+                <button
+                  onClick={() => setDeletingChannel(null)}
+                  className="px-4 py-2 bg-grey-850 text-white border-2 border-grey-700 hover:border-white transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteChannel}
+                  className="px-4 py-2 bg-red-900 text-white border-2 border-red-700 hover:border-red-500 transition-colors font-bold"
+                >
+                  Delete Channel
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ChatGateway } from './chat.gateway';
 import { MessagesModule } from '../messages/messages.module';
 import { UsersModule } from '../users/users.module';
+import { DirectMessagesModule } from '../direct-messages/direct-messages.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { UsersModule } from '../users/users.module';
     }),
     MessagesModule,
     UsersModule,
+    DirectMessagesModule,
   ],
   providers: [ChatGateway],
   exports: [ChatGateway],

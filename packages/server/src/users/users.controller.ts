@@ -80,4 +80,28 @@ export class UsersController {
   getFriends(@Param('id', ParseIntPipe) id: number) {
     return this.usersService.getFriends(id);
   }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':userId/block/:blockedUserId')
+  blockUser(
+    @Param('userId', ParseIntPipe) userId: number,
+    @Param('blockedUserId', ParseIntPipe) blockedUserId: number
+  ) {
+    return this.usersService.blockUser(userId, blockedUserId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':userId/block/:blockedUserId')
+  unblockUser(
+    @Param('userId', ParseIntPipe) userId: number,
+    @Param('blockedUserId', ParseIntPipe) blockedUserId: number
+  ) {
+    return this.usersService.unblockUser(userId, blockedUserId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/blocked')
+  getBlockedUsers(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.getBlockedUsers(id);
+  }
 }

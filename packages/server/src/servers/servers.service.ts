@@ -94,7 +94,6 @@ export class ServersService {
           select: {
             id: true,
             username: true,
-            email: true,
           },
         },
         channels: {
@@ -340,11 +339,12 @@ export class ServersService {
   }
 
   private generateInviteCode(): string {
-    // Generate a random 8-character alphanumeric code
+    // Use crypto.randomInt for cryptographically secure random
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let result = '';
+    const crypto = require('crypto');
     for (let i = 0; i < 8; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
+      result += chars.charAt(crypto.randomInt(0, chars.length));
     }
     return result;
   }

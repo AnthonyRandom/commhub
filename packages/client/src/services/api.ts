@@ -41,6 +41,8 @@ export interface Message {
   userId: number
   channelId: number
   createdAt: string
+  isEdited?: boolean
+  editedAt?: string
   user: {
     id: number
     username: string
@@ -55,6 +57,53 @@ export interface Friend {
   id: number
   username: string
   email: string
+}
+
+export interface FriendRequest {
+  id: number
+  senderId: number
+  receiverId: number
+  status: 'pending' | 'accepted' | 'rejected'
+  createdAt: string
+  sender?: {
+    id: number
+    username: string
+    email: string
+  }
+  receiver?: {
+    id: number
+    username: string
+    email: string
+  }
+}
+
+export interface DirectMessage {
+  id: number
+  content: string
+  senderId: number
+  receiverId: number
+  createdAt: string
+  isEdited: boolean
+  editedAt?: string
+  isRead: boolean
+  sender: {
+    id: number
+    username: string
+  }
+  receiver: {
+    id: number
+    username: string
+  }
+}
+
+export interface Conversation {
+  user: {
+    id: number
+    username: string
+    email: string
+  }
+  lastMessage: DirectMessage | null
+  unreadCount: number
 }
 
 class ApiService {
@@ -179,6 +228,50 @@ class ApiService {
     return response.data
   }
 
+  async editMessage(messageId: number, content: string): Promise<Message> {
+    const response: AxiosResponse<Message> = await this.axiosInstance.patch(
+      `/messages/${messageId}`,
+      { content }
+    )
+    return response.data
+  }
+
+  async deleteMessage(messageId: number): Promise<void> {
+    await this.axiosInstance.delete(`/messages/${messageId}`)
+  }
+
+  // Server management methods
+  async updateServer(
+    serverId: number,
+    data: { name?: string; description?: string }
+  ): Promise<Server> {
+    const response: AxiosResponse<Server> = await this.axiosInstance.patch(
+      `/servers/${serverId}`,
+      data
+    )
+    return response.data
+  }
+
+  async deleteServer(serverId: number): Promise<void> {
+    await this.axiosInstance.delete(`/servers/${serverId}`)
+  }
+
+  // Channel management methods
+  async updateChannel(
+    channelId: number,
+    data: { name?: string; type?: 'text' | 'voice' }
+  ): Promise<Channel> {
+    const response: AxiosResponse<Channel> = await this.axiosInstance.patch(
+      `/channels/${channelId}`,
+      data
+    )
+    return response.data
+  }
+
+  async deleteChannel(channelId: number): Promise<void> {
+    await this.axiosInstance.delete(`/channels/${channelId}`)
+  }
+
   // Friend methods
   async getFriends(userId: number): Promise<Friend[]> {
     const response: AxiosResponse<Friend[]> = await this.axiosInstance.get(
@@ -193,6 +286,101 @@ class ApiService {
 
   async removeFriend(userId: number, friendId: number): Promise<void> {
     await this.axiosInstance.delete(`/users/${userId}/friends/${friendId}`)
+  }
+
+  // Friend requests methods
+  async sendFriendRequest(receiverId: number): Promise<FriendRequest> {
+    const response: AxiosResponse<FriendRequest> = await this.axiosInstance.post(
+      '/friend-requests',
+      { receiverId }
+    )
+    return response.data
+  }
+
+  async getSentFriendRequests(): Promise<FriendRequest[]> {
+    const response: AxiosResponse<FriendRequest[]> =
+      await this.axiosInstance.get('/friend-requests/sent')
+    return response.data
+  }
+
+  async getReceivedFriendRequests(): Promise<FriendRequest[]> {
+    const response: AxiosResponse<FriendRequest[]> = await this.axiosInstance.get(
+      '/friend-requests/received'
+    )
+    return response.data
+  }
+
+  async respondToFriendRequest(
+    requestId: number,
+    status: 'accepted' | 'rejected'
+  ): Promise<FriendRequest> {
+    const response: AxiosResponse<FriendRequest> = await this.axiosInstance.patch(
+      `/friend-requests/${requestId}/respond`,
+      { status }
+    )
+    return response.data
+  }
+
+  async cancelFriendRequest(requestId: number): Promise<void> {
+    await this.axiosInstance.delete(`/friend-requests/${requestId}`)
+  }
+
+  // Blocking methods
+  async blockUser(userId: number, blockedUserId: number): Promise<void> {
+    await this.axiosInstance.post(`/users/${userId}/block/${blockedUserId}`)
+  }
+
+  async unblockUser(userId: number, blockedUserId: number): Promise<void> {
+    await this.axiosInstance.delete(`/users/${userId}/block/${blockedUserId}`)
+  }
+
+  async getBlockedUsers(userId: number): Promise<Friend[]> {
+    const response: AxiosResponse<Friend[]> = await this.axiosInstance.get(
+      `/users/${userId}/blocked`
+    )
+    return response.data
+  }
+
+  // Direct messages methods
+  async sendDirectMessage(receiverId: number, content: string): Promise<DirectMessage> {
+    const response: AxiosResponse<DirectMessage> = await this.axiosInstance.post(
+      '/direct-messages',
+      { receiverId, content }
+    )
+    return response.data
+  }
+
+  async getConversation(userId: number, limit = 50, offset = 0): Promise<DirectMessage[]> {
+    const response: AxiosResponse<DirectMessage[]> = await this.axiosInstance.get(
+      `/direct-messages/conversation/${userId}`,
+      {
+        params: { limit, offset },
+      }
+    )
+    return response.data
+  }
+
+  async getAllConversations(): Promise<Conversation[]> {
+    const response: AxiosResponse<Conversation[]> = await this.axiosInstance.get(
+      '/direct-messages/conversations'
+    )
+    return response.data
+  }
+
+  async editDirectMessage(messageId: number, content: string): Promise<DirectMessage> {
+    const response: AxiosResponse<DirectMessage> = await this.axiosInstance.patch(
+      `/direct-messages/${messageId}`,
+      { content }
+    )
+    return response.data
+  }
+
+  async deleteDirectMessage(messageId: number): Promise<void> {
+    await this.axiosInstance.delete(`/direct-messages/${messageId}`)
+  }
+
+  async markConversationAsRead(userId: number): Promise<void> {
+    await this.axiosInstance.post(`/direct-messages/conversation/${userId}/read`)
   }
 
   // Utility methods

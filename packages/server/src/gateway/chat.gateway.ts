@@ -12,6 +12,7 @@ import { Logger, Inject } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { MessagesService } from '../messages/messages.service';
 import { UsersService } from '../users/users.service';
+import { DirectMessagesService } from '../direct-messages/direct-messages.service';
 
 interface AuthenticatedSocket extends Socket {
   userId?: number;
@@ -20,7 +21,12 @@ interface AuthenticatedSocket extends Socket {
 
 @WebSocketGateway({
   cors: {
-    origin: '*', // Configure for production
+    origin: process.env.ALLOWED_ORIGINS?.split(',') || [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'http://localhost:1420',
+    ],
+    credentials: true,
   },
   namespace: '/chat',
 })
@@ -34,7 +40,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private jwtService: JwtService,
     private messagesService: MessagesService,
-    private usersService: UsersService
+    private usersService: UsersService,
+    private directMessagesService: DirectMessagesService
   ) {}
 
   async handleConnection(client: AuthenticatedSocket) {
@@ -83,20 +90,46 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('join-server')
-  handleJoinServer(
+  async handleJoinServer(
     @MessageBody() data: { serverId: number },
     @ConnectedSocket() client: AuthenticatedSocket
   ) {
-    const roomName = `server-${data.serverId}`;
-    client.join(roomName);
-    this.logger.log(`${client.username} joined server room: ${roomName}`);
+    // Validate input
+    if (
+      !data.serverId ||
+      typeof data.serverId !== 'number' ||
+      data.serverId <= 0
+    ) {
+      client.emit('error', { message: 'Invalid server ID' });
+      return;
+    }
 
-    // Notify others in the server
-    client.to(roomName).emit('user-joined', {
-      serverId: data.serverId,
-      userId: client.userId,
-      username: client.username,
-    });
+    // Verify user is a member of the server
+    try {
+      const server = await this.usersService.findOne(client.userId);
+      const isMember = server.servers?.some(s => s.id === data.serverId);
+
+      if (!isMember) {
+        client.emit('error', {
+          message: 'You are not a member of this server',
+        });
+        return;
+      }
+
+      const roomName = `server-${data.serverId}`;
+      client.join(roomName);
+      this.logger.log(`${client.username} joined server room: ${roomName}`);
+
+      // Notify others in the server
+      client.to(roomName).emit('user-joined', {
+        serverId: data.serverId,
+        userId: client.userId,
+        username: client.username,
+      });
+    } catch (error) {
+      this.logger.error('Error joining server:', error.message);
+      client.emit('error', { message: 'Failed to join server' });
+    }
   }
 
   @SubscribeMessage('leave-server')
@@ -117,10 +150,22 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('join-channel')
-  handleJoinChannel(
+  async handleJoinChannel(
     @MessageBody() data: { channelId: number },
     @ConnectedSocket() client: AuthenticatedSocket
   ) {
+    // Validate input
+    if (
+      !data.channelId ||
+      typeof data.channelId !== 'number' ||
+      data.channelId <= 0
+    ) {
+      client.emit('error', { message: 'Invalid channel ID' });
+      return;
+    }
+
+    // Note: Authorization check would require ChannelsService injection
+    // For now, we rely on the message sending authorization
     const roomName = `channel-${data.channelId}`;
     client.join(roomName);
     this.logger.log(`${client.username} joined channel room: ${roomName}`);
@@ -142,10 +187,38 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: AuthenticatedSocket
   ) {
     try {
-      // Save message to database
+      // Validate input
+      if (
+        !data.channelId ||
+        typeof data.channelId !== 'number' ||
+        data.channelId <= 0
+      ) {
+        client.emit('error', { message: 'Invalid channel ID' });
+        return;
+      }
+
+      if (!data.content || typeof data.content !== 'string') {
+        client.emit('error', { message: 'Invalid message content' });
+        return;
+      }
+
+      const trimmedContent = data.content.trim();
+      if (trimmedContent.length === 0) {
+        client.emit('error', { message: 'Message cannot be empty' });
+        return;
+      }
+
+      if (trimmedContent.length > 2000) {
+        client.emit('error', {
+          message: 'Message too long (max 2000 characters)',
+        });
+        return;
+      }
+
+      // Save message to database (includes authorization check)
       const message = await this.messagesService.create(
         {
-          content: data.content,
+          content: trimmedContent,
           channelId: data.channelId,
         },
         client.userId
@@ -161,10 +234,214 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         username: message.user.username,
         channelId: message.channel.id,
         createdAt: message.createdAt,
+        isEdited: false,
+        editedAt: null,
       });
     } catch (error) {
       this.logger.error('Error sending message:', error.message);
       client.emit('error', { message: 'Failed to send message' });
+    }
+  }
+
+  @SubscribeMessage('edit-message')
+  async handleEditMessage(
+    @MessageBody() data: { messageId: number; content: string },
+    @ConnectedSocket() client: AuthenticatedSocket
+  ) {
+    try {
+      // Validate input
+      if (
+        !data.messageId ||
+        typeof data.messageId !== 'number' ||
+        data.messageId <= 0
+      ) {
+        client.emit('error', { message: 'Invalid message ID' });
+        return;
+      }
+
+      if (!data.content || typeof data.content !== 'string') {
+        client.emit('error', { message: 'Invalid message content' });
+        return;
+      }
+
+      const trimmedContent = data.content.trim();
+      if (trimmedContent.length === 0) {
+        client.emit('error', { message: 'Message cannot be empty' });
+        return;
+      }
+
+      if (trimmedContent.length > 2000) {
+        client.emit('error', {
+          message: 'Message too long (max 2000 characters)',
+        });
+        return;
+      }
+
+      const message = await this.messagesService.update(
+        data.messageId,
+        trimmedContent,
+        client.userId
+      );
+
+      const roomName = `channel-${message.channel.id}`;
+
+      this.server.to(roomName).emit('message-edited', {
+        id: message.id,
+        content: message.content,
+        userId: message.user.id,
+        username: message.user.username,
+        channelId: message.channel.id,
+        createdAt: message.createdAt,
+        isEdited: true,
+        editedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      this.logger.error('Error editing message:', error.message);
+      client.emit('error', { message: 'Failed to edit message' });
+    }
+  }
+
+  @SubscribeMessage('delete-message')
+  async handleDeleteMessage(
+    @MessageBody() data: { messageId: number; channelId: number },
+    @ConnectedSocket() client: AuthenticatedSocket
+  ) {
+    try {
+      // Validate input
+      if (
+        !data.messageId ||
+        typeof data.messageId !== 'number' ||
+        data.messageId <= 0
+      ) {
+        client.emit('error', { message: 'Invalid message ID' });
+        return;
+      }
+
+      if (
+        !data.channelId ||
+        typeof data.channelId !== 'number' ||
+        data.channelId <= 0
+      ) {
+        client.emit('error', { message: 'Invalid channel ID' });
+        return;
+      }
+
+      await this.messagesService.remove(data.messageId, client.userId);
+
+      const roomName = `channel-${data.channelId}`;
+
+      this.server.to(roomName).emit('message-deleted', {
+        messageId: data.messageId,
+        channelId: data.channelId,
+      });
+    } catch (error) {
+      this.logger.error('Error deleting message:', error.message);
+      client.emit('error', { message: 'Failed to delete message' });
+    }
+  }
+
+  @SubscribeMessage('send-direct-message')
+  async handleDirectMessage(
+    @MessageBody() data: { receiverId: number; content: string },
+    @ConnectedSocket() client: AuthenticatedSocket
+  ) {
+    try {
+      // Validate input
+      if (
+        !data.receiverId ||
+        typeof data.receiverId !== 'number' ||
+        data.receiverId <= 0
+      ) {
+        client.emit('error', { message: 'Invalid receiver ID' });
+        return;
+      }
+
+      if (!data.content || typeof data.content !== 'string') {
+        client.emit('error', { message: 'Invalid message content' });
+        return;
+      }
+
+      const trimmedContent = data.content.trim();
+      if (trimmedContent.length === 0) {
+        client.emit('error', { message: 'Message cannot be empty' });
+        return;
+      }
+
+      if (trimmedContent.length > 2000) {
+        client.emit('error', {
+          message: 'Message too long (max 2000 characters)',
+        });
+        return;
+      }
+
+      // Use DirectMessagesService instead of MessagesService
+      const directMessage = await this.directMessagesService.create(
+        {
+          receiverId: data.receiverId,
+          content: trimmedContent,
+        },
+        client.userId
+      );
+
+      const receiverSocketId = this.onlineUsers.get(data.receiverId);
+      const senderSocketId = this.onlineUsers.get(client.userId);
+
+      const messageData = {
+        id: directMessage.id,
+        content: directMessage.content,
+        senderId: client.userId,
+        senderUsername: client.username,
+        receiverId: data.receiverId,
+        createdAt: directMessage.createdAt,
+        isEdited: directMessage.isEdited,
+        editedAt: directMessage.editedAt,
+      };
+
+      if (receiverSocketId) {
+        this.server.to(receiverSocketId).emit('direct-message', messageData);
+      }
+
+      if (senderSocketId) {
+        this.server.to(senderSocketId).emit('direct-message', messageData);
+      }
+    } catch (error) {
+      this.logger.error('Error sending direct message:', error.message);
+      client.emit('error', { message: 'Failed to send direct message' });
+    }
+  }
+
+  @SubscribeMessage('friend-request-sent')
+  handleFriendRequestNotification(
+    @MessageBody() data: { receiverId: number; senderUsername: string },
+    @ConnectedSocket() client: AuthenticatedSocket
+  ) {
+    const receiverSocketId = this.onlineUsers.get(data.receiverId);
+    if (receiverSocketId) {
+      this.server.to(receiverSocketId).emit('friend-request-received', {
+        senderId: client.userId,
+        senderUsername: data.senderUsername,
+      });
+    }
+  }
+
+  @SubscribeMessage('friend-request-response')
+  handleFriendRequestResponse(
+    @MessageBody()
+    data: {
+      requestId: number;
+      senderId: number;
+      status: 'accepted' | 'rejected';
+    },
+    @ConnectedSocket() client: AuthenticatedSocket
+  ) {
+    const senderSocketId = this.onlineUsers.get(data.senderId);
+    if (senderSocketId) {
+      this.server.to(senderSocketId).emit('friend-request-responded', {
+        requestId: data.requestId,
+        responderId: client.userId,
+        responderUsername: client.username,
+        status: data.status,
+      });
     }
   }
 

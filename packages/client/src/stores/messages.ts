@@ -11,6 +11,8 @@ interface MessagesState {
   // Actions
   fetchMessages: (channelId: number) => Promise<void>
   sendMessage: (channelId: number, content: string) => Promise<void>
+  editMessage: (messageId: number, content: string) => Promise<void>
+  deleteMessage: (channelId: number, messageId: number) => Promise<void>
   addMessage: (message: WSMessage) => void
   clearError: () => void
   initializeWebSocketListeners: () => void
@@ -71,6 +73,53 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
       wsService.sendMessage(channelId, content)
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Failed to send message'
+      set({ error: errorMessage })
+      throw error
+    }
+  },
+
+  editMessage: async (messageId: number, content: string) => {
+    try {
+      const updatedMessage = await apiService.editMessage(messageId, content)
+
+      set((state) => {
+        const channelId = updatedMessage.channelId
+        const channelMessages = state.messages[channelId] || []
+        const updatedMessages = channelMessages.map((m) =>
+          m.id === messageId ? updatedMessage : m
+        )
+
+        return {
+          messages: {
+            ...state.messages,
+            [channelId]: updatedMessages,
+          },
+        }
+      })
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'Failed to edit message'
+      set({ error: errorMessage })
+      throw error
+    }
+  },
+
+  deleteMessage: async (channelId: number, messageId: number) => {
+    try {
+      await apiService.deleteMessage(messageId)
+
+      set((state) => {
+        const channelMessages = state.messages[channelId] || []
+        const updatedMessages = channelMessages.filter((m) => m.id !== messageId)
+
+        return {
+          messages: {
+            ...state.messages,
+            [channelId]: updatedMessages,
+          },
+        }
+      })
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'Failed to delete message'
       set({ error: errorMessage })
       throw error
     }

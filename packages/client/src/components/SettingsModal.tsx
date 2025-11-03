@@ -79,13 +79,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     if (!isOpen && testStream) {
       stopMicTest()
     }
+
+    // Debug: Log current settings when modal opens
+    if (isOpen) {
+      console.log('[Settings] Modal opened with settings:', settings)
+      console.log('[Settings] Available input devices:', audioInputDevices)
+      console.log('[Settings] Available output devices:', audioOutputDevices)
+    }
   }, [isOpen, testStream])
 
   // Load available audio devices
   const loadAudioDevices = async () => {
     try {
-      // Request permission first
-      await navigator.mediaDevices.getUserMedia({ audio: true })
+      // Request permission first (and keep the stream to get proper labels)
+      const permissionStream = await navigator.mediaDevices.getUserMedia({ audio: true })
 
       const devices = await navigator.mediaDevices.enumerateDevices()
 
@@ -105,10 +112,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           kind: device.kind,
         }))
 
+      console.log('[Settings] Loaded audio devices:', { inputs, outputs })
+
       setAudioInputDevices(inputs)
       setAudioOutputDevices(outputs)
+
+      // Stop the permission stream
+      permissionStream.getTracks().forEach((track) => track.stop())
     } catch (error) {
       console.error('Failed to load audio devices:', error)
+      alert('Failed to access audio devices. Please allow microphone permissions.')
     }
   }
 
@@ -117,56 +130,104 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     try {
       const deviceId = settings.audioInputDeviceId
       const constraints: MediaStreamConstraints = {
-        audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+        audio: deviceId && deviceId !== 'default' ? { deviceId: { exact: deviceId } } : true,
       }
 
+      console.log('[Settings] Starting mic test with constraints:', constraints)
+
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
+
+      console.log(
+        '[Settings] Got mic stream:',
+        stream.getAudioTracks().map((t) => ({
+          label: t.label,
+          enabled: t.enabled,
+          readyState: t.readyState,
+        }))
+      )
+
       setTestStream(stream)
       setIsTesting(true)
 
       // Set up audio analysis
       const audioContext = new AudioContext()
       const analyser = audioContext.createAnalyser()
-      analyser.fftSize = 512
-      analyser.smoothingTimeConstant = 0.8
+      analyser.fftSize = 256
+      analyser.smoothingTimeConstant = 0.3
 
       const source = audioContext.createMediaStreamSource(stream)
       source.connect(analyser)
 
       const dataArray = new Uint8Array(analyser.frequencyBinCount)
+      let animationId: number
 
       const updateLevel = () => {
-        if (!isTesting) return
-
         analyser.getByteFrequencyData(dataArray)
         const average = dataArray.reduce((a, b) => a + b) / dataArray.length
-        setMicLevel(Math.min(100, (average / 255) * 200)) // Scale to 0-100%
+        const scaledLevel = Math.min(100, (average / 128) * 100) // Better scaling
 
-        requestAnimationFrame(updateLevel)
+        console.log('[Settings] Mic level:', average, 'scaled:', scaledLevel)
+        setMicLevel(scaledLevel)
+
+        animationId = requestAnimationFrame(updateLevel)
       }
 
-      updateLevel()
+      animationId = requestAnimationFrame(updateLevel)
+
+      // Store animation ID for cleanup
+      ;(stream as any)._animationId = animationId
+      ;(stream as any)._audioContext = audioContext
     } catch (error) {
       console.error('Failed to start mic test:', error)
-      alert('Failed to access microphone. Please check permissions.')
+      setIsTesting(false)
+
+      if (error instanceof Error) {
+        if (error.name === 'NotAllowedError') {
+          alert('Microphone access denied. Please allow microphone permissions in your browser.')
+        } else if (error.name === 'NotFoundError') {
+          alert('No microphone found. Please connect a microphone.')
+        } else if (error.name === 'OverconstrainedError') {
+          alert(
+            'Selected microphone not available. Try selecting a different device or using default.'
+          )
+        } else {
+          alert(`Failed to access microphone: ${error.message}`)
+        }
+      }
     }
   }
 
   // Stop microphone test
   const stopMicTest = () => {
     if (testStream) {
+      // Cancel animation frame
+      const animationId = (testStream as any)._animationId
+      if (animationId) {
+        cancelAnimationFrame(animationId)
+      }
+
+      // Close audio context
+      const audioContext = (testStream as any)._audioContext
+      if (audioContext) {
+        audioContext.close()
+      }
+
+      // Stop all tracks
       testStream.getTracks().forEach((track) => track.stop())
       setTestStream(null)
     }
     setIsTesting(false)
     setMicLevel(0)
+    console.log('[Settings] Mic test stopped')
   }
 
   // Save settings to localStorage when they change
   const updateSetting = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
+    console.log('[Settings] Updating setting:', key, '=', value)
     const newSettings = { ...settings, [key]: value }
     setSettings(newSettings)
     localStorage.setItem('commhub-settings', JSON.stringify(newSettings))
+    console.log('[Settings] Settings saved:', newSettings)
   }
 
   const handleCheckUpdate = async () => {

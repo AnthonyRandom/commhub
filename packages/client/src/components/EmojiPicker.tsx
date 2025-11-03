@@ -531,7 +531,7 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({ isOpen, onClose, onSelectEmoj
   const filteredEmojis = searchQuery.trim()
     ? emojiCategories
         .flatMap((cat) => cat.emojis)
-        .filter((emoji) => {
+        .filter(() => {
           // Simple filter - in production, you'd want emoji names/descriptions
           return true
         })

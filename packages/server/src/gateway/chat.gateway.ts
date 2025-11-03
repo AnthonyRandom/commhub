@@ -36,8 +36,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private logger: Logger = new Logger('ChatGateway');
   private onlineUsers: Map<number, string> = new Map(); // userId -> socketId
-  private voiceChannelUsers: Map<number, Map<number, string>> = new Map(); // channelId -> Map of userId -> username
-  private userVoiceChannels: Map<number, number> = new Map(); // userId -> channelId
+  private userVoiceChannels: Map<number, number> = new Map(); // userId -> channelId (for disconnect cleanup)
 
   constructor(
     private jwtService: JwtService,
@@ -77,27 +76,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   async handleDisconnect(client: AuthenticatedSocket) {
     if (client.userId) {
-      // Check if user was in a voice channel and clean up
+      // Check if user was in a voice channel and notify others
       const voiceChannelId = this.userVoiceChannels.get(client.userId);
       if (voiceChannelId) {
         this.logger.log(
           `[Voice] User ${client.username} disconnected while in voice channel ${voiceChannelId}`
         );
 
-        // Remove user from voice channel tracking
-        const usersInChannel = this.voiceChannelUsers.get(voiceChannelId);
-        if (usersInChannel) {
-          usersInChannel.delete(client.userId);
-          if (usersInChannel.size === 0) {
-            this.voiceChannelUsers.delete(voiceChannelId);
-            this.logger.log(
-              `[Voice] Channel ${voiceChannelId} is now empty, removed from tracking`
-            );
-          }
-        }
+        // Clean up tracking
         this.userVoiceChannels.delete(client.userId);
 
-        // Notify other users in the voice channel
+        // Notify other users in the voice channel that this user left
         const roomName = `voice-${voiceChannelId}`;
         this.server.to(roomName).emit('voice-user-left', {
           channelId: voiceChannelId,
@@ -548,7 +537,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         this.logger.log(
           `[Voice] User ${client.username} switching from channel ${currentVoiceChannel} to ${data.channelId}`
         );
-        await this.handleLeaveVoiceChannel(
+        this.handleLeaveVoiceChannel(
           { channelId: currentVoiceChannel },
           client
         );
@@ -560,29 +549,26 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         `[Voice] ${client.username} joined voice channel room: ${roomName}`
       );
 
-      // Add user to voice channel tracking
-      if (!this.voiceChannelUsers.has(data.channelId)) {
-        this.voiceChannelUsers.set(data.channelId, new Map());
-      }
-      this.voiceChannelUsers
-        .get(data.channelId)
-        .set(client.userId, client.username);
+      // Track which channel this user is in (for disconnect cleanup)
       this.userVoiceChannels.set(client.userId, data.channelId);
 
-      // Get list of users already in the voice channel from tracking
-      const usersInChannelMap = this.voiceChannelUsers.get(data.channelId);
+      // Get list of users already in the voice channel using Socket.IO rooms
+      const socketsInRoom = await this.server.in(roomName).fetchSockets();
       const usersInChannel: Array<{ userId: number; username: string }> = [];
 
       this.logger.log(
-        `[Voice] Channel ${data.channelId} has ${usersInChannelMap.size} users in tracking`
+        `[Voice] Room ${roomName} has ${socketsInRoom.length} sockets`
       );
 
-      // Build list of users (excluding the joining user)
-      for (const [userId, username] of usersInChannelMap.entries()) {
-        if (userId !== client.userId) {
-          usersInChannel.push({ userId, username });
+      for (const socket of socketsInRoom) {
+        const authSocket = socket as any as AuthenticatedSocket;
+        if (authSocket.userId && authSocket.userId !== client.userId) {
+          usersInChannel.push({
+            userId: authSocket.userId,
+            username: authSocket.username,
+          });
           this.logger.log(
-            `[Voice] Found user in channel: ${username} (${userId})`
+            `[Voice] Found user in channel: ${authSocket.username} (${authSocket.userId})`
           );
         }
       }
@@ -629,17 +615,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     client.leave(roomName);
     this.logger.log(`${client.username} left voice channel room: ${roomName}`);
 
-    // Remove user from voice channel tracking
-    const usersInChannel = this.voiceChannelUsers.get(data.channelId);
-    if (usersInChannel) {
-      usersInChannel.delete(client.userId);
-      if (usersInChannel.size === 0) {
-        this.voiceChannelUsers.delete(data.channelId);
-        this.logger.log(
-          `[Voice] Channel ${data.channelId} is now empty, removed from tracking`
-        );
-      }
-    }
+    // Clean up tracking
     this.userVoiceChannels.delete(client.userId);
 
     // Notify others in the voice channel

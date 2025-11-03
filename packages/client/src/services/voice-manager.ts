@@ -1,6 +1,7 @@
 import { wsService } from './websocket'
 import { webrtcService } from './webrtc'
 import { useVoiceStore } from '../stores/voice'
+import { soundManager } from './sound-manager'
 import type SimplePeer from 'simple-peer'
 
 class VoiceManager {
@@ -42,6 +43,12 @@ class VoiceManager {
 
     // Listen for ICE candidates
     socket.on('voice-ice-candidate', this.handleVoiceIceCandidate.bind(this))
+
+    // Listen for voice channel members updates
+    socket.on('voice-channel-members', this.handleVoiceChannelMembers.bind(this))
+
+    // Listen for speaking status updates
+    socket.on('voice-user-speaking', this.handleVoiceUserSpeaking.bind(this))
   }
 
   /**
@@ -52,6 +59,9 @@ class VoiceManager {
       useVoiceStore.getState().setIsConnecting(true)
       useVoiceStore.getState().setConnectionError(null)
 
+      // Initialize sound manager
+      soundManager.initialize()
+
       // Initialize local audio stream
       await webrtcService.initializeLocalStream()
 
@@ -61,6 +71,9 @@ class VoiceManager {
 
       // Join the voice channel via WebSocket
       wsService.getSocket()?.emit('join-voice-channel', { channelId })
+
+      // Play join sound for ourselves
+      soundManager.playUserJoined()
 
       useVoiceStore.getState().setIsConnecting(false)
     } catch (error) {
@@ -82,6 +95,9 @@ class VoiceManager {
     if (!channelId) {
       return
     }
+
+    // Play leave sound for ourselves
+    soundManager.playUserLeft()
 
     // Notify server
     wsService.getSocket()?.emit('leave-voice-channel', { channelId })
@@ -113,6 +129,11 @@ class VoiceManager {
   private handleVoiceUserJoined(data: { channelId: number; userId: number; username: string }) {
     console.log(`[VoiceManager] ➕ User joined voice channel: ${data.username} (${data.userId})`)
 
+    // Play join sound (only if we're already in the channel)
+    if (webrtcService.getCurrentChannelId() === data.channelId) {
+      soundManager.playUserJoined()
+    }
+
     // Add user to voice store
     useVoiceStore.getState().addConnectedUser({
       userId: data.userId,
@@ -120,6 +141,8 @@ class VoiceManager {
       isSpeaking: false,
       isMuted: false,
       connectionStatus: 'connecting',
+      localMuted: false,
+      localVolume: 1.0,
     })
 
     console.log(`[VoiceManager] ⏳ Waiting for offer from ${data.username}`)
@@ -131,6 +154,11 @@ class VoiceManager {
    */
   private handleVoiceUserLeft(data: { channelId: number; userId: number; username: string }) {
     console.log('User left voice channel:', data.username)
+
+    // Play leave sound (only if we're still in the channel)
+    if (webrtcService.getCurrentChannelId() === data.channelId) {
+      soundManager.playUserLeft()
+    }
 
     // Remove peer connection
     webrtcService.removePeer(data.userId)
@@ -212,6 +240,8 @@ class VoiceManager {
         isSpeaking: false,
         isMuted: false,
         connectionStatus: 'connecting',
+        localMuted: false,
+        localVolume: 1.0,
       })
     } else {
       // Update status to connecting
@@ -297,6 +327,22 @@ class VoiceManager {
   }
 
   /**
+   * Set local mute for a specific user
+   */
+  setUserLocalMuted(userId: number, muted: boolean) {
+    webrtcService.setUserLocalMuted(userId, muted)
+    useVoiceStore.getState().setUserLocalMuted(userId, muted)
+  }
+
+  /**
+   * Set volume for a specific user
+   */
+  setUserVolume(userId: number, volume: number) {
+    webrtcService.setUserVolume(userId, volume)
+    useVoiceStore.getState().setUserLocalVolume(userId, volume)
+  }
+
+  /**
    * Get connection status
    */
   isConnected(): boolean {
@@ -308,6 +354,39 @@ class VoiceManager {
    */
   getCurrentChannelId(): number | null {
     return webrtcService.getCurrentChannelId()
+  }
+
+  /**
+   * Handle voice channel members update broadcast
+   */
+  private handleVoiceChannelMembers(data: {
+    channelId: number
+    members: Array<{ userId: number; username: string }>
+  }) {
+    console.log(`[VoiceManager] 📋 Voice channel ${data.channelId} members update:`, data.members)
+    // This will be used by ChannelList to show who's in voice channels
+    // Store it in a way that components can access it
+    // For now, we'll emit a custom event that components can listen to
+    window.dispatchEvent(
+      new CustomEvent('voice-channel-members-update', {
+        detail: data,
+      })
+    )
+  }
+
+  /**
+   * Handle user speaking status update
+   */
+  private handleVoiceUserSpeaking(data: {
+    channelId: number
+    userId: number
+    username: string
+    isSpeaking: boolean
+  }) {
+    console.log(
+      `[VoiceManager] 🎤 ${data.username} is ${data.isSpeaking ? 'speaking' : 'not speaking'}`
+    )
+    useVoiceStore.getState().updateUserSpeaking(data.userId, data.isSpeaking)
   }
 
   /**

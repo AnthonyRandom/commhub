@@ -1,5 +1,6 @@
 import SimplePeer from 'simple-peer'
 import { useVoiceStore } from '../stores/voice'
+import { wsService } from './websocket'
 
 interface PeerConnection {
   peer: SimplePeer.Instance
@@ -130,10 +131,19 @@ class WebRTCService {
       return
     }
 
+    let lastSpeakingState = false
+
     this.speakingCheckInterval = window.setInterval(() => {
-      this.checkIfSpeaking()
-      // You can emit speaking status via websocket here if needed
-      // For now, we'll just update local state
+      const isSpeaking = this.checkIfSpeaking()
+
+      // Only emit when speaking state changes to reduce network traffic
+      if (isSpeaking !== lastSpeakingState && this.currentChannelId) {
+        lastSpeakingState = isSpeaking
+        wsService.getSocket()?.emit('voice-speaking', {
+          channelId: this.currentChannelId,
+          isSpeaking: isSpeaking,
+        })
+      }
     }, this.SPEAKING_CHECK_INTERVAL)
   }
 
@@ -239,6 +249,10 @@ class WebRTCService {
     const audio = document.createElement('audio')
     audio.srcObject = stream
     audio.autoplay = true
+
+    // Check if user is deafened and mute the audio element accordingly
+    const isDeafened = useVoiceStore.getState().isDeafened
+    audio.muted = isDeafened
 
     // Set audio element properties for better compatibility
     audio.setAttribute('data-user-id', userId.toString())
@@ -352,10 +366,20 @@ class WebRTCService {
   setDeafened(deafened: boolean) {
     useVoiceStore.getState().setIsDeafened(deafened)
 
-    // When deafened, also mute
+    // When deafened, also mute the microphone
     if (deafened) {
       this.setMuted(true)
     }
+
+    // Mute/unmute all remote audio elements
+    this.peers.forEach((peerConnection) => {
+      if (peerConnection.audioElement) {
+        peerConnection.audioElement.muted = deafened
+        console.log(
+          `[WebRTC] ${deafened ? 'Muted' : 'Unmuted'} audio from ${peerConnection.username}`
+        )
+      }
+    })
   }
 
   /**
@@ -443,6 +467,34 @@ class WebRTCService {
    */
   getLocalStream(): MediaStream | null {
     return this.localStream
+  }
+
+  /**
+   * Set local mute for a specific user
+   */
+  setUserLocalMuted(userId: number, muted: boolean) {
+    const peerConnection = this.peers.get(userId)
+    if (peerConnection?.audioElement) {
+      peerConnection.audioElement.muted = muted
+      console.log(
+        `[WebRTC] ${muted ? 'Locally muted' : 'Locally unmuted'} ${peerConnection.username}`
+      )
+    }
+  }
+
+  /**
+   * Set volume for a specific user
+   */
+  setUserVolume(userId: number, volume: number) {
+    const peerConnection = this.peers.get(userId)
+    if (peerConnection?.audioElement) {
+      // Clamp volume between 0 and 2 (0% to 200%)
+      const clampedVolume = Math.max(0, Math.min(2, volume))
+      peerConnection.audioElement.volume = clampedVolume
+      console.log(
+        `[WebRTC] Set volume for ${peerConnection.username} to ${(clampedVolume * 100).toFixed(0)}%`
+      )
+    }
   }
 }
 

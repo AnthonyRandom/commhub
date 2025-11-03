@@ -9,6 +9,8 @@ export interface VoiceUser {
   isMuted: boolean
   connectionStatus: ConnectionStatus
   stream?: MediaStream
+  localMuted: boolean
+  localVolume: number
 }
 
 interface VoiceState {
@@ -38,6 +40,8 @@ interface VoiceState {
   updateUserMuted: (userId: number, isMuted: boolean) => void
   updateUserStream: (userId: number, stream: MediaStream) => void
   updateUserConnectionStatus: (userId: number, status: ConnectionStatus) => void
+  setUserLocalMuted: (userId: number, muted: boolean) => void
+  setUserLocalVolume: (userId: number, volume: number) => void
   clearConnectedUsers: () => void
   reset: () => void
 }
@@ -136,6 +140,26 @@ export const useVoiceStore = create<VoiceState>((set) => ({
       const user = newUsers.get(userId)
       if (user) {
         newUsers.set(userId, { ...user, connectionStatus: status })
+      }
+      return { connectedUsers: newUsers }
+    }),
+
+  setUserLocalMuted: (userId, muted) =>
+    set((state) => {
+      const newUsers = new Map(state.connectedUsers)
+      const user = newUsers.get(userId)
+      if (user) {
+        newUsers.set(userId, { ...user, localMuted: muted })
+      }
+      return { connectedUsers: newUsers }
+    }),
+
+  setUserLocalVolume: (userId, volume) =>
+    set((state) => {
+      const newUsers = new Map(state.connectedUsers)
+      const user = newUsers.get(userId)
+      if (user) {
+        newUsers.set(userId, { ...user, localVolume: volume })
       }
       return { connectedUsers: newUsers }
     }),

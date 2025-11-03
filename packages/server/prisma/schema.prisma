@@ -70,15 +70,19 @@ model Message {
   updatedAt DateTime  @default(now()) @updatedAt
   editedAt  DateTime?
   isEdited  Boolean   @default(false)
+  replyToId Int?
 
   // Relations
   userId    Int
   user      User     @relation(fields: [userId], references: [id])
   channelId Int
   channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  replyTo   Message? @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   Message[] @relation("MessageReplies")
 
   @@index([channelId, createdAt])
   @@index([userId])
+  @@index([replyToId])
 }
 
 model FriendRequest {

@@ -37,6 +37,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private logger: Logger = new Logger('ChatGateway');
   private onlineUsers: Map<number, string> = new Map(); // userId -> socketId
   private userVoiceChannels: Map<number, number> = new Map(); // userId -> channelId (for disconnect cleanup)
+  private voiceChannelMembers: Map<
+    number,
+    Set<{ userId: number; username: string }>
+  > = new Map(); // channelId -> Set of users
 
   constructor(
     private jwtService: JwtService,
@@ -110,6 +114,20 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         // Clean up tracking
         this.userVoiceChannels.delete(client.userId);
 
+        // Remove from voice channel members tracking
+        const members = this.voiceChannelMembers.get(voiceChannelId);
+        if (members) {
+          const userToRemove = Array.from(members).find(
+            m => m.userId === client.userId
+          );
+          if (userToRemove) {
+            members.delete(userToRemove);
+          }
+          if (members.size === 0) {
+            this.voiceChannelMembers.delete(voiceChannelId);
+          }
+        }
+
         // Notify other users in the voice channel that this user left
         const roomName = `voice-${voiceChannelId}`;
         this.server.to(roomName).emit('voice-user-left', {
@@ -117,6 +135,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           userId: client.userId,
           username: client.username,
         });
+
+        // Broadcast updated member list
+        await this.broadcastVoiceChannelMembers(voiceChannelId);
 
         this.logger.log(
           `[Voice] Notified voice channel ${voiceChannelId} that ${client.username} left due to disconnect`
@@ -231,7 +252,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('send-message')
   async handleMessage(
-    @MessageBody() data: { channelId: number; content: string },
+    @MessageBody()
+    data: { channelId: number; content: string; replyToId?: number },
     @ConnectedSocket() client: AuthenticatedSocket
   ) {
     try {
@@ -263,11 +285,20 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return;
       }
 
+      // Validate replyToId if provided
+      if (data.replyToId !== undefined && data.replyToId !== null) {
+        if (typeof data.replyToId !== 'number' || data.replyToId <= 0) {
+          client.emit('error', { message: 'Invalid reply to ID' });
+          return;
+        }
+      }
+
       // Save message to database (includes authorization check)
       const message = await this.messagesService.create(
         {
           content: trimmedContent,
           channelId: data.channelId,
+          replyToId: data.replyToId,
         },
         client.userId
       );
@@ -284,6 +315,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         createdAt: message.createdAt,
         isEdited: false,
         editedAt: null,
+        replyTo: message.replyTo
+          ? {
+              id: message.replyTo.id,
+              content: message.replyTo.content,
+              user: message.replyTo.user,
+            }
+          : null,
       });
     } catch (error) {
       this.logger.error('Error sending message:', error.message);
@@ -341,7 +379,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         channelId: message.channel.id,
         createdAt: message.createdAt,
         isEdited: true,
-        editedAt: new Date().toISOString(),
+        editedAt: message.editedAt?.toISOString() || new Date().toISOString(),
+        replyTo: message.replyTo
+          ? {
+              id: message.replyTo.id,
+              content: message.replyTo.content,
+              user: message.replyTo.user,
+            }
+          : null,
       });
     } catch (error) {
       this.logger.error('Error editing message:', error.message);
@@ -689,6 +734,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         }
       }
 
+      // Add current user to voice channel members tracking
+      if (!this.voiceChannelMembers.has(data.channelId)) {
+        this.voiceChannelMembers.set(data.channelId, new Set());
+      }
+      const members = this.voiceChannelMembers.get(data.channelId);
+      members.add({ userId: client.userId, username: client.username });
+
       this.logger.log(
         `[Voice] Sending voice-channel-users to ${client.username} with ${usersInChannel.length} users`
       );
@@ -710,6 +762,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         username: client.username,
       });
 
+      // Broadcast updated member list to all users who can see this channel
+      await this.broadcastVoiceChannelMembers(data.channelId);
+
       this.logger.log(
         `[Voice] Successfully completed join for ${client.username}`
       );
@@ -723,7 +778,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('leave-voice-channel')
-  handleLeaveVoiceChannel(
+  async handleLeaveVoiceChannel(
     @MessageBody() data: { channelId: number },
     @ConnectedSocket() client: AuthenticatedSocket
   ) {
@@ -734,12 +789,29 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Clean up tracking
     this.userVoiceChannels.delete(client.userId);
 
+    // Remove from voice channel members tracking
+    const members = this.voiceChannelMembers.get(data.channelId);
+    if (members) {
+      const userToRemove = Array.from(members).find(
+        m => m.userId === client.userId
+      );
+      if (userToRemove) {
+        members.delete(userToRemove);
+      }
+      if (members.size === 0) {
+        this.voiceChannelMembers.delete(data.channelId);
+      }
+    }
+
     // Notify others in the voice channel
     client.to(roomName).emit('voice-user-left', {
       channelId: data.channelId,
       userId: client.userId,
       username: client.username,
     });
+
+    // Broadcast updated member list to all users who can see this channel
+    await this.broadcastVoiceChannelMembers(data.channelId);
   }
 
   @SubscribeMessage('voice-offer')
@@ -845,6 +917,85 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
     } catch (error) {
       this.logger.error('Error handling ICE candidate:', error.message);
+    }
+  }
+
+  @SubscribeMessage('get-voice-channel-members')
+  handleGetVoiceChannelMembers(
+    @MessageBody() data: { channelId: number },
+    @ConnectedSocket() client: AuthenticatedSocket
+  ) {
+    try {
+      if (
+        !data.channelId ||
+        typeof data.channelId !== 'number' ||
+        data.channelId <= 0
+      ) {
+        client.emit('error', { message: 'Invalid channel ID' });
+        return;
+      }
+
+      const members = this.voiceChannelMembers.get(data.channelId);
+      const membersList = members ? Array.from(members) : [];
+
+      client.emit('voice-channel-members', {
+        channelId: data.channelId,
+        members: membersList,
+      });
+    } catch (error) {
+      this.logger.error('Error getting voice channel members:', error.message);
+    }
+  }
+
+  @SubscribeMessage('voice-speaking')
+  handleVoiceSpeaking(
+    @MessageBody() data: { channelId: number; isSpeaking: boolean },
+    @ConnectedSocket() client: AuthenticatedSocket
+  ) {
+    try {
+      if (
+        !data.channelId ||
+        typeof data.channelId !== 'number' ||
+        data.channelId <= 0 ||
+        typeof data.isSpeaking !== 'boolean'
+      ) {
+        return;
+      }
+
+      const roomName = `voice-${data.channelId}`;
+      // Broadcast to other users in the voice channel
+      client.to(roomName).emit('voice-user-speaking', {
+        channelId: data.channelId,
+        userId: client.userId,
+        username: client.username,
+        isSpeaking: data.isSpeaking,
+      });
+    } catch (error) {
+      this.logger.error('Error handling voice speaking status:', error.message);
+    }
+  }
+
+  private async broadcastVoiceChannelMembers(channelId: number) {
+    try {
+      const members = this.voiceChannelMembers.get(channelId);
+      const membersList = members ? Array.from(members) : [];
+
+      // Broadcast to all users in the server room
+      // We need to get the serverId from the channelId (requires database lookup)
+      // For now, broadcast to everyone connected
+      this.server.emit('voice-channel-members', {
+        channelId,
+        members: membersList,
+      });
+
+      this.logger.log(
+        `[Voice] Broadcasted ${membersList.length} members for channel ${channelId}`
+      );
+    } catch (error) {
+      this.logger.error(
+        'Error broadcasting voice channel members:',
+        error.message
+      );
     }
   }
 }

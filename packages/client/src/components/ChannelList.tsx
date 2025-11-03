@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   Hash,
   Volume2,
@@ -11,6 +11,7 @@ import {
   Trash2,
   PhoneCall,
   MessageSquare,
+  Users,
 } from 'lucide-react'
 import { useChannelsStore } from '../stores/channels'
 import { useServersStore } from '../stores/servers'
@@ -58,10 +59,41 @@ const ChannelList: React.FC<ChannelListProps> = ({
   const [deletingChannel, setDeletingChannel] = React.useState<Channel | null>(null)
   const [contextMenuDMId, setContextMenuDMId] = React.useState<number | null>(null)
   const [deletingDM, setDeletingDM] = React.useState<Conversation | null>(null)
+  const [voiceChannelMembers, setVoiceChannelMembers] = useState<
+    Map<number, Array<{ userId: number; username: string }>>
+  >(new Map())
 
   useEffect(() => {
     fetchChannels()
   }, [fetchChannels])
+
+  // Listen for voice channel member updates
+  useEffect(() => {
+    const handleVoiceChannelMembersUpdate = (event: CustomEvent) => {
+      const { channelId, members } = event.detail
+      setVoiceChannelMembers((prev) => {
+        const newMap = new Map(prev)
+        if (members.length === 0) {
+          newMap.delete(channelId)
+        } else {
+          newMap.set(channelId, members)
+        }
+        return newMap
+      })
+    }
+
+    window.addEventListener(
+      'voice-channel-members-update',
+      handleVoiceChannelMembersUpdate as EventListener
+    )
+
+    return () => {
+      window.removeEventListener(
+        'voice-channel-members-update',
+        handleVoiceChannelMembersUpdate as EventListener
+      )
+    }
+  }, [])
 
   const serverChannels = server ? getChannelsByServer(server.id) : []
   const textChannels = serverChannels.filter((ch) => ch.type === 'text')
@@ -341,28 +373,67 @@ const ChannelList: React.FC<ChannelListProps> = ({
               <div className="space-y-1">
                 {voiceChannels.map((channel) => {
                   const isConnected = connectedChannelId === channel.id
+                  const channelMembers = voiceChannelMembers.get(channel.id) || []
+                  const hasMember = channelMembers.length > 0
+
                   return (
-                    <button
-                      key={channel.id}
-                      onClick={() => onChannelSelect(channel)}
-                      className={`
-                        w-full px-2 py-2 flex items-center gap-2
-                        border-2 transition-all duration-100
-                        ${
-                          selectedChannel?.id === channel.id
-                            ? 'bg-white text-black border-white'
-                            : isConnected
-                              ? 'bg-grey-850 text-white border-grey-700'
-                              : 'bg-transparent text-grey-300 border-transparent hover:border-grey-700 hover:bg-grey-850'
-                        }
-                      `}
-                    >
-                      <Volume2 className="w-4 h-4 flex-shrink-0" />
-                      <span className="truncate text-sm font-medium flex-1 text-left">
-                        {channel.name}
-                      </span>
-                      {isConnected && <PhoneCall className="w-3 h-3 flex-shrink-0 animate-pulse" />}
-                    </button>
+                    <div key={channel.id} className="relative">
+                      <button
+                        onClick={() => onChannelSelect(channel)}
+                        className={`
+                          w-full px-2 py-2 flex items-center gap-2
+                          border-2 transition-all duration-100
+                          ${
+                            selectedChannel?.id === channel.id
+                              ? 'bg-white text-black border-white'
+                              : isConnected
+                                ? 'bg-grey-850 text-white border-grey-700'
+                                : hasMember
+                                  ? 'bg-grey-900 text-white border-grey-700'
+                                  : 'bg-transparent text-grey-300 border-transparent hover:border-grey-700 hover:bg-grey-850'
+                          }
+                        `}
+                      >
+                        <Volume2 className="w-4 h-4 flex-shrink-0" />
+                        <span className="truncate text-sm font-medium flex-1 text-left">
+                          {channel.name}
+                        </span>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {hasMember && (
+                            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-grey-800 border border-grey-700">
+                              <Users className="w-3 h-3" />
+                              <span className="text-xs font-bold">{channelMembers.length}</span>
+                            </div>
+                          )}
+                          {isConnected && <PhoneCall className="w-3 h-3 animate-pulse" />}
+                        </div>
+                      </button>
+
+                      {/* Show connected users when hovering */}
+                      {hasMember && !isConnected && (
+                        <div className="absolute left-full top-0 ml-2 z-50 hidden group-hover:block">
+                          <div className="bg-grey-900 border-2 border-grey-700 p-2 min-w-[150px] animate-fade-in">
+                            <p className="text-grey-400 text-xs font-bold uppercase mb-1">
+                              In Voice
+                            </p>
+                            <div className="space-y-1">
+                              {channelMembers.map((member) => (
+                                <div key={member.userId} className="flex items-center gap-2">
+                                  <div className="w-4 h-4 bg-grey-800 flex items-center justify-center flex-shrink-0">
+                                    <span className="text-white text-xs font-bold">
+                                      {member.username.charAt(0).toUpperCase()}
+                                    </span>
+                                  </div>
+                                  <span className="text-white text-xs truncate">
+                                    {member.username}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )
                 })}
               </div>

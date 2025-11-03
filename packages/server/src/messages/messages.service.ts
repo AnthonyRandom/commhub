@@ -11,7 +11,7 @@ export class MessagesService {
   constructor(private prisma: PrismaService) {}
 
   async create(createMessageDto: CreateMessageDto, userId: number) {
-    const { channelId, content } = createMessageDto;
+    const { channelId, content, replyToId } = createMessageDto;
 
     // Check if channel exists and user has access
     const channel = await this.prisma.channel.findUnique({
@@ -37,11 +37,30 @@ export class MessagesService {
       throw new ForbiddenException('You are not a member of this server');
     }
 
+    // Validate replyToId if provided
+    if (replyToId) {
+      const replyToMessage = await this.prisma.message.findUnique({
+        where: { id: replyToId },
+        select: { id: true, channelId: true },
+      });
+
+      if (!replyToMessage) {
+        throw new NotFoundException('Reply target message not found');
+      }
+
+      if (replyToMessage.channelId !== channelId) {
+        throw new ForbiddenException(
+          'Cannot reply to a message from a different channel'
+        );
+      }
+    }
+
     return this.prisma.message.create({
       data: {
         content,
         channelId,
         userId,
+        replyToId,
       },
       include: {
         user: {
@@ -54,6 +73,18 @@ export class MessagesService {
           select: {
             id: true,
             name: true,
+          },
+        },
+        replyTo: {
+          select: {
+            id: true,
+            content: true,
+            user: {
+              select: {
+                id: true,
+                username: true,
+              },
+            },
           },
         },
       },
@@ -106,6 +137,18 @@ export class MessagesService {
           select: {
             id: true,
             name: true,
+          },
+        },
+        replyTo: {
+          select: {
+            id: true,
+            content: true,
+            user: {
+              select: {
+                id: true,
+                username: true,
+              },
+            },
           },
         },
       },
@@ -208,6 +251,8 @@ export class MessagesService {
       where: { id },
       data: {
         content,
+        isEdited: true,
+        editedAt: new Date(),
       },
       include: {
         user: {
@@ -220,6 +265,18 @@ export class MessagesService {
           select: {
             id: true,
             name: true,
+          },
+        },
+        replyTo: {
+          select: {
+            id: true,
+            content: true,
+            user: {
+              select: {
+                id: true,
+                username: true,
+              },
+            },
           },
         },
       },
@@ -313,6 +370,18 @@ export class MessagesService {
           select: {
             id: true,
             username: true,
+          },
+        },
+        replyTo: {
+          select: {
+            id: true,
+            content: true,
+            user: {
+              select: {
+                id: true,
+                username: true,
+              },
+            },
           },
         },
       },

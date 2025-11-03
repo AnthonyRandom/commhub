@@ -4,7 +4,7 @@ import { io, Socket } from 'socket.io-client'
 const WS_BASE_URL = 'https://commhub-production.up.railway.app/chat'
 
 // Client version - should match package.json version
-const CLIENT_VERSION = '1.1.1'
+const CLIENT_VERSION = '1.1.2'
 
 export interface WSMessage {
   id: number
@@ -13,6 +13,16 @@ export interface WSMessage {
   username: string
   channelId: number
   createdAt: string
+  isEdited?: boolean
+  editedAt?: string
+  replyTo?: {
+    id: number
+    content: string
+    user: {
+      id: number
+      username: string
+    }
+  }
 }
 
 export interface FriendPresence {
@@ -194,9 +204,9 @@ class WebSocketService {
   }
 
   // Messaging
-  sendMessage(channelId: number, content: string): void {
+  sendMessage(channelId: number, content: string, replyToId?: number): void {
     if (this.socket) {
-      this.socket.emit('send-message', { channelId, content })
+      this.socket.emit('send-message', { channelId, content, replyToId })
     }
   }
 

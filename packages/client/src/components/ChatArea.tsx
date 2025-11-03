@@ -1,5 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Hash, Send, Users, MoreVertical, Edit2, Trash2, Volume2, PhoneCall } from 'lucide-react'
+import {
+  Hash,
+  Send,
+  Users,
+  MoreVertical,
+  Edit2,
+  Trash2,
+  Volume2,
+  PhoneCall,
+  MicOff,
+  VolumeX,
+  Volume1,
+  Image as ImageIcon,
+  Smile,
+  Reply as ReplyIcon,
+  X,
+} from 'lucide-react'
 import { useMessagesStore } from '../stores/messages'
 import { wsManager } from '../services/websocket-manager'
 import { useAuthStore } from '../stores/auth'
@@ -7,11 +23,245 @@ import { useVoiceStore } from '../stores/voice'
 import { voiceManager } from '../services/voice-manager'
 import MembersModal from './MembersModal'
 import VoiceControls from './VoiceControls'
+import GifPicker from './GifPicker'
+import EmojiPicker from './EmojiPicker'
+import MediaEmbed from './MediaEmbed'
 import type { Channel, Server, Message } from '../services/api'
 
 interface ChatAreaProps {
   selectedChannel: Channel | null
   server: Server | null
+}
+
+// Twitter Spaces-style voice participant grid
+const VoiceChannelParticipants: React.FC = () => {
+  const { connectedUsers, isMuted, isDeafened, isConnecting } = useVoiceStore()
+  const { user } = useAuthStore()
+  const [selectedUser, setSelectedUser] = useState<number | null>(null)
+  const [showVolumeSlider, setShowVolumeSlider] = useState<number | null>(null)
+
+  if (isConnecting) {
+    return (
+      <div className="text-center animate-fade-in">
+        <div className="w-16 h-16 border-4 border-white border-t-transparent animate-spin mx-auto mb-4"></div>
+        <p className="text-white text-lg font-bold">Connecting to voice...</p>
+        <p className="text-grey-400 text-sm mt-2">Requesting microphone access...</p>
+      </div>
+    )
+  }
+
+  const connectedUsersArray = Array.from(connectedUsers.values())
+  const currentUser = {
+    userId: user?.id || 0,
+    username: user?.username || 'You',
+    isSpeaking: false,
+    isMuted,
+    isDeafened,
+  }
+
+  const handleUserLocalMute = (userId: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const targetUser = connectedUsers.get(userId)
+    if (targetUser) {
+      voiceManager.setUserLocalMuted(userId, !targetUser.localMuted)
+    }
+  }
+
+  const handleUserVolumeChange = (userId: number, volume: number) => {
+    voiceManager.setUserVolume(userId, volume)
+  }
+
+  const handleUserClick = (userId: number, isCurrentUser: boolean) => {
+    if (isCurrentUser) return
+    setSelectedUser(selectedUser === userId ? null : userId)
+    setShowVolumeSlider(null)
+  }
+
+  const toggleVolumeSlider = (userId: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setShowVolumeSlider(showVolumeSlider === userId ? null : userId)
+  }
+
+  // Dynamic grid size based on number of users
+  const totalUsers = connectedUsersArray.length + 1
+  const gridCols = Math.min(Math.ceil(Math.sqrt(totalUsers)), 5)
+
+  return (
+    <div className="w-full max-w-6xl">
+      {/* Grid of participants - centered layout */}
+      <div
+        className="grid gap-3 justify-items-center items-start"
+        style={{
+          gridTemplateColumns: `repeat(${gridCols}, minmax(0, max-content))`,
+          justifyContent: 'center',
+        }}
+      >
+        {/* Current User - always first/centered */}
+        <div
+          key={currentUser.userId}
+          className="flex flex-col items-center gap-3 animate-slide-up"
+          style={{
+            gridColumn: connectedUsersArray.length === 0 ? '1 / -1' : 'auto',
+            justifySelf: connectedUsersArray.length === 0 ? 'center' : 'auto',
+          }}
+        >
+          {/* Avatar */}
+          <div className="relative">
+            <div
+              className={`w-32 h-32 flex items-center justify-center transition-all duration-300 border-4 border-grey-800 ${
+                currentUser.isSpeaking
+                  ? 'bg-white ring-4 ring-white ring-offset-4 ring-offset-grey-900 scale-105'
+                  : 'bg-white'
+              }`}
+            >
+              <span className="font-bold text-3xl text-black">
+                {currentUser.username.charAt(0).toUpperCase()}
+              </span>
+            </div>
+
+            {/* Status badges */}
+            {(currentUser.isMuted || currentUser.isDeafened) && (
+              <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex gap-1 animate-slide-up">
+                {currentUser.isMuted && (
+                  <div className="bg-red-900 border-2 border-grey-900 p-1.5">
+                    <MicOff className="w-4 h-4 text-white" />
+                  </div>
+                )}
+                {currentUser.isDeafened && (
+                  <div className="bg-red-900 border-2 border-grey-900 p-1.5">
+                    <VolumeX className="w-4 h-4 text-white" />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Username */}
+          <div className="text-center">
+            <p className="text-white font-bold text-base">You</p>
+            <p className="text-grey-500 text-xs">Host</p>
+          </div>
+        </div>
+
+        {/* Other Users */}
+        {connectedUsersArray.map((participant, index) => {
+          const voiceUser = connectedUsers.get(participant.userId)
+          const isSelected = selectedUser === participant.userId
+
+          return (
+            <div
+              key={participant.userId}
+              className="flex flex-col items-center gap-3 relative cursor-pointer animate-slide-up"
+              style={{
+                animationDelay: `${index * 50}ms`,
+              }}
+              onClick={() => handleUserClick(participant.userId, false)}
+            >
+              {/* Avatar */}
+              <div className="relative">
+                <div
+                  className={`w-32 h-32 flex items-center justify-center transition-all duration-300 border-4 border-grey-800 ${
+                    participant.isSpeaking
+                      ? 'bg-white ring-4 ring-white ring-offset-4 ring-offset-grey-900 scale-105'
+                      : 'bg-grey-800 hover:bg-grey-750'
+                  } ${isSelected ? 'ring-2 ring-grey-600' : ''}`}
+                >
+                  <span
+                    className={`font-bold text-3xl transition-colors ${
+                      participant.isSpeaking ? 'text-black' : 'text-grey-300'
+                    }`}
+                  >
+                    {participant.username.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+
+                {/* Status badges */}
+                {(participant.isMuted || voiceUser?.localMuted) && (
+                  <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex gap-1 animate-slide-up">
+                    {participant.isMuted && (
+                      <div className="bg-red-900 border-2 border-grey-900 p-1.5">
+                        <MicOff className="w-4 h-4 text-white" />
+                      </div>
+                    )}
+                    {voiceUser?.localMuted && (
+                      <div className="bg-grey-700 border-2 border-grey-900 p-1.5">
+                        <VolumeX className="w-4 h-4 text-white" />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Username */}
+              <div className="text-center">
+                <p className="text-white font-bold text-sm">{participant.username}</p>
+                <p className="text-grey-500 text-xs">
+                  {participant.isSpeaking ? 'Speaking' : 'Listening'}
+                </p>
+              </div>
+
+              {/* Controls panel - shown when selected */}
+              {isSelected && voiceUser && (
+                <div className="absolute top-full mt-4 z-50 animate-slide-up">
+                  <div className="bg-grey-950 border-2 border-grey-700 p-4 min-w-[240px] shadow-xl">
+                    <div className="flex gap-2 mb-3">
+                      <button
+                        onClick={(e) => handleUserLocalMute(participant.userId, e)}
+                        className={`flex-1 p-3 border-2 transition-all duration-100 text-sm font-bold ${
+                          voiceUser.localMuted
+                            ? 'bg-red-900 border-red-700 text-white hover:bg-red-800'
+                            : 'bg-grey-850 border-grey-700 text-white hover:bg-grey-800 hover:border-white'
+                        }`}
+                      >
+                        <div className="flex items-center justify-center gap-2">
+                          {voiceUser.localMuted ? (
+                            <VolumeX className="w-4 h-4" />
+                          ) : (
+                            <Volume2 className="w-4 h-4" />
+                          )}
+                          <span>{voiceUser.localMuted ? 'Unmute' : 'Mute'}</span>
+                        </div>
+                      </button>
+                      <button
+                        onClick={(e) => toggleVolumeSlider(participant.userId, e)}
+                        className="p-3 border-2 bg-grey-850 border-grey-700 text-white hover:bg-grey-800 hover:border-white transition-all duration-100"
+                      >
+                        <Volume1 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    {showVolumeSlider === participant.userId && (
+                      <div className="pt-3 border-t border-grey-800 animate-slide-down">
+                        <div className="flex items-center gap-3">
+                          <Volume1 className="w-4 h-4 text-grey-400" />
+                          <input
+                            type="range"
+                            min="0"
+                            max="200"
+                            value={voiceUser.localVolume * 100}
+                            onChange={(e) =>
+                              handleUserVolumeChange(
+                                participant.userId,
+                                parseInt(e.target.value) / 100
+                              )
+                            }
+                            className="flex-1 h-1 bg-grey-700 appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <span className="text-sm text-white font-mono w-12 text-right">
+                            {Math.round(voiceUser.localVolume * 100)}%
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
@@ -20,6 +270,9 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
   const [editContent, setEditContent] = useState('')
   const [contextMenuMessageId, setContextMenuMessageId] = useState<number | null>(null)
+  const [showGifPicker, setShowGifPicker] = useState(false)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const editInputRef = useRef<HTMLTextAreaElement>(null)
@@ -70,12 +323,40 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
     if (!selectedChannel || !messageInput.trim()) return
 
     try {
-      await sendMessage(selectedChannel.id, messageInput.trim())
+      await sendMessage(selectedChannel.id, messageInput.trim(), replyingTo?.id)
       setMessageInput('')
+      setReplyingTo(null)
       inputRef.current?.focus()
     } catch (error) {
       console.error('Failed to send message:', error)
     }
+  }
+
+  const handleGifSelect = async (gifUrl: string) => {
+    if (!selectedChannel) return
+
+    try {
+      await sendMessage(selectedChannel.id, gifUrl, replyingTo?.id)
+      setReplyingTo(null)
+      setShowGifPicker(false)
+    } catch (error) {
+      console.error('Failed to send GIF:', error)
+    }
+  }
+
+  const handleEmojiSelect = (emoji: string) => {
+    setMessageInput((prev) => prev + emoji)
+    inputRef.current?.focus()
+  }
+
+  const handleReplyTo = (message: Message) => {
+    setReplyingTo(message)
+    setContextMenuMessageId(null)
+    inputRef.current?.focus()
+  }
+
+  const cancelReply = () => {
+    setReplyingTo(null)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -174,6 +455,15 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
     })
   }
 
+  const extractUrls = (text: string): string[] => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g
+    return text.match(urlRegex) || []
+  }
+
+  const isGifUrl = (url: string): boolean => {
+    return /\.(gif)$/i.test(url) || url.includes('tenor.com') || url.includes('giphy.com')
+  }
+
   if (!selectedChannel) {
     return (
       <div className="flex-1 bg-grey-900 flex items-center justify-center">
@@ -208,7 +498,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
         </div>
 
         {/* Voice Channel Content */}
-        <div className="flex-1 flex items-center justify-center p-8">
+        <div className="flex-1 flex items-center justify-center p-8 overflow-y-auto">
           {!isConnectedToVoice && !isConnecting ? (
             <div className="text-center max-w-md">
               <div className="w-24 h-24 bg-grey-850 border-2 border-grey-700 flex items-center justify-center mx-auto mb-6">
@@ -228,23 +518,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
               </button>
             </div>
           ) : (
-            <div className="text-center">
-              {isConnecting ? (
-                <>
-                  <div className="w-16 h-16 border-4 border-white border-t-transparent animate-spin mx-auto mb-4"></div>
-                  <p className="text-white text-lg font-bold">Connecting to voice...</p>
-                  <p className="text-grey-400 text-sm mt-2">Requesting microphone access...</p>
-                </>
-              ) : (
-                <>
-                  <div className="w-24 h-24 bg-white border-2 border-white flex items-center justify-center mx-auto mb-6">
-                    <Volume2 className="w-12 h-12 text-black" />
-                  </div>
-                  <h2 className="text-white text-2xl font-bold mb-3">Voice Connected</h2>
-                  <p className="text-grey-400">You are now in the voice channel</p>
-                </>
-              )}
-            </div>
+            <VoiceChannelParticipants />
           )}
         </div>
 
@@ -301,6 +575,9 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
             const canModify = canEditOrDelete(message)
             const canDelete = isOwnMessage || isServerOwner
             const isEditing = editingMessageId === message.id
+            const urls = extractUrls(message.content)
+            const messageIsGif =
+              urls.length === 1 && isGifUrl(urls[0]) && message.content === urls[0]
 
             return (
               <div key={message.id} className="message-enter group relative">
@@ -320,9 +597,29 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
                         </span>
                         <span className="text-grey-500 text-xs">
                           {formatTimestamp(message.createdAt)}
-                          {message.isEdited && <span className="ml-1 text-grey-600">(edited)</span>}
                         </span>
+                        {message.isEdited && (
+                          <span className="text-grey-600 text-xs px-2 py-0.5 bg-grey-850 border border-grey-700">
+                            edited
+                          </span>
+                        )}
                       </div>
+
+                      {/* Reply indicator */}
+                      {message.replyTo && (
+                        <div className="mb-2 pl-3 border-l-2 border-grey-700 bg-grey-850/50 p-2 text-sm">
+                          <div className="flex items-center gap-1 mb-1">
+                            <ReplyIcon className="w-3 h-3 text-grey-500" />
+                            <span className="text-grey-400 font-bold text-xs">
+                              {message.replyTo.user.username}
+                            </span>
+                          </div>
+                          <p className="text-grey-400 text-xs truncate">
+                            {message.replyTo.content}
+                          </p>
+                        </div>
+                      )}
+
                       {isEditing ? (
                         <div className="flex flex-col gap-2">
                           <textarea
@@ -350,10 +647,33 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
                           </div>
                         </div>
                       ) : (
-                        <p className="text-grey-100 break-words">{message.content}</p>
+                        <>
+                          {/* Display GIF if message is just a GIF URL */}
+                          {messageIsGif ? (
+                            <div className="max-w-md">
+                              <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden">
+                                <img
+                                  src={urls[0]}
+                                  alt="GIF"
+                                  className="w-full h-auto max-h-96 object-contain"
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <p className="text-grey-100 break-words whitespace-pre-wrap">
+                                {message.content}
+                              </p>
+                              {/* Display media embeds for URLs in the message */}
+                              {urls.map((url, urlIndex) => (
+                                <MediaEmbed key={`${message.id}-${urlIndex}`} url={url} />
+                              ))}
+                            </>
+                          )}
+                        </>
                       )}
                     </div>
-                    {!isEditing && (canModify || canDelete) && (
+                    {!isEditing && (
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() =>
@@ -367,6 +687,13 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
                         </button>
                         {contextMenuMessageId === message.id && (
                           <div className="absolute right-0 top-8 bg-grey-900 border-2 border-grey-700 z-10 min-w-[150px] animate-fade-in">
+                            <button
+                              onClick={() => handleReplyTo(message)}
+                              className="w-full px-4 py-2 text-left text-white hover:bg-grey-800 flex items-center gap-2 transition-colors"
+                            >
+                              <ReplyIcon className="w-4 h-4" />
+                              Reply
+                            </button>
                             {canModify && (
                               <button
                                 onClick={() => startEditingMessage(message)}
@@ -398,6 +725,21 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
+                      {/* Reply indicator for condensed messages */}
+                      {message.replyTo && (
+                        <div className="mb-2 pl-3 border-l-2 border-grey-700 bg-grey-850/50 p-2 text-sm">
+                          <div className="flex items-center gap-1 mb-1">
+                            <ReplyIcon className="w-3 h-3 text-grey-500" />
+                            <span className="text-grey-400 font-bold text-xs">
+                              {message.replyTo.user.username}
+                            </span>
+                          </div>
+                          <p className="text-grey-400 text-xs truncate">
+                            {message.replyTo.content}
+                          </p>
+                        </div>
+                      )}
+
                       {isEditing ? (
                         <div className="flex flex-col gap-2">
                           <textarea
@@ -426,14 +768,35 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
                         </div>
                       ) : (
                         <>
-                          <p className="text-grey-100 break-words inline">{message.content}</p>
-                          {message.isEdited && (
-                            <span className="text-grey-600 text-xs ml-2">(edited)</span>
+                          {messageIsGif ? (
+                            <div className="max-w-md">
+                              <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden">
+                                <img
+                                  src={urls[0]}
+                                  alt="GIF"
+                                  className="w-full h-auto max-h-96 object-contain"
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <p className="text-grey-100 break-words whitespace-pre-wrap inline">
+                                {message.content}
+                              </p>
+                              {message.isEdited && (
+                                <span className="text-grey-600 text-xs ml-2 px-2 py-0.5 bg-grey-850 border border-grey-700 align-middle">
+                                  edited
+                                </span>
+                              )}
+                              {urls.map((url, urlIndex) => (
+                                <MediaEmbed key={`${message.id}-${urlIndex}`} url={url} />
+                              ))}
+                            </>
                           )}
                         </>
                       )}
                     </div>
-                    {!isEditing && (canModify || canDelete) && (
+                    {!isEditing && (
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity relative">
                         <button
                           onClick={() =>
@@ -447,6 +810,13 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
                         </button>
                         {contextMenuMessageId === message.id && (
                           <div className="absolute right-0 top-8 bg-grey-900 border-2 border-grey-700 z-10 min-w-[150px] animate-fade-in">
+                            <button
+                              onClick={() => handleReplyTo(message)}
+                              className="w-full px-4 py-2 text-left text-white hover:bg-grey-800 flex items-center gap-2 transition-colors"
+                            >
+                              <ReplyIcon className="w-4 h-4" />
+                              Reply
+                            </button>
                             {canModify && (
                               <button
                                 onClick={() => startEditingMessage(message)}
@@ -479,34 +849,96 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
       </div>
 
       {/* Message Input */}
-      <div className="p-4 border-t-2 border-grey-800 flex-shrink-0">
-        <form onSubmit={handleSendMessage} className="relative">
-          <textarea
-            ref={inputRef}
-            value={messageInput}
-            onChange={(e) => setMessageInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={`Message #${selectedChannel.name}`}
-            className="w-full bg-grey-850 border-2 border-grey-700 px-4 py-3 pr-12 text-white resize-none focus:border-white"
-            rows={1}
-            maxLength={2000}
-            style={{
-              minHeight: '48px',
-              maxHeight: '200px',
-              height: 'auto',
-            }}
-          />
-          <button
-            type="submit"
-            disabled={!messageInput.trim()}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white text-black hover:bg-grey-100 disabled:bg-grey-700 disabled:text-grey-500 disabled:cursor-not-allowed transition-colors border-2 border-transparent"
-            title="Send message"
-          >
-            <Send className="w-5 h-5" />
-          </button>
-        </form>
-        <p className="text-grey-600 text-xs mt-2">Press Enter to send, Shift+Enter for new line</p>
+      <div className="border-t-2 border-grey-800 flex-shrink-0">
+        {/* Reply Indicator */}
+        {replyingTo && (
+          <div className="px-4 pt-3 pb-2 bg-grey-850 border-b-2 border-grey-800 animate-slide-down">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <ReplyIcon className="w-4 h-4 text-grey-400 flex-shrink-0" />
+                  <span className="text-grey-300 text-sm font-bold">
+                    Replying to {replyingTo.user?.username}
+                  </span>
+                </div>
+                <p className="text-grey-400 text-xs truncate pl-6">{replyingTo.content}</p>
+              </div>
+              <button
+                onClick={cancelReply}
+                className="p-1 hover:bg-grey-800 text-grey-400 hover:text-white transition-colors flex-shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Input Area */}
+        <div className="p-4">
+          <form onSubmit={handleSendMessage} className="relative">
+            <textarea
+              ref={inputRef}
+              value={messageInput}
+              onChange={(e) => setMessageInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={`Message #${selectedChannel.name}`}
+              className="w-full bg-grey-850 border-2 border-grey-700 px-4 py-3 pr-24 text-white resize-none focus:border-white"
+              rows={1}
+              maxLength={2000}
+              style={{
+                minHeight: '48px',
+                maxHeight: '200px',
+                height: 'auto',
+              }}
+            />
+
+            {/* Action Buttons */}
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
+              <button
+                type="button"
+                onClick={() => setShowGifPicker(!showGifPicker)}
+                className="p-2 hover:bg-grey-800 text-grey-400 hover:text-white transition-colors border-2 border-transparent hover:border-grey-600"
+                title="Send GIF"
+              >
+                <ImageIcon className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                className="p-2 hover:bg-grey-800 text-grey-400 hover:text-white transition-colors border-2 border-transparent hover:border-grey-600"
+                title="Add emoji"
+              >
+                <Smile className="w-5 h-5" />
+              </button>
+              <button
+                type="submit"
+                disabled={!messageInput.trim()}
+                className="p-2 bg-white text-black hover:bg-grey-100 disabled:bg-grey-700 disabled:text-grey-500 disabled:cursor-not-allowed transition-colors border-2 border-transparent"
+                title="Send message"
+              >
+                <Send className="w-5 h-5" />
+              </button>
+            </div>
+          </form>
+          <p className="text-grey-600 text-xs mt-2">
+            Press Enter to send, Shift+Enter for new line
+          </p>
+        </div>
       </div>
+
+      {/* GIF Picker */}
+      <GifPicker
+        isOpen={showGifPicker}
+        onClose={() => setShowGifPicker(false)}
+        onSelectGif={handleGifSelect}
+      />
+
+      {/* Emoji Picker */}
+      <EmojiPicker
+        isOpen={showEmojiPicker}
+        onClose={() => setShowEmojiPicker(false)}
+        onSelectEmoji={handleEmojiSelect}
+      />
 
       {/* Members Modal */}
       <MembersModal

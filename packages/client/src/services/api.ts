@@ -43,6 +43,15 @@ export interface Message {
   createdAt: string
   isEdited?: boolean
   editedAt?: string
+  replyToId?: number
+  replyTo?: {
+    id: number
+    content: string
+    user: {
+      id: number
+      username: string
+    }
+  }
   user: {
     id: number
     username: string
@@ -223,7 +232,11 @@ class ApiService {
   }
 
   // Message methods
-  async sendMessage(data: { content: string; channelId: number }): Promise<Message> {
+  async sendMessage(data: {
+    content: string
+    channelId: number
+    replyToId?: number
+  }): Promise<Message> {
     const response: AxiosResponse<Message> = await this.axiosInstance.post('/messages', data)
     return response.data
   }

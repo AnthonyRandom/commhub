@@ -10,7 +10,7 @@ interface MessagesState {
 
   // Actions
   fetchMessages: (channelId: number) => Promise<void>
-  sendMessage: (channelId: number, content: string) => Promise<void>
+  sendMessage: (channelId: number, content: string, replyToId?: number) => Promise<void>
   editMessage: (messageId: number, content: string) => Promise<void>
   deleteMessage: (channelId: number, messageId: number) => Promise<void>
   addMessage: (message: WSMessage) => void
@@ -43,7 +43,7 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
     }
   },
 
-  sendMessage: async (channelId: number, content: string) => {
+  sendMessage: async (channelId: number, content: string, replyToId?: number) => {
     try {
       // Optimistically add message to UI
       const tempMessage: Message = {
@@ -52,6 +52,7 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
         userId: 0, // Will be set by server
         channelId,
         createdAt: new Date().toISOString(),
+        replyToId,
         user: {
           id: 0,
           username: 'You',
@@ -70,7 +71,7 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
       }))
 
       // Send via WebSocket (this will also add the real message via addMessage)
-      wsService.sendMessage(channelId, content)
+      wsService.sendMessage(channelId, content, replyToId)
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Failed to send message'
       set({ error: errorMessage })
@@ -178,6 +179,9 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
         userId: message.userId,
         channelId: message.channelId,
         createdAt: message.createdAt,
+        isEdited: message.isEdited,
+        editedAt: message.editedAt,
+        replyTo: message.replyTo,
         user: {
           id: message.userId,
           username: message.username,

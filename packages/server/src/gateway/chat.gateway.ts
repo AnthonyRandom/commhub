@@ -36,6 +36,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private logger: Logger = new Logger('ChatGateway');
   private onlineUsers: Map<number, string> = new Map(); // userId -> socketId
+  private voiceChannelUsers: Map<number, Set<number>> = new Map(); // channelId -> Set of userIds
+  private userVoiceChannels: Map<number, number> = new Map(); // userId -> channelId
 
   constructor(
     private jwtService: JwtService,
@@ -75,6 +77,36 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   async handleDisconnect(client: AuthenticatedSocket) {
     if (client.userId) {
+      // Check if user was in a voice channel and clean up
+      const voiceChannelId = this.userVoiceChannels.get(client.userId);
+      if (voiceChannelId) {
+        this.logger.log(
+          `[Voice] User ${client.username} disconnected while in voice channel ${voiceChannelId}`
+        );
+
+        // Remove user from voice channel tracking
+        const usersInChannel = this.voiceChannelUsers.get(voiceChannelId);
+        if (usersInChannel) {
+          usersInChannel.delete(client.userId);
+          if (usersInChannel.size === 0) {
+            this.voiceChannelUsers.delete(voiceChannelId);
+          }
+        }
+        this.userVoiceChannels.delete(client.userId);
+
+        // Notify other users in the voice channel
+        const roomName = `voice-${voiceChannelId}`;
+        this.server.to(roomName).emit('voice-user-left', {
+          channelId: voiceChannelId,
+          userId: client.userId,
+          username: client.username,
+        });
+
+        this.logger.log(
+          `[Voice] Notified voice channel ${voiceChannelId} that ${client.username} left due to disconnect`
+        );
+      }
+
       // Remove user from online tracking
       this.onlineUsers.delete(client.userId);
 
@@ -507,30 +539,59 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return;
       }
 
+      // If user is already in another voice channel, leave it first
+      const currentVoiceChannel = this.userVoiceChannels.get(client.userId);
+      if (currentVoiceChannel && currentVoiceChannel !== data.channelId) {
+        this.logger.log(
+          `[Voice] User ${client.username} switching from channel ${currentVoiceChannel} to ${data.channelId}`
+        );
+        await this.handleLeaveVoiceChannel(
+          { channelId: currentVoiceChannel },
+          client
+        );
+      }
+
       const roomName = `voice-${data.channelId}`;
       client.join(roomName);
       this.logger.log(
         `[Voice] ${client.username} joined voice channel room: ${roomName}`
       );
 
-      // Get list of users already in the voice channel using Socket.IO v5 method
-      const socketsInRoom = await this.server.in(roomName).fetchSockets();
+      // Add user to voice channel tracking
+      if (!this.voiceChannelUsers.has(data.channelId)) {
+        this.voiceChannelUsers.set(data.channelId, new Set());
+      }
+      this.voiceChannelUsers.get(data.channelId).add(client.userId);
+      this.userVoiceChannels.set(client.userId, data.channelId);
+
+      // Get list of users already in the voice channel from tracking
+      const userIdsInChannel = this.voiceChannelUsers.get(data.channelId);
       const usersInChannel: Array<{ userId: number; username: string }> = [];
 
       this.logger.log(
-        `[Voice] Room ${roomName} has ${socketsInRoom.length} sockets`
+        `[Voice] Channel ${data.channelId} has ${userIdsInChannel.size} users in tracking`
       );
 
-      for (const socket of socketsInRoom) {
-        const authSocket = socket as any as AuthenticatedSocket;
-        if (authSocket.userId && authSocket.userId !== client.userId) {
-          usersInChannel.push({
-            userId: authSocket.userId,
-            username: authSocket.username,
-          });
-          this.logger.log(
-            `[Voice] Found user in channel: ${authSocket.username} (${authSocket.userId})`
-          );
+      // Fetch user details for each user in the channel (excluding the joining user)
+      for (const userId of userIdsInChannel) {
+        if (userId !== client.userId) {
+          const userSocketId = this.onlineUsers.get(userId);
+          if (userSocketId) {
+            const userSocket =
+              await this.server.sockets.sockets.get(userSocketId);
+            if (userSocket) {
+              const authSocket = userSocket as any as AuthenticatedSocket;
+              if (authSocket.username) {
+                usersInChannel.push({
+                  userId: authSocket.userId,
+                  username: authSocket.username,
+                });
+                this.logger.log(
+                  `[Voice] Found user in channel: ${authSocket.username} (${authSocket.userId})`
+                );
+              }
+            }
+          }
         }
       }
 
@@ -575,6 +636,19 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const roomName = `voice-${data.channelId}`;
     client.leave(roomName);
     this.logger.log(`${client.username} left voice channel room: ${roomName}`);
+
+    // Remove user from voice channel tracking
+    const usersInChannel = this.voiceChannelUsers.get(data.channelId);
+    if (usersInChannel) {
+      usersInChannel.delete(client.userId);
+      if (usersInChannel.size === 0) {
+        this.voiceChannelUsers.delete(data.channelId);
+        this.logger.log(
+          `[Voice] Channel ${data.channelId} is now empty, removed from tracking`
+        );
+      }
+    }
+    this.userVoiceChannels.delete(client.userId);
 
     // Notify others in the voice channel
     client.to(roomName).emit('voice-user-left', {

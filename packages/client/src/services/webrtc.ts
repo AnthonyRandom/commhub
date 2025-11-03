@@ -33,14 +33,49 @@ class WebRTCService {
    */
   async initializeLocalStream(): Promise<MediaStream> {
     try {
+      // Get selected audio device from settings
+      const savedSettings = localStorage.getItem('commhub-settings')
+      let audioDeviceId: string | undefined
+
+      if (savedSettings) {
+        try {
+          const settings = JSON.parse(savedSettings)
+          audioDeviceId = settings.audioInputDeviceId
+        } catch (error) {
+          console.warn('[WebRTC] Failed to parse settings:', error)
+        }
+      }
+
+      // Build audio constraints
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      }
+
+      // Use specific device if selected
+      if (audioDeviceId && audioDeviceId !== 'default') {
+        console.log(`[WebRTC] Using selected audio device: ${audioDeviceId}`)
+        audioConstraints.deviceId = { exact: audioDeviceId }
+      } else {
+        console.log('[WebRTC] Using default audio device')
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
+        audio: audioConstraints,
         video: false,
       })
+
+      console.log('[WebRTC] ✅ Local audio stream initialized')
+      console.log(
+        '[WebRTC] Audio tracks:',
+        stream.getAudioTracks().map((t) => ({
+          label: t.label,
+          enabled: t.enabled,
+          muted: t.muted,
+          readyState: t.readyState,
+        }))
+      )
 
       this.localStream = stream
       useVoiceStore.getState().setLocalStream(stream)
@@ -50,8 +85,20 @@ class WebRTCService {
 
       return stream
     } catch (error) {
-      console.error('Failed to get user media:', error)
-      throw new Error('Failed to access microphone. Please check permissions.')
+      console.error('[WebRTC] Failed to get user media:', error)
+
+      // Provide more helpful error messages
+      if (error instanceof Error) {
+        if (error.name === 'NotAllowedError') {
+          throw new Error('Microphone access denied. Please allow microphone permissions.')
+        } else if (error.name === 'NotFoundError') {
+          throw new Error('No microphone found. Please connect a microphone.')
+        } else if (error.name === 'OverconstrainedError') {
+          throw new Error('Selected microphone not available. Try using default device.')
+        }
+      }
+
+      throw new Error('Failed to access microphone. Please check permissions and try again.')
     }
   }
 

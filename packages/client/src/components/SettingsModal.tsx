@@ -24,6 +24,14 @@ interface UserSettings {
   sounds: boolean
   fontSize: 'small' | 'medium' | 'large'
   timestampFormat: '12h' | '24h'
+  audioInputDeviceId?: string
+  audioOutputDeviceId?: string
+}
+
+interface AudioDevice {
+  deviceId: string
+  label: string
+  kind: string
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
@@ -35,6 +43,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     progress?: number
   }>({ type: 'idle', message: '' })
   const [updateManifest, setUpdateManifest] = useState<UpdateManifest | null>(null)
+
+  // Audio devices state
+  const [audioInputDevices, setAudioInputDevices] = useState<AudioDevice[]>([])
+  const [audioOutputDevices, setAudioOutputDevices] = useState<AudioDevice[]>([])
+  const [isTesting, setIsTesting] = useState(false)
+  const [micLevel, setMicLevel] = useState(0)
+  const [testStream, setTestStream] = useState<MediaStream | null>(null)
 
   // User preferences state
   const [settings, setSettings] = useState<UserSettings>({
@@ -54,7 +69,98 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         console.error('Failed to load settings:', error)
       }
     }
+
+    // Load audio devices
+    loadAudioDevices()
   }, [])
+
+  // Cleanup test stream when modal closes
+  useEffect(() => {
+    if (!isOpen && testStream) {
+      stopMicTest()
+    }
+  }, [isOpen, testStream])
+
+  // Load available audio devices
+  const loadAudioDevices = async () => {
+    try {
+      // Request permission first
+      await navigator.mediaDevices.getUserMedia({ audio: true })
+
+      const devices = await navigator.mediaDevices.enumerateDevices()
+
+      const inputs = devices
+        .filter((device) => device.kind === 'audioinput')
+        .map((device) => ({
+          deviceId: device.deviceId,
+          label: device.label || `Microphone ${device.deviceId.slice(0, 5)}`,
+          kind: device.kind,
+        }))
+
+      const outputs = devices
+        .filter((device) => device.kind === 'audiooutput')
+        .map((device) => ({
+          deviceId: device.deviceId,
+          label: device.label || `Speaker ${device.deviceId.slice(0, 5)}`,
+          kind: device.kind,
+        }))
+
+      setAudioInputDevices(inputs)
+      setAudioOutputDevices(outputs)
+    } catch (error) {
+      console.error('Failed to load audio devices:', error)
+    }
+  }
+
+  // Test microphone
+  const startMicTest = async () => {
+    try {
+      const deviceId = settings.audioInputDeviceId
+      const constraints: MediaStreamConstraints = {
+        audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      setTestStream(stream)
+      setIsTesting(true)
+
+      // Set up audio analysis
+      const audioContext = new AudioContext()
+      const analyser = audioContext.createAnalyser()
+      analyser.fftSize = 512
+      analyser.smoothingTimeConstant = 0.8
+
+      const source = audioContext.createMediaStreamSource(stream)
+      source.connect(analyser)
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount)
+
+      const updateLevel = () => {
+        if (!isTesting) return
+
+        analyser.getByteFrequencyData(dataArray)
+        const average = dataArray.reduce((a, b) => a + b) / dataArray.length
+        setMicLevel(Math.min(100, (average / 255) * 200)) // Scale to 0-100%
+
+        requestAnimationFrame(updateLevel)
+      }
+
+      updateLevel()
+    } catch (error) {
+      console.error('Failed to start mic test:', error)
+      alert('Failed to access microphone. Please check permissions.')
+    }
+  }
+
+  // Stop microphone test
+  const stopMicTest = () => {
+    if (testStream) {
+      testStream.getTracks().forEach((track) => track.stop())
+      setTestStream(null)
+    }
+    setIsTesting(false)
+    setMicLevel(0)
+  }
 
   // Save settings to localStorage when they change
   const updateSetting = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
@@ -265,6 +371,111 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                     24 Hour
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Audio Settings Section */}
+          <div>
+            <h4 className="text-xs font-bold text-grey-400 uppercase tracking-wider mb-3">
+              Audio Settings
+            </h4>
+            <div className="bg-grey-850 border-2 border-grey-700 p-4 space-y-4">
+              {/* Microphone Selection */}
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <Volume2 className="w-5 h-5 text-grey-400" />
+                  <label className="text-white text-sm font-medium">
+                    Input Device (Microphone)
+                  </label>
+                </div>
+                <select
+                  value={settings.audioInputDeviceId || 'default'}
+                  onChange={(e) => updateSetting('audioInputDeviceId', e.target.value)}
+                  className="w-full bg-grey-800 border-2 border-grey-700 px-3 py-2 text-white focus:border-white"
+                >
+                  <option value="default">Default Microphone</option>
+                  {audioInputDevices.map((device) => (
+                    <option key={device.deviceId} value={device.deviceId}>
+                      {device.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Speaker Selection */}
+              <div className="pt-4 border-t border-grey-700">
+                <div className="flex items-center gap-3 mb-2">
+                  <Volume2 className="w-5 h-5 text-grey-400" />
+                  <label className="text-white text-sm font-medium">
+                    Output Device (Speakers/Headphones)
+                  </label>
+                </div>
+                <select
+                  value={settings.audioOutputDeviceId || 'default'}
+                  onChange={(e) => updateSetting('audioOutputDeviceId', e.target.value)}
+                  className="w-full bg-grey-800 border-2 border-grey-700 px-3 py-2 text-white focus:border-white"
+                >
+                  <option value="default">Default Speakers</option>
+                  {audioOutputDevices.map((device) => (
+                    <option key={device.deviceId} value={device.deviceId}>
+                      {device.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-grey-500 text-xs mt-2">
+                  Note: Output device selection may not be supported in all browsers
+                </p>
+              </div>
+
+              {/* Microphone Test */}
+              <div className="pt-4 border-t border-grey-700">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-white text-sm font-medium">Test Microphone</p>
+                    <p className="text-grey-500 text-xs">Speak to see the level indicator</p>
+                  </div>
+                  <button
+                    onClick={isTesting ? stopMicTest : startMicTest}
+                    className={`px-4 py-2 border-2 font-bold text-sm transition-colors ${
+                      isTesting
+                        ? 'bg-red-900 border-red-700 text-white hover:bg-red-800'
+                        : 'bg-white text-black border-white hover:bg-grey-100'
+                    }`}
+                  >
+                    {isTesting ? 'Stop Test' : 'Test Mic'}
+                  </button>
+                </div>
+
+                {/* Microphone Level Indicator */}
+                {isTesting && (
+                  <div className="space-y-2">
+                    <div className="w-full h-6 bg-grey-800 border-2 border-grey-700 overflow-hidden">
+                      <div
+                        className="h-full bg-white transition-all duration-100"
+                        style={{ width: `${micLevel}%` }}
+                      />
+                    </div>
+                    <p className="text-grey-400 text-xs text-center">
+                      {micLevel > 10
+                        ? '🎤 Microphone is working!'
+                        : 'Speak into your microphone...'}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Refresh Devices Button */}
+              <div className="pt-4 border-t border-grey-700">
+                <button
+                  onClick={loadAudioDevices}
+                  className="w-full px-4 py-2 bg-grey-800 text-white border-2 border-grey-700 hover:border-white transition-colors text-sm font-bold uppercase tracking-wide"
+                >
+                  Refresh Devices
+                </button>
+                <p className="text-grey-500 text-xs mt-2 text-center">
+                  Click if you connected a new audio device
+                </p>
               </div>
             </div>
           </div>

@@ -10,6 +10,9 @@ interface ChannelsState {
   // Actions
   fetchChannels: () => Promise<void>
   createChannel: (name: string, type: 'text' | 'voice', serverId: number) => Promise<Channel>
+  addChannel: (channel: Channel) => void
+  updateChannel: (channel: Channel) => void
+  removeChannel: (channelId: number) => void
   selectChannel: (channel: Channel | null) => void
   getChannelsByServer: (serverId: number) => Channel[]
   clearError: () => void
@@ -55,6 +58,42 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
         error: errorMessage,
       })
       throw error
+    }
+  },
+
+  addChannel: (channel: Channel) => {
+    const currentChannels = get().channels
+    // Check if channel already exists to avoid duplicates
+    if (!currentChannels.some((c) => c.id === channel.id)) {
+      set({
+        channels: [...currentChannels, channel],
+      })
+    }
+  },
+
+  updateChannel: (updatedChannel: Channel) => {
+    const currentChannels = get().channels
+    const updatedChannels = currentChannels.map((c) =>
+      c.id === updatedChannel.id ? updatedChannel : c
+    )
+    set({ channels: updatedChannels })
+
+    // If the updated channel is the current channel, update it too
+    const currentChannel = get().currentChannel
+    if (currentChannel?.id === updatedChannel.id) {
+      set({ currentChannel: updatedChannel })
+    }
+  },
+
+  removeChannel: (channelId: number) => {
+    const currentChannels = get().channels
+    const filteredChannels = currentChannels.filter((c) => c.id !== channelId)
+    set({ channels: filteredChannels })
+
+    // If the removed channel is the current channel, clear it
+    const currentChannel = get().currentChannel
+    if (currentChannel?.id === channelId) {
+      set({ currentChannel: null })
     }
   },
 

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { apiService, type Friend, type FriendRequest } from '../services/api'
+import { wsService } from '../services/websocket'
 
 interface FriendsState {
   friends: Friend[]
@@ -83,6 +84,15 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
         sentRequests: [...state.sentRequests, request],
         isLoading: false,
       }))
+
+      // Notify receiver via WebSocket
+      const socket = wsService.getSocket()
+      if (socket && request.sender) {
+        socket.emit('friend-request-sent', {
+          receiverId: receiverId,
+          senderUsername: request.sender.username,
+        })
+      }
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Failed to send friend request'
       set({ isLoading: false, error: errorMessage })
@@ -93,6 +103,9 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
   respondToRequest: async (requestId: number, status: 'accepted' | 'rejected') => {
     set({ isLoading: true, error: null })
     try {
+      // Find the request before removing it
+      const request = get().receivedRequests.find((r) => r.id === requestId)
+
       await apiService.respondToFriendRequest(requestId, status)
       set((state) => ({
         receivedRequests: state.receivedRequests.filter((r) => r.id !== requestId),
@@ -100,12 +113,21 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
       }))
 
       if (status === 'accepted') {
-        const request = get().receivedRequests.find((r) => r.id === requestId)
         if (request?.sender) {
           set((state) => ({
             friends: [...state.friends, request.sender!],
           }))
         }
+      }
+
+      // Notify sender via WebSocket
+      const socket = wsService.getSocket()
+      if (socket && request?.sender) {
+        socket.emit('friend-request-response', {
+          requestId: requestId,
+          senderId: request.sender.id,
+          status: status,
+        })
       }
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Failed to respond to friend request'

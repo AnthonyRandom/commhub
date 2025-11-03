@@ -2,6 +2,7 @@ import { wsService } from './websocket'
 import { apiService } from './api'
 import { useMessagesStore } from '../stores/messages'
 import { useServersStore } from '../stores/servers'
+import { useDirectMessagesStore } from '../stores/directMessages'
 
 class WebSocketManager {
   private isInitialized = false
@@ -16,6 +17,9 @@ class WebSocketManager {
     // Initialize WebSocket listeners
     useMessagesStore.getState().initializeWebSocketListeners()
     this.initializeServerListeners()
+    this.initializeChannelListeners()
+    this.initializeDirectMessageListeners()
+    this.initializeFriendRequestListeners()
 
     // Set up auth-based connection management
     this.checkAndConnect()
@@ -33,6 +37,64 @@ class WebSocketManager {
     // Listen for users leaving servers
     wsService.onUserLeft((data) => {
       useServersStore.getState().removeMemberFromServer(data.serverId, data.userId)
+    })
+  }
+
+  private initializeChannelListeners() {
+    // Listen for new channels being created
+    wsService.getSocket()?.on('channel-created', (data) => {
+      console.log('[WebSocket] Channel created:', data)
+      const { useChannelsStore } = require('../stores/channels')
+      useChannelsStore.getState().addChannel(data.channel)
+    })
+
+    // Listen for channels being updated
+    wsService.getSocket()?.on('channel-updated', (data) => {
+      console.log('[WebSocket] Channel updated:', data)
+      const { useChannelsStore } = require('../stores/channels')
+      useChannelsStore.getState().updateChannel(data.channel)
+    })
+
+    // Listen for channels being deleted
+    wsService.getSocket()?.on('channel-deleted', (data) => {
+      console.log('[WebSocket] Channel deleted:', data)
+      const { useChannelsStore } = require('../stores/channels')
+      useChannelsStore.getState().removeChannel(data.channelId)
+    })
+  }
+
+  private initializeDirectMessageListeners() {
+    // Listen for incoming direct messages
+    wsService.getSocket()?.on('direct-message', (data) => {
+      console.log('[WebSocket] Received direct message:', data)
+      useDirectMessagesStore.getState().addMessage(data)
+      // Refresh conversations to update last message and unread count
+      useDirectMessagesStore.getState().fetchConversations()
+    })
+  }
+
+  private initializeFriendRequestListeners() {
+    // Listen for incoming friend requests
+    wsService.getSocket()?.on('friend-request-received', (data) => {
+      console.log('[WebSocket] Friend request received:', data)
+      // Refresh received requests
+      const { useFriendsStore } = require('../stores/friends')
+      useFriendsStore.getState().fetchReceivedRequests()
+    })
+
+    // Listen for friend request responses
+    wsService.getSocket()?.on('friend-request-responded', (data) => {
+      console.log('[WebSocket] Friend request responded:', data)
+      // Refresh friend requests and friends list
+      const { useFriendsStore } = require('../stores/friends')
+      const { useAuthStore } = require('../stores/auth')
+      const user = useAuthStore.getState().user
+
+      if (user) {
+        useFriendsStore.getState().fetchSentRequests()
+        useFriendsStore.getState().fetchReceivedRequests()
+        useFriendsStore.getState().fetchFriends(user.id)
+      }
     })
   }
 

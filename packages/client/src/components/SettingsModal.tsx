@@ -235,6 +235,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     setUpdateStatus({ type: 'checking', message: 'Checking for updates...' })
 
     try {
+      // Check if running in Tauri environment
+      if (!(window as any).__TAURI__) {
+        console.log('Not running in Tauri - updates not available')
+        setUpdateStatus({
+          type: 'error',
+          message:
+            'Updates are only available in the desktop app. You are running the web version.',
+        })
+        setIsCheckingUpdate(false)
+        return
+      }
+
       console.log('Checking for updates...')
       const { shouldUpdate, manifest } = await checkUpdate()
       console.log('Update check result:', { shouldUpdate, manifest })
@@ -287,6 +299,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     }
 
     try {
+      // Check if running in Tauri environment
+      if (!(window as any).__TAURI__) {
+        // For web version, just open the releases page in a new tab
+        const downloadUrl = `https://github.com/AnthonyRandom/commhub/releases/tag/v${updateManifest.version}`
+        window.open(downloadUrl, '_blank')
+        setUpdateStatus({
+          type: 'downloading',
+          message: 'Download page opened in a new tab.',
+        })
+        return
+      }
+
       // Open the GitHub releases page for this version
       const downloadUrl = `https://github.com/AnthonyRandom/commhub/releases/tag/v${updateManifest.version}`
       console.log('Opening download page:', downloadUrl)
@@ -568,7 +592,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-grey-400 text-sm">Version</span>
-                  <span className="text-white text-sm font-mono">1.0.9</span>
+                  <span className="text-white text-sm font-mono">1.1.0</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-grey-400 text-sm">Product</span>

@@ -124,12 +124,14 @@ export class FriendRequestsService {
     return this.prisma.friendRequest.findMany({
       where: {
         senderId: userId,
+        status: 'pending',
       },
       include: {
         receiver: {
           select: {
             id: true,
             username: true,
+            email: true,
           },
         },
       },
@@ -150,6 +152,7 @@ export class FriendRequestsService {
           select: {
             id: true,
             username: true,
+            email: true,
           },
         },
       },

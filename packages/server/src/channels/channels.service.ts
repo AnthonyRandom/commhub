@@ -2,14 +2,21 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateChannelDto } from './dto/create-channel.dto';
 import { UpdateChannelDto } from './dto/update-channel.dto';
+import { ChatGateway } from '../gateway/chat.gateway';
 
 @Injectable()
 export class ChannelsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(forwardRef(() => ChatGateway))
+    private chatGateway: ChatGateway
+  ) {}
 
   async create(createChannelDto: CreateChannelDto, userId: number) {
     const { serverId, ...channelData } = createChannelDto;
@@ -39,7 +46,7 @@ export class ChannelsService {
       throw new ForbiddenException('Only server owner can create channels');
     }
 
-    return this.prisma.channel.create({
+    const newChannel = await this.prisma.channel.create({
       data: {
         ...channelData,
         serverId,
@@ -58,6 +65,11 @@ export class ChannelsService {
         },
       },
     });
+
+    // Notify all members of the server about the new channel
+    this.chatGateway.notifyChannelCreated(serverId, newChannel);
+
+    return newChannel;
   }
 
   async findAll(serverId?: number, userId?: number) {
@@ -160,6 +172,7 @@ export class ChannelsService {
       where: { id },
       select: {
         id: true,
+        serverId: true,
         server: {
           select: {
             ownerId: true,
@@ -185,7 +198,7 @@ export class ChannelsService {
       throw new ForbiddenException('Only server owner can update channels');
     }
 
-    return this.prisma.channel.update({
+    const updatedChannel = await this.prisma.channel.update({
       where: { id },
       data: updateChannelDto,
       include: {
@@ -202,6 +215,11 @@ export class ChannelsService {
         },
       },
     });
+
+    // Notify all members of the server about the channel update
+    this.chatGateway.notifyChannelUpdated(channel.serverId, updatedChannel);
+
+    return updatedChannel;
   }
 
   async remove(id: number, userId: number) {
@@ -210,6 +228,7 @@ export class ChannelsService {
       where: { id },
       select: {
         id: true,
+        serverId: true,
         server: {
           select: {
             ownerId: true,
@@ -238,6 +257,9 @@ export class ChannelsService {
     await this.prisma.channel.delete({
       where: { id },
     });
+
+    // Notify all members of the server about the channel deletion
+    this.chatGateway.notifyChannelDeleted(channel.serverId, id);
 
     return { message: 'Channel deleted successfully' };
   }

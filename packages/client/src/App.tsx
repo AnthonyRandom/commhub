@@ -60,8 +60,8 @@ function App() {
 
   const handleServerSelect = (server: Server | null) => {
     setSelectedServer(server)
-    setSelectedChannel(null) // Clear channel selection when switching servers
-    setShowFriendsPanel(false) // Close friends panel when selecting server
+    setSelectedChannel(null)
+    setShowFriendsPanel(false)
   }
 
   const handleShowFriends = () => {

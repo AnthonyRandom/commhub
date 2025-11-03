@@ -59,11 +59,35 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.userId = payload.sub;
       client.username = payload.username;
 
+      // Check client version compatibility
+      const clientVersion = client.handshake.query.clientVersion as string;
+      const minClientVersion = process.env.MIN_CLIENT_VERSION || '1.0.0';
+
+      if (clientVersion) {
+        if (!this.isVersionCompatible(clientVersion, minClientVersion)) {
+          this.logger.warn(
+            `Client ${client.username} has incompatible version: ${clientVersion} (min required: ${minClientVersion})`
+          );
+          client.emit('version-mismatch', {
+            currentVersion: clientVersion,
+            requiredVersion: minClientVersion,
+            message:
+              'Your app version is outdated. Please refresh the page or update your app.',
+          });
+          client.disconnect();
+          return;
+        }
+      } else {
+        this.logger.warn(
+          `Client ${client.username} connected without version information`
+        );
+      }
+
       // Track user as online
       this.onlineUsers.set(client.userId, client.id);
 
       this.logger.log(
-        `Client connected: ${client.username} (${client.userId})`
+        `Client connected: ${client.username} (${client.userId})${clientVersion ? ` [v${clientVersion}]` : ''}`
       );
 
       // Notify friends that user came online
@@ -490,6 +514,89 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
     } catch (error) {
       this.logger.error('Error notifying friends presence:', error.message);
+    }
+  }
+
+  public notifyChannelCreated(serverId: number, channel: any) {
+    try {
+      const serverRoom = `server-${serverId}`;
+      this.server.to(serverRoom).emit('channel-created', {
+        serverId,
+        channel: {
+          id: channel.id,
+          name: channel.name,
+          type: channel.type,
+          serverId: channel.serverId,
+        },
+      });
+      this.logger.log(
+        `[Channel] Notified server ${serverId} about new channel: ${channel.name} (${channel.type})`
+      );
+    } catch (error) {
+      this.logger.error('Error notifying channel creation:', error.message);
+    }
+  }
+
+  public notifyChannelUpdated(serverId: number, channel: any) {
+    try {
+      const serverRoom = `server-${serverId}`;
+      this.server.to(serverRoom).emit('channel-updated', {
+        serverId,
+        channel: {
+          id: channel.id,
+          name: channel.name,
+          type: channel.type,
+          serverId: channel.serverId,
+        },
+      });
+      this.logger.log(
+        `[Channel] Notified server ${serverId} about updated channel: ${channel.name} (${channel.type})`
+      );
+    } catch (error) {
+      this.logger.error('Error notifying channel update:', error.message);
+    }
+  }
+
+  public notifyChannelDeleted(serverId: number, channelId: number) {
+    try {
+      const serverRoom = `server-${serverId}`;
+      this.server.to(serverRoom).emit('channel-deleted', {
+        serverId,
+        channelId,
+      });
+      this.logger.log(
+        `[Channel] Notified server ${serverId} about deleted channel: ${channelId}`
+      );
+    } catch (error) {
+      this.logger.error('Error notifying channel deletion:', error.message);
+    }
+  }
+
+  private isVersionCompatible(
+    clientVersion: string,
+    minVersion: string
+  ): boolean {
+    try {
+      const parseVersion = (v: string) => {
+        const parts = v.split('.').map(p => parseInt(p, 10));
+        return {
+          major: parts[0] || 0,
+          minor: parts[1] || 0,
+          patch: parts[2] || 0,
+        };
+      };
+
+      const client = parseVersion(clientVersion);
+      const min = parseVersion(minVersion);
+
+      if (client.major > min.major) return true;
+      if (client.major < min.major) return false;
+      if (client.minor > min.minor) return true;
+      if (client.minor < min.minor) return false;
+      return client.patch >= min.patch;
+    } catch (error) {
+      this.logger.error('Error comparing versions:', error.message);
+      return true; // Allow connection on version comparison error
     }
   }
 

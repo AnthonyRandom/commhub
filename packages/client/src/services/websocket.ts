@@ -3,6 +3,9 @@ import { io, Socket } from 'socket.io-client'
 // WebSocket URL - adjust for production
 const WS_BASE_URL = 'https://commhub-production.up.railway.app/chat'
 
+// Client version - should match package.json version
+const CLIENT_VERSION = '1.1.0'
+
 export interface WSMessage {
   id: number
   content: string
@@ -52,6 +55,9 @@ class WebSocketService {
       auth: {
         token,
       },
+      query: {
+        clientVersion: CLIENT_VERSION,
+      },
       transports: ['websocket', 'polling'],
     })
 
@@ -73,6 +79,19 @@ class WebSocketService {
       console.error('WebSocket connection error:', error)
       this.attemptReconnect(token)
     })
+
+    // Handle version mismatch
+    this.socket.on(
+      'version-mismatch',
+      (data: { currentVersion: string; requiredVersion: string; message: string }) => {
+        console.error('Version mismatch:', data)
+        alert(
+          `⚠️ App Update Required\n\n${data.message}\n\nYour version: ${data.currentVersion}\nRequired version: ${data.requiredVersion}\n\nPlease refresh the page (Ctrl+R or Cmd+R) or restart the app.`
+        )
+        // Prevent reconnection attempts
+        this.maxReconnectAttempts = 0
+      }
+    )
 
     // Set up message listeners
     this.socket.on('message', (message: WSMessage) => {

@@ -74,7 +74,9 @@ const VoiceChannelParticipants: React.FC = () => {
     )
   }
 
-  const connectedUsersArray = Array.from(connectedUsers.values())
+  const connectedUsersArray = Array.from(connectedUsers.values()).filter(
+    (voiceUser) => voiceUser.userId !== user?.id
+  )
   const currentUserVoiceState = user ? connectedUsers.get(user.id) : null
   const currentUser = {
     userId: user?.id || 0,

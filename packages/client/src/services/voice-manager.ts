@@ -81,6 +81,21 @@ class VoiceManager {
       webrtcService.setCurrentChannelId(channelId)
       useVoiceStore.getState().setConnectedChannel(channelId)
 
+      // Add local user to voice store so their speaking status can be tracked
+      const localUser = useAuthStore.getState().user
+      if (localUser) {
+        useVoiceStore.getState().addConnectedUser({
+          userId: localUser.id,
+          username: localUser.username,
+          isSpeaking: false,
+          isMuted: useVoiceStore.getState().isMuted,
+          connectionStatus: 'connected',
+          connectionQuality: 'excellent',
+          localMuted: false,
+          localVolume: 1.0,
+        })
+      }
+
       // Join the voice channel via WebSocket
       wsService.getSocket()?.emit('join-voice-channel', { channelId })
 

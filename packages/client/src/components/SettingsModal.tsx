@@ -1,23 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import {
-  X,
-  Download,
-  CheckCircle,
-  AlertCircle,
-  Bell,
-  Volume2,
-  Type,
-  Clock,
-  ExternalLink,
-  Mic,
-  Zap,
-  Shield,
-  Gauge,
-  Wifi,
-} from 'lucide-react'
-import { checkUpdate } from '@tauri-apps/api/updater'
-import { open } from '@tauri-apps/api/shell'
-import type { UpdateManifest } from '@tauri-apps/api/updater'
+import { X, Bell, Volume2, Type, Clock, Mic, Zap, Shield, Gauge, Wifi } from 'lucide-react'
 import { useVoiceSettingsStore } from '../stores/voice-settings'
 import { voiceManager } from '../services/voice-manager'
 import { useVoiceStore } from '../stores/voice'
@@ -36,15 +18,6 @@ interface AudioDevice {
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
-  const [updateStatus, setUpdateStatus] = useState<{
-    type: 'idle' | 'checking' | 'available' | 'current' | 'error' | 'downloading' | 'installing'
-    message: string
-    version?: string
-    progress?: number
-  }>({ type: 'idle', message: '' })
-  const [updateManifest, setUpdateManifest] = useState<UpdateManifest | null>(null)
-
   // Audio devices state
   const [audioInputDevices, setAudioInputDevices] = useState<AudioDevice[]>([])
   const [audioOutputDevices, setAudioOutputDevices] = useState<AudioDevice[]>([])
@@ -326,105 +299,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const cancelRecordingPTT = () => {
     setIsRecordingPTT(false)
     setPttKeyDisplay(voiceSettings.detection.pttKey ? 'Set' : 'Not set')
-  }
-
-  const handleCheckUpdate = async () => {
-    setIsCheckingUpdate(true)
-    setUpdateStatus({ type: 'checking', message: 'Checking for updates...' })
-
-    try {
-      // Check if running in Tauri environment
-      if (!(window as any).__TAURI__) {
-        console.log('Not running in Tauri - updates not available')
-        setUpdateStatus({
-          type: 'error',
-          message:
-            'Updates are only available in the desktop app. You are running the web version.',
-        })
-        setIsCheckingUpdate(false)
-        return
-      }
-
-      console.log('Checking for updates...')
-      const { shouldUpdate, manifest } = await checkUpdate()
-      console.log('Update check result:', { shouldUpdate, manifest })
-
-      if (shouldUpdate && manifest) {
-        setUpdateManifest(manifest)
-        setUpdateStatus({
-          type: 'available',
-          message: `Update available: v${manifest.version}`,
-          version: manifest.version,
-        })
-        console.log('Update available:', manifest.version)
-      } else {
-        setUpdateStatus({
-          type: 'current',
-          message: 'You are on the latest version',
-        })
-        console.log('Already on latest version')
-      }
-    } catch (error: any) {
-      console.error('Update check error:', error)
-
-      let errorMessage = 'Failed to check for updates'
-
-      // Provide more helpful error messages
-      if (error.message) {
-        errorMessage = error.message
-      }
-
-      // Check if it's a network/GitHub issue
-      if (error.toString().includes('404') || error.toString().includes('Not Found')) {
-        errorMessage = 'No releases found. Please create a GitHub release first.'
-      } else if (error.toString().includes('Network') || error.toString().includes('fetch')) {
-        errorMessage = 'Network error. Check your internet connection.'
-      }
-
-      setUpdateStatus({
-        type: 'error',
-        message: errorMessage,
-      })
-    } finally {
-      setIsCheckingUpdate(false)
-    }
-  }
-
-  const handleDownloadUpdate = async () => {
-    if (!updateManifest) {
-      console.error('No update manifest available')
-      return
-    }
-
-    try {
-      // Check if running in Tauri environment
-      if (!(window as any).__TAURI__) {
-        // For web version, just open the releases page in a new tab
-        const downloadUrl = `https://github.com/AnthonyRandom/commhub/releases/tag/v${updateManifest.version}`
-        window.open(downloadUrl, '_blank')
-        setUpdateStatus({
-          type: 'downloading',
-          message: 'Download page opened in a new tab.',
-        })
-        return
-      }
-
-      // Open the GitHub releases page for this version
-      const downloadUrl = `https://github.com/AnthonyRandom/commhub/releases/tag/v${updateManifest.version}`
-      console.log('Opening download page:', downloadUrl)
-      await open(downloadUrl)
-
-      setUpdateStatus({
-        type: 'downloading',
-        message: 'Download page opened. Get the installer, close CommHub, then run it.',
-      })
-    } catch (error: any) {
-      console.error('Failed to open download page:', error)
-      setUpdateStatus({
-        type: 'error',
-        message: 'Failed to open download page. Visit: github.com/AnthonyRandom/commhub/releases',
-      })
-    }
   }
 
   if (!isOpen) return null
@@ -969,7 +843,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 {voiceStore.qualityWarnings.length > 0 && (
                   <div className="bg-yellow-900/20 border-2 border-yellow-700 p-3">
                     <div className="flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
+                      <Wifi className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
                       <div>
                         <p className="text-yellow-300 text-xs font-medium">Connection Issues:</p>
                         {voiceStore.qualityWarnings.map((warning, index) => (
@@ -994,7 +868,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-grey-400 text-sm">Version</span>
-                  <span className="text-white text-sm font-mono">1.1.3</span>
+                  <span className="text-white text-sm font-mono">1.1.4</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-grey-400 text-sm">Product</span>
@@ -1005,95 +879,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           </div>
 
           {/* Updates Section */}
-          <div>
-            <h4 className="text-xs font-bold text-grey-400 uppercase tracking-wider mb-3">
-              Updates
-            </h4>
-            <div className="bg-grey-850 border-2 border-grey-700 p-4 space-y-4">
-              <p className="text-grey-300 text-sm">
-                Keep CommHub up to date with the latest features and bug fixes.
-              </p>
-
-              {/* Update Status */}
-              {updateStatus.type !== 'idle' && updateStatus.type !== 'available' && (
-                <div
-                  className={`p-4 border-2 ${
-                    updateStatus.type === 'error'
-                      ? 'bg-red-900/20 border-red-500'
-                      : updateStatus.type === 'current'
-                        ? 'bg-green-900/20 border-green-500'
-                        : 'bg-grey-800 border-grey-600'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    {updateStatus.type === 'error' && (
-                      <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-                    )}
-                    {updateStatus.type === 'current' && (
-                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                    )}
-                    {(updateStatus.type === 'checking' || updateStatus.type === 'downloading') && (
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent animate-spin flex-shrink-0 mt-0.5"></div>
-                    )}
-                    <div className="flex-1">
-                      <p
-                        className={`text-sm font-medium ${
-                          updateStatus.type === 'error'
-                            ? 'text-red-300'
-                            : updateStatus.type === 'current'
-                              ? 'text-green-300'
-                              : 'text-grey-300'
-                        }`}
-                      >
-                        {updateStatus.message}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Update Available Section */}
-              {updateStatus.type === 'available' && (
-                <div className="bg-grey-800 border-2 border-grey-700 p-4 space-y-4">
-                  <div className="flex items-start gap-3">
-                    <Download className="w-5 h-5 text-white flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <h5 className="text-white font-bold text-sm mb-1 uppercase tracking-wider">
-                        Update Available
-                      </h5>
-                      <p className="text-grey-300 text-xs">
-                        Version {updateStatus.version} is ready to download
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={handleDownloadUpdate}
-                    className="w-full bg-white text-black border-2 border-white hover:bg-grey-100 font-bold py-3 px-4 transition-colors uppercase tracking-wide flex items-center justify-center gap-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    Download Update
-                    <ExternalLink className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-
-              {/* Update Buttons */}
-              <div className="flex gap-3">
-                <button
-                  onClick={handleCheckUpdate}
-                  disabled={
-                    isCheckingUpdate ||
-                    updateStatus.type === 'downloading' ||
-                    updateStatus.type === 'checking'
-                  }
-                  className="flex-1 bg-white text-black border-2 border-white hover:bg-grey-100 disabled:bg-grey-700 disabled:text-grey-500 disabled:border-grey-700 font-bold py-3 px-4 transition-colors uppercase tracking-wide disabled:cursor-not-allowed"
-                >
-                  {isCheckingUpdate ? 'Checking...' : 'Check for Updates'}
-                </button>
-              </div>
-            </div>
-          </div>
 
           {/* About Section */}
           <div>

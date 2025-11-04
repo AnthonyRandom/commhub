@@ -92,11 +92,12 @@ const ChannelList: React.FC<ChannelListProps> = ({
       const { channelId, members } = event.detail
       setVoiceChannelMembers((prev) => {
         const newMap = new Map(prev)
-        // Only update if we have actual members to prevent flickering from empty responses
         if (members.length > 0) {
           newMap.set(channelId, members)
+        } else {
+          // Remove empty channels from the display
+          newMap.delete(channelId)
         }
-        // Never remove channels based on polling to prevent flickering
         return newMap
       })
     }

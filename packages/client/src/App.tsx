@@ -7,10 +7,10 @@ import ChannelModal from './components/ChannelModal'
 import SettingsModal from './components/SettingsModal'
 import ServerSettingsModal from './components/ServerSettingsModal'
 import FriendsPanel from './components/FriendsPanel'
+import UpdateNotification from './components/UpdateNotification'
 import { useAuthStore } from './stores/auth'
 import { useServersStore } from './stores/servers'
 import { useDirectMessagesStore } from './stores/directMessages'
-import { useVoiceStore } from './stores/voice'
 import { wsManager } from './services/websocket-manager'
 import type { Server, Channel } from './services/api'
 import './app.css'
@@ -24,11 +24,11 @@ function App() {
   const [showServerSettings, setShowServerSettings] = useState(false)
   const [showAppSettings, setShowAppSettings] = useState(false)
   const [showFriendsPanel, setShowFriendsPanel] = useState(false)
+  const [showUpdateNotification, setShowUpdateNotification] = useState(false)
 
   const { isAuthenticated, isLoading } = useAuthStore()
   const selectServer = useServersStore((state) => state.selectServer)
   const { conversations, fetchConversations, deleteConversation } = useDirectMessagesStore()
-  const { connectedChannelId } = useVoiceStore()
 
   // Initialize WebSocket manager and check auth on mount
   useEffect(() => {
@@ -39,6 +39,15 @@ function App() {
 
         // Check authentication status
         await useAuthStore.getState().checkAuth()
+
+        // Check for updates (only in Tauri environment and only once per session)
+        if (window.__TAURI__ && !sessionStorage.getItem('updateChecked')) {
+          // Delay update check to avoid interfering with initial app load
+          setTimeout(() => {
+            setShowUpdateNotification(true)
+            sessionStorage.setItem('updateChecked', 'true')
+          }, 2000)
+        }
       } catch (error) {
         console.error('App initialization error:', error)
       }
@@ -117,6 +126,10 @@ function App() {
     setShowAppSettings(true)
   }
 
+  const handleDismissUpdateNotification = () => {
+    setShowUpdateNotification(false)
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-grey-950">
@@ -159,16 +172,6 @@ function App() {
           )}
         </main>
 
-        {/* Persistent Voice Indicator */}
-        {connectedChannelId && (
-          <div className="fixed bottom-4 left-4 z-50">
-            <div className="bg-grey-900 border-2 border-grey-700 px-3 py-2 flex items-center gap-2 animate-fade-in">
-              <div className="w-2 h-2 bg-green-500 animate-pulse"></div>
-              <span className="text-white text-sm font-medium">Connected to Voice</span>
-            </div>
-          </div>
-        )}
-
         {/* Modals */}
         <ServerModal isOpen={showServerModal} onClose={() => setShowServerModal(false)} />
         <ChannelModal
@@ -184,6 +187,11 @@ function App() {
           onClose={() => setShowServerSettings(false)}
           server={selectedServer}
         />
+
+        {/* Update Notification */}
+        {showUpdateNotification && (
+          <UpdateNotification onDismiss={handleDismissUpdateNotification} />
+        )}
       </>
     )
   }

@@ -9,10 +9,18 @@ import {
   Type,
   Clock,
   ExternalLink,
+  Mic,
+  Zap,
+  Shield,
+  Gauge,
+  Wifi,
 } from 'lucide-react'
 import { checkUpdate } from '@tauri-apps/api/updater'
 import { open } from '@tauri-apps/api/shell'
 import type { UpdateManifest } from '@tauri-apps/api/updater'
+import { useVoiceSettingsStore } from '../stores/voice-settings'
+import { voiceManager } from '../services/voice-manager'
+import { useVoiceStore } from '../stores/voice'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -59,6 +67,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     timestampFormat: '12h',
   })
 
+  // Voice settings state
+  const voiceSettings = useVoiceSettingsStore((state) => state.settings)
+  const voiceStore = useVoiceStore()
+  const [isRecordingPTT, setIsRecordingPTT] = useState(false)
+  const [pttKeyDisplay, setPttKeyDisplay] = useState('')
+
   // Load settings from localStorage on mount
   useEffect(() => {
     const savedSettings = localStorage.getItem('commhub-settings')
@@ -87,6 +101,35 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       console.log('[Settings] Available output devices:', audioOutputDevices)
     }
   }, [isOpen, testStream])
+
+  // Update PTT key display
+  useEffect(() => {
+    const formatKey = (key: string) => {
+      const parts = key.toLowerCase().split('+')
+      return parts
+        .map((part) => {
+          switch (part) {
+            case 'ctrl':
+              return 'Ctrl'
+            case 'alt':
+              return 'Alt'
+            case 'shift':
+              return 'Shift'
+            case 'meta':
+              return 'Cmd'
+            default:
+              return part.charAt(0).toUpperCase() + part.slice(1)
+          }
+        })
+        .join(' + ')
+    }
+
+    if (voiceSettings.detection.pttKey) {
+      setPttKeyDisplay(formatKey(voiceSettings.detection.pttKey))
+    } else {
+      setPttKeyDisplay('Not set')
+    }
+  }, [voiceSettings.detection.pttKey])
 
   // Load available audio devices
   const loadAudioDevices = async () => {
@@ -228,6 +271,46 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     setSettings(newSettings)
     localStorage.setItem('commhub-settings', JSON.stringify(newSettings))
     console.log('[Settings] Settings saved:', newSettings)
+  }
+
+  // Voice settings update functions
+  const updateVoiceSetting = (updates: any) => {
+    console.log('[Settings] Updating voice setting:', updates)
+    voiceManager.updateVoiceSettings(updates)
+  }
+
+  // PTT key recording
+  const startRecordingPTT = () => {
+    setIsRecordingPTT(true)
+    setPttKeyDisplay('Press your desired key combination...')
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      event.preventDefault()
+
+      const modifiers = []
+      if (event.ctrlKey) modifiers.push('ctrl')
+      if (event.altKey) modifiers.push('alt')
+      if (event.shiftKey) modifiers.push('shift')
+      if (event.metaKey) modifiers.push('meta')
+
+      const key = event.key.toLowerCase()
+      const keyCombo = [...modifiers, key].join('+')
+
+      // Update the voice settings
+      updateVoiceSetting({
+        detection: { pttKey: keyCombo },
+      })
+
+      setIsRecordingPTT(false)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+  }
+
+  const cancelRecordingPTT = () => {
+    setIsRecordingPTT(false)
+    setPttKeyDisplay(voiceSettings.detection.pttKey ? 'Set' : 'Not set')
   }
 
   const handleCheckUpdate = async () => {
@@ -579,6 +662,310 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 <p className="text-grey-500 text-xs mt-2 text-center">
                   Click if you connected a new audio device
                 </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Voice Settings Section */}
+          <div>
+            <h4 className="text-xs font-bold text-grey-400 uppercase tracking-wider mb-3">
+              Voice Settings
+            </h4>
+            <div className="bg-grey-850 border-2 border-grey-700 p-4 space-y-4">
+              {/* Detection Mode */}
+              <div>
+                <div className="flex items-center gap-3 mb-3">
+                  <Mic className="w-5 h-5 text-grey-400" />
+                  <div>
+                    <p className="text-white text-sm font-medium">Voice Detection Mode</p>
+                    <p className="text-grey-500 text-xs">
+                      Choose how voice transmission is triggered
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => updateVoiceSetting({ detection: { mode: 'voice_activity' } })}
+                    className={`flex-1 py-2 border-2 transition-colors uppercase text-xs font-bold tracking-wider ${
+                      voiceSettings.detection.mode === 'voice_activity'
+                        ? 'bg-white text-black border-white'
+                        : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
+                    }`}
+                  >
+                    Voice Activity
+                  </button>
+                  <button
+                    onClick={() => updateVoiceSetting({ detection: { mode: 'push_to_talk' } })}
+                    className={`flex-1 py-2 border-2 transition-colors uppercase text-xs font-bold tracking-wider ${
+                      voiceSettings.detection.mode === 'push_to_talk'
+                        ? 'bg-white text-black border-white'
+                        : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
+                    }`}
+                  >
+                    Push to Talk
+                  </button>
+                </div>
+              </div>
+
+              {/* PTT Key Configuration */}
+              {voiceSettings.detection.mode === 'push_to_talk' && (
+                <div className="pt-4 border-t border-grey-700">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <Zap className="w-5 h-5 text-grey-400" />
+                      <div>
+                        <p className="text-white text-sm font-medium">Push-to-Talk Key</p>
+                        <p className="text-grey-500 text-xs">Key combination to transmit voice</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-white text-sm font-mono">{pttKeyDisplay}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={isRecordingPTT ? cancelRecordingPTT : startRecordingPTT}
+                      className={`flex-1 py-2 border-2 transition-colors uppercase text-xs font-bold tracking-wider ${
+                        isRecordingPTT
+                          ? 'bg-red-900 border-red-700 text-white'
+                          : 'bg-white text-black border-white hover:bg-grey-100'
+                      }`}
+                    >
+                      {isRecordingPTT ? 'Cancel' : 'Set Key'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Sensitivity Slider */}
+              <div className="pt-4 border-t border-grey-700">
+                <div className="flex items-center gap-3 mb-3">
+                  <Gauge className="w-5 h-5 text-grey-400" />
+                  <div className="flex-1">
+                    <p className="text-white text-sm font-medium">Voice Sensitivity</p>
+                    <p className="text-grey-500 text-xs">
+                      How easily voice is detected ({voiceSettings.input.sensitivity}%)
+                    </p>
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={voiceSettings.input.sensitivity}
+                  onChange={(e) =>
+                    updateVoiceSetting({ input: { sensitivity: parseInt(e.target.value) } })
+                  }
+                  className="w-full h-2 bg-grey-700 appearance-none slider"
+                />
+                <div className="flex justify-between text-xs text-grey-500 mt-1">
+                  <span>Less Sensitive</span>
+                  <span>More Sensitive</span>
+                </div>
+              </div>
+
+              {/* Noise Suppression */}
+              <div className="pt-4 border-t border-grey-700">
+                <div className="flex items-center gap-3 mb-3">
+                  <Shield className="w-5 h-5 text-grey-400" />
+                  <div className="flex-1">
+                    <p className="text-white text-sm font-medium">Noise Suppression</p>
+                    <p className="text-grey-500 text-xs">Reduce background noise and echo</p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <select
+                    value={voiceSettings.input.noiseSuppressionMethod}
+                    onChange={(e) =>
+                      updateVoiceSetting({
+                        input: { noiseSuppressionMethod: e.target.value as any },
+                      })
+                    }
+                    className="w-full bg-grey-800 border-2 border-grey-700 px-3 py-2 text-white focus:border-white"
+                  >
+                    <option value="none">None</option>
+                    <option value="webrtc">WebRTC Built-in</option>
+                    <option value="noise-gate">Noise Gate</option>
+                    <option value="rnnoise">RNNoise (Advanced)</option>
+                    <option value="krisp">Krisp (Premium)</option>
+                  </select>
+
+                  {voiceSettings.input.noiseSuppressionMethod !== 'none' && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-grey-400 text-xs">Intensity</span>
+                        <span className="text-white text-xs">
+                          {voiceSettings.input.noiseSuppressionIntensity}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={voiceSettings.input.noiseSuppressionIntensity}
+                        onChange={(e) =>
+                          updateVoiceSetting({
+                            input: { noiseSuppressionIntensity: parseInt(e.target.value) },
+                          })
+                        }
+                        className="w-full h-2 bg-grey-700 appearance-none slider"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Audio Processing Toggles */}
+              <div className="pt-4 border-t border-grey-700 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Volume2 className="w-5 h-5 text-grey-400" />
+                    <div>
+                      <p className="text-white text-sm font-medium">Echo Cancellation</p>
+                      <p className="text-grey-500 text-xs">Remove echo from your microphone</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() =>
+                      updateVoiceSetting({
+                        input: { echoCancellation: !voiceSettings.input.echoCancellation },
+                      })
+                    }
+                    className={`relative w-12 h-6 border-2 transition-colors ${
+                      voiceSettings.input.echoCancellation
+                        ? 'bg-white border-white'
+                        : 'bg-grey-700 border-grey-600'
+                    }`}
+                  >
+                    <div
+                      className={`absolute top-0.5 w-4 h-4 bg-black transition-transform ${
+                        voiceSettings.input.echoCancellation ? 'translate-x-6' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Mic className="w-5 h-5 text-grey-400" />
+                    <div>
+                      <p className="text-white text-sm font-medium">Auto Gain Control</p>
+                      <p className="text-grey-500 text-xs">
+                        Automatically adjust microphone volume
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() =>
+                      updateVoiceSetting({
+                        input: { autoGainControl: !voiceSettings.input.autoGainControl },
+                      })
+                    }
+                    className={`relative w-12 h-6 border-2 transition-colors ${
+                      voiceSettings.input.autoGainControl
+                        ? 'bg-white border-white'
+                        : 'bg-grey-700 border-grey-600'
+                    }`}
+                  >
+                    <div
+                      className={`absolute top-0.5 w-4 h-4 bg-black transition-transform ${
+                        voiceSettings.input.autoGainControl ? 'translate-x-6' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {/* Volume Controls */}
+              <div className="pt-4 border-t border-grey-700 space-y-4">
+                <div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <Volume2 className="w-5 h-5 text-grey-400" />
+                    <div className="flex-1">
+                      <p className="text-white text-sm font-medium">Master Volume</p>
+                      <p className="text-grey-500 text-xs">
+                        Overall volume for all voice channels ({voiceSettings.output.masterVolume}%)
+                      </p>
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={voiceSettings.output.masterVolume}
+                    onChange={(e) =>
+                      updateVoiceSetting({ output: { masterVolume: parseInt(e.target.value) } })
+                    }
+                    className="w-full h-2 bg-grey-700 appearance-none slider"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <Volume2 className="w-5 h-5 text-grey-400" />
+                    <div className="flex-1">
+                      <p className="text-white text-sm font-medium">Voice Attenuation</p>
+                      <p className="text-grey-500 text-xs">
+                        Reduce volume of other users ({voiceSettings.output.attenuation}%)
+                      </p>
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={voiceSettings.output.attenuation}
+                    onChange={(e) =>
+                      updateVoiceSetting({ output: { attenuation: parseInt(e.target.value) } })
+                    }
+                    className="w-full h-2 bg-grey-700 appearance-none slider"
+                  />
+                </div>
+              </div>
+
+              {/* Connection Quality Indicator */}
+              <div className="pt-4 border-t border-grey-700">
+                <div className="flex items-center gap-3 mb-3">
+                  <Wifi className="w-5 h-5 text-grey-400" />
+                  <div className="flex-1">
+                    <p className="text-white text-sm font-medium">Voice Quality</p>
+                    <p className="text-grey-500 text-xs">
+                      {voiceManager.getQualityStatusDescription()}
+                    </p>
+                  </div>
+                  <div
+                    className={`px-2 py-1 border-2 text-xs font-bold uppercase tracking-wider ${
+                      voiceStore.overallQuality === 'excellent'
+                        ? 'bg-green-900 border-green-700 text-green-300'
+                        : voiceStore.overallQuality === 'good'
+                          ? 'bg-blue-900 border-blue-700 text-blue-300'
+                          : voiceStore.overallQuality === 'poor'
+                            ? 'bg-yellow-900 border-yellow-700 text-yellow-300'
+                            : voiceStore.overallQuality === 'critical'
+                              ? 'bg-red-900 border-red-700 text-red-300'
+                              : 'bg-grey-700 border-grey-600 text-grey-400'
+                    }`}
+                  >
+                    {voiceStore.overallQuality || 'Unknown'}
+                  </div>
+                </div>
+
+                {/* Quality Warnings */}
+                {voiceStore.qualityWarnings.length > 0 && (
+                  <div className="bg-yellow-900/20 border-2 border-yellow-700 p-3">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-yellow-300 text-xs font-medium">Connection Issues:</p>
+                        {voiceStore.qualityWarnings.map((warning, index) => (
+                          <p key={index} className="text-yellow-200 text-xs mt-1">
+                            {warning}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -49,6 +49,9 @@ class VoiceManager {
 
     // Listen for speaking status updates
     socket.on('voice-user-speaking', this.handleVoiceUserSpeaking.bind(this))
+
+    // Listen for reconnection requests
+    socket.on('voice-reconnect-request', this.handleVoiceReconnectRequest.bind(this))
   }
 
   /**
@@ -141,6 +144,7 @@ class VoiceManager {
       isSpeaking: false,
       isMuted: false,
       connectionStatus: 'connecting',
+      connectionQuality: 'connecting',
       localMuted: false,
       localVolume: 1.0,
     })
@@ -240,12 +244,14 @@ class VoiceManager {
         isSpeaking: false,
         isMuted: false,
         connectionStatus: 'connecting',
+        connectionQuality: 'connecting',
         localMuted: false,
         localVolume: 1.0,
       })
     } else {
       // Update status to connecting
       voiceStore.updateUserConnectionStatus(userId, 'connecting')
+      voiceStore.updateUserConnectionQuality(userId, 'connecting')
     }
 
     // Create peer connection
@@ -343,6 +349,199 @@ class VoiceManager {
   }
 
   /**
+   * Update voice settings and apply them to the current session
+   */
+  updateVoiceSettings(settings: any) {
+    const { useVoiceSettingsStore } = require('../stores/voice-settings')
+    const voiceSettingsStore = useVoiceSettingsStore.getState()
+
+    // Update detection settings if they changed
+    if (settings.detection) {
+      voiceSettingsStore.updateDetectionSettings(settings.detection)
+
+      // Update speaking detector configuration
+      const speakingConfig: any = {}
+      if (settings.detection.mode !== undefined) speakingConfig.mode = settings.detection.mode
+      if (settings.detection.pttKey !== undefined) speakingConfig.pttKey = settings.detection.pttKey
+      if (settings.detection.holdTime !== undefined)
+        speakingConfig.holdTime = settings.detection.holdTime
+      if (settings.detection.cooldownTime !== undefined)
+        speakingConfig.cooldownTime = settings.detection.cooldownTime
+
+      webrtcService.updateSpeakingConfig(speakingConfig)
+    }
+
+    // Update input settings if they changed
+    if (settings.input) {
+      voiceSettingsStore.updateInputSettings(settings.input)
+
+      // If device changed, we might need to reinitialize stream
+      if (settings.input.deviceId !== undefined) {
+        console.log(
+          '[VoiceManager] Audio input device changed, may require stream reinitialization'
+        )
+      }
+    }
+
+    // Update output settings
+    if (settings.output) {
+      voiceSettingsStore.updateOutputSettings(settings.output)
+
+      // Apply master volume to all current peers
+      if (settings.output.masterVolume !== undefined) {
+        this.applyMasterVolume(settings.output.masterVolume)
+      }
+
+      // Apply attenuation to all current peers
+      if (settings.output.attenuation !== undefined) {
+        this.applyAttenuation(settings.output.attenuation)
+      }
+    }
+  }
+
+  /**
+   * Apply master volume to all connected users
+   */
+  private applyMasterVolume(masterVolume: number) {
+    webrtcService.applyMasterVolumeToAll(masterVolume)
+  }
+
+  /**
+   * Apply attenuation to all connected users
+   */
+  private applyAttenuation(attenuation: number) {
+    webrtcService.applyAttenuationToAll(attenuation)
+  }
+
+  /**
+   * Toggle between voice activity and push-to-talk modes
+   */
+  toggleDetectionMode() {
+    const { useVoiceSettingsStore } = require('../stores/voice-settings')
+    const currentMode = useVoiceSettingsStore.getState().settings.detection.mode
+    const newMode = currentMode === 'voice_activity' ? 'push_to_talk' : 'voice_activity'
+
+    this.updateVoiceSettings({
+      detection: { mode: newMode },
+    })
+
+    console.log(`[VoiceManager] Switched to ${newMode} mode`)
+    return newMode
+  }
+
+  /**
+   * Set attenuation level (reduces volume of all other users)
+   */
+  setAttenuation(attenuation: number) {
+    this.updateVoiceSettings({
+      output: { attenuation: Math.max(0, Math.min(100, attenuation)) },
+    })
+  }
+
+  /**
+   * Set master volume level
+   */
+  setMasterVolume(volume: number) {
+    this.updateVoiceSettings({
+      output: { masterVolume: Math.max(0, Math.min(100, volume)) },
+    })
+  }
+
+  /**
+   * Get connection quality information for all users
+   */
+  getConnectionQualities(): Map<number, string> {
+    const qualities = new Map<number, string>()
+
+    // Return connection quality from voice store
+    const voiceStore = useVoiceStore.getState()
+    voiceStore.connectedUsers.forEach((user, userId) => {
+      qualities.set(userId, user.connectionQuality)
+    })
+
+    return qualities
+  }
+
+  /**
+   * Get overall voice quality
+   */
+  getOverallQuality(): string {
+    return useVoiceStore.getState().overallQuality
+  }
+
+  /**
+   * Get current quality warnings
+   */
+  getQualityWarnings(): string[] {
+    return useVoiceStore.getState().qualityWarnings
+  }
+
+  /**
+   * Check if voice quality is degraded
+   */
+  isQualityDegraded(): boolean {
+    const quality = this.getOverallQuality()
+    return quality === 'poor' || quality === 'critical'
+  }
+
+  /**
+   * Get quality status description
+   */
+  getQualityStatusDescription(): string {
+    const quality = this.getOverallQuality()
+    const warnings = this.getQualityWarnings()
+
+    switch (quality) {
+      case 'excellent':
+        return 'Voice quality is excellent'
+      case 'good':
+        return 'Voice quality is good'
+      case 'poor':
+        return `Voice quality is poor. ${warnings.length > 0 ? warnings[0] : ''}`
+      case 'critical':
+        return `Voice quality is critical. ${warnings.length > 0 ? warnings[0] : ''}`
+      default:
+        return 'Voice quality unknown'
+    }
+  }
+
+  /**
+   * Get audio device information
+   */
+  async getAudioDevices() {
+    const { useVoiceSettingsStore } = require('../stores/voice-settings')
+    const voiceSettingsStore = useVoiceSettingsStore.getState()
+    await voiceSettingsStore.loadDevices()
+    return voiceSettingsStore.availableDevices
+  }
+
+  /**
+   * Change audio input device
+   */
+  async changeInputDevice(deviceId: string) {
+    const { useVoiceSettingsStore } = require('../stores/voice-settings')
+    useVoiceSettingsStore.getState().updateInputSettings({ deviceId })
+
+    // Note: This would require reinitializing the audio stream
+    // The UI should prompt the user to rejoin voice channels
+    console.log(
+      `[VoiceManager] Input device changed to ${deviceId}, stream reinitialization may be needed`
+    )
+  }
+
+  /**
+   * Change audio output device
+   */
+  async changeOutputDevice(deviceId: string) {
+    const { useVoiceSettingsStore } = require('../stores/voice-settings')
+    useVoiceSettingsStore.getState().updateOutputSettings({ deviceId })
+
+    // HTML5 doesn't support changing output device programmatically
+    // This would need to be handled by the operating system
+    console.log(`[VoiceManager] Output device preference set to ${deviceId}`)
+  }
+
+  /**
    * Get connection status
    */
   isConnected(): boolean {
@@ -387,6 +586,19 @@ class VoiceManager {
       `[VoiceManager] 🎤 ${data.username} is ${data.isSpeaking ? 'speaking' : 'not speaking'}`
     )
     useVoiceStore.getState().updateUserSpeaking(data.userId, data.isSpeaking)
+  }
+
+  /**
+   * Handle reconnection request from another user
+   */
+  private handleVoiceReconnectRequest(data: { channelId: number; targetUserId: number }) {
+    console.log(`[VoiceManager] 🔄 Reconnection request received for user ${data.targetUserId}`)
+
+    // Only respond if we're in the same channel
+    if (webrtcService.getCurrentChannelId() === data.channelId) {
+      // Create a new peer connection as initiator
+      this.createPeerConnection(data.targetUserId, '', true) // Username will be updated when we get user info
+    }
   }
 
   /**

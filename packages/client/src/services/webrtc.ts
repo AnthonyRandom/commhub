@@ -1,7 +1,319 @@
 import SimplePeer from 'simple-peer'
 import { useVoiceStore } from '../stores/voice'
+import { useVoiceSettingsStore } from '../stores/voice-settings'
 import { wsService } from './websocket'
 import { useAuthStore } from '../stores/auth'
+import { NoiseSuppressionProcessor, NoiseSuppressionConfig } from './noise-suppression'
+
+// Enhanced Speaking Detection Configuration
+interface SpeakingDetectionConfig {
+  mode: 'voice_activity' | 'push_to_talk'
+  sensitivity: number // 0-100
+  noiseGate: number // Minimum volume threshold
+  holdTime: number // ms to keep speaking state after audio drops
+  cooldownTime: number // ms between speaking detections
+  pttKey?: string // key combination for PTT
+}
+
+// Advanced Speaking Detection Class
+class EnhancedSpeakingDetector {
+  private audioContext: AudioContext | null = null
+  private analyser: AnalyserNode | null = null
+  private speakingConfig: SpeakingDetectionConfig
+  private detectionInterval: number | null = null
+  private lastSpeakTime = 0
+  private isSpeaking = false
+  private holdTimeout: number | null = null
+  private pttPressed = false
+  private keyListeners: ((event: KeyboardEvent) => void)[] = []
+
+  constructor(config: SpeakingDetectionConfig) {
+    this.speakingConfig = { ...config }
+  }
+
+  /**
+   * Initialize speaking detection with audio stream
+   */
+  initialize(stream: MediaStream): void {
+    this.setupAudioAnalysis(stream)
+    this.setupPTTListeners()
+    this.startDetection()
+  }
+
+  /**
+   * Update speaking detection configuration
+   */
+  updateConfig(config: Partial<SpeakingDetectionConfig>): void {
+    this.speakingConfig = { ...this.speakingConfig, ...config }
+
+    // Restart detection with new config
+    if (this.detectionInterval) {
+      this.stopDetection()
+      this.startDetection()
+    }
+  }
+
+  /**
+   * Set up Web Audio API analysis
+   */
+  private setupAudioAnalysis(stream: MediaStream): void {
+    try {
+      this.audioContext = new AudioContext()
+      this.analyser = this.audioContext.createAnalyser()
+
+      // Higher FFT size for better frequency analysis
+      this.analyser.fftSize = 2048
+      this.analyser.smoothingTimeConstant = 0.3
+
+      const source = this.audioContext.createMediaStreamSource(stream)
+      source.connect(this.analyser)
+    } catch (error) {
+      console.error('[SpeakingDetector] Failed to set up audio analysis:', error)
+    }
+  }
+
+  /**
+   * Set up push-to-talk key listeners
+   */
+  private setupPTTListeners(): void {
+    if (this.speakingConfig.mode !== 'push_to_talk' || !this.speakingConfig.pttKey) {
+      return
+    }
+
+    const keyDownListener = (event: KeyboardEvent) => {
+      if (this.isPTTKey(event)) {
+        event.preventDefault()
+        this.pttPressed = true
+        this.updateSpeakingState(true)
+      }
+    }
+
+    const keyUpListener = (event: KeyboardEvent) => {
+      if (this.isPTTKey(event)) {
+        event.preventDefault()
+        this.pttPressed = false
+        this.updateSpeakingState(false)
+      }
+    }
+
+    document.addEventListener('keydown', keyDownListener)
+    document.addEventListener('keyup', keyUpListener)
+
+    this.keyListeners = [keyDownListener, keyUpListener]
+  }
+
+  /**
+   * Check if the pressed key matches PTT configuration
+   */
+  private isPTTKey(event: KeyboardEvent): boolean {
+    if (!this.speakingConfig.pttKey) return false
+
+    const keys = this.speakingConfig.pttKey.toLowerCase().split('+')
+    const modifiers = keys.filter((k) => ['ctrl', 'alt', 'shift', 'meta'].includes(k))
+    const mainKey = keys.find((k) => !['ctrl', 'alt', 'shift', 'meta'].includes(k))
+
+    // Check modifiers
+    for (const mod of modifiers) {
+      switch (mod) {
+        case 'ctrl':
+          if (!event.ctrlKey) return false
+          break
+        case 'alt':
+          if (!event.altKey) return false
+          break
+        case 'shift':
+          if (!event.shiftKey) return false
+          break
+        case 'meta':
+          if (!event.metaKey) return false
+          break
+      }
+    }
+
+    // Check main key
+    return event.key.toLowerCase() === mainKey
+  }
+
+  /**
+   * Start periodic speaking detection
+   */
+  private startDetection(): void {
+    if (this.detectionInterval) return
+
+    let lastSpeakingState = false
+
+    this.detectionInterval = window.setInterval(() => {
+      let shouldSpeak = false
+
+      if (this.speakingConfig.mode === 'push_to_talk') {
+        shouldSpeak = this.pttPressed
+      } else {
+        // Voice activity detection
+        shouldSpeak = this.analyzeAudioForSpeech()
+      }
+
+      // Only emit when speaking state changes to reduce network traffic
+      if (shouldSpeak !== lastSpeakingState) {
+        lastSpeakingState = shouldSpeak
+        this.emitSpeakingChange(shouldSpeak)
+      }
+    }, 100) // Check every 100ms
+  }
+
+  /**
+   * Analyze audio for speech using multiple algorithms
+   */
+  private analyzeAudioForSpeech(): boolean {
+    if (!this.analyser) return false
+
+    const bufferLength = this.analyser.frequencyBinCount
+    const dataArray = new Uint8Array(bufferLength)
+    this.analyser.getByteFrequencyData(dataArray)
+
+    const metrics = this.calculateAudioMetrics(dataArray)
+    return this.shouldDetectSpeaking(metrics)
+  }
+
+  /**
+   * Calculate comprehensive audio metrics
+   */
+  private calculateAudioMetrics(dataArray: Uint8Array): {
+    rms: number
+    lowAvg: number
+    highAvg: number
+    spectralCentroid: number
+  } {
+    const length = dataArray.length
+
+    // RMS (Root Mean Square) for volume
+    let sum = 0
+    for (let i = 0; i < length; i++) {
+      sum += dataArray[i] * dataArray[i]
+    }
+    const rms = Math.sqrt(sum / length)
+
+    // Frequency analysis
+    const lowFreq = dataArray.slice(0, Math.floor(length * 0.1)) // 0-1kHz approx
+    const highFreq = dataArray.slice(Math.floor(length * 0.1)) // 1kHz+
+
+    const lowAvg = lowFreq.reduce((a, b) => a + b) / lowFreq.length
+    const highAvg = highFreq.reduce((a, b) => a + b) / highFreq.length
+
+    // Spectral centroid (center of mass of spectrum)
+    let weightedSum = 0
+    let totalWeight = 0
+    for (let i = 0; i < length; i++) {
+      weightedSum += i * dataArray[i]
+      totalWeight += dataArray[i]
+    }
+    const spectralCentroid = totalWeight > 0 ? weightedSum / totalWeight / length : 0
+
+    return { rms, lowAvg, highAvg, spectralCentroid }
+  }
+
+  /**
+   * Determine if audio contains speech using multiple criteria
+   */
+  private shouldDetectSpeaking(metrics: ReturnType<typeof this.calculateAudioMetrics>): boolean {
+    const { rms, lowAvg, highAvg, spectralCentroid } = metrics
+
+    // Adaptive threshold based on sensitivity setting
+    const baseThreshold = this.speakingConfig.noiseGate || 30
+    const adaptiveThreshold = baseThreshold * (1 + (100 - this.speakingConfig.sensitivity) / 100)
+
+    // Volume check
+    if (rms < adaptiveThreshold) return false
+
+    // Voice typically has more energy in lower frequencies
+    const voiceRatio = lowAvg / (highAvg + 1)
+    if (voiceRatio < 1.2) return false
+
+    // Spectral centroid should be in speech range (roughly 0.3-0.7 of spectrum)
+    if (spectralCentroid < 0.2 || spectralCentroid > 0.8) return false
+
+    return true
+  }
+
+  /**
+   * Update speaking state with hold time and cooldown
+   */
+  private updateSpeakingState(speaking: boolean): void {
+    const now = Date.now()
+
+    if (speaking && !this.isSpeaking) {
+      // Started speaking
+      if (now - this.lastSpeakTime > this.speakingConfig.cooldownTime) {
+        this.isSpeaking = true
+        this.emitSpeakingChange(true)
+      }
+    } else if (!speaking && this.isSpeaking) {
+      // Stopped speaking - use hold time
+      if (this.holdTimeout) clearTimeout(this.holdTimeout)
+
+      this.holdTimeout = window.setTimeout(() => {
+        this.isSpeaking = false
+        this.emitSpeakingChange(false)
+        this.lastSpeakTime = now
+      }, this.speakingConfig.holdTime)
+    }
+  }
+
+  /**
+   * Emit speaking change event
+   */
+  private emitSpeakingChange(isSpeaking: boolean): void {
+    const user = useAuthStore.getState().user
+    if (user) {
+      useVoiceStore.getState().updateUserSpeaking(user.id, isSpeaking)
+    }
+
+    // Emit to server if we have a channel
+    const currentChannelId = useVoiceStore.getState().connectedChannelId
+    if (currentChannelId) {
+      wsService.getSocket()?.emit('voice-speaking', {
+        channelId: currentChannelId,
+        isSpeaking: isSpeaking,
+      })
+    }
+  }
+
+  /**
+   * Stop detection and clean up
+   */
+  destroy(): void {
+    this.stopDetection()
+
+    // Remove key listeners
+    this.keyListeners.forEach((listener, index) => {
+      const eventType = index % 2 === 0 ? 'keydown' : 'keyup'
+      document.removeEventListener(eventType, listener as EventListener)
+    })
+    this.keyListeners = []
+
+    // Close audio context
+    if (this.audioContext) {
+      this.audioContext.close()
+      this.audioContext = null
+    }
+
+    this.analyser = null
+  }
+
+  /**
+   * Stop detection interval
+   */
+  private stopDetection(): void {
+    if (this.detectionInterval) {
+      clearInterval(this.detectionInterval)
+      this.detectionInterval = null
+    }
+
+    if (this.holdTimeout) {
+      clearTimeout(this.holdTimeout)
+      this.holdTimeout = null
+    }
+  }
+}
 
 interface PeerConnection {
   peer: SimplePeer.Instance
@@ -10,13 +322,22 @@ interface PeerConnection {
   audioElement?: HTMLAudioElement
 }
 
+interface ConnectionState {
+  quality: 'excellent' | 'good' | 'poor' | 'critical' | 'connecting'
+  retryCount: number
+  lastConnected: Date
+  reconnecting: boolean
+  iceState?: string
+}
+
 class WebRTCService {
   private peers: Map<number, PeerConnection> = new Map()
   private localStream: MediaStream | null = null
-  private audioContext: AudioContext | null = null
-  private analyser: AnalyserNode | null = null
-  private speakingCheckInterval: number | null = null
+  private processedStream: MediaStream | null = null
+  private speakingDetector: EnhancedSpeakingDetector | null = null
+  private noiseSuppressor: NoiseSuppressionProcessor | null = null
   private currentChannelId: number | null = null
+  private connectionStates: Map<number, ConnectionState> = new Map()
 
   // Configuration for WebRTC
   private rtcConfig = {
@@ -26,39 +347,30 @@ class WebRTCService {
     ],
   }
 
-  // Speaking detection threshold (0-255)
-  private readonly SPEAKING_THRESHOLD = 30
-  private readonly SPEAKING_CHECK_INTERVAL = 100 // ms
+  // Connection management constants
+  private readonly MAX_RETRY_ATTEMPTS = 3
+  private readonly RECONNECT_DELAY_BASE = 2000 // ms
+  private readonly CONNECTION_TIMEOUT = 30000 // ms
 
   /**
    * Initialize local audio stream
    */
   async initializeLocalStream(): Promise<MediaStream> {
     try {
-      // Get selected audio device from settings
-      const savedSettings = localStorage.getItem('commhub-settings')
-      let audioDeviceId: string | undefined
+      // Get voice settings from the store
+      const voiceSettings = useVoiceSettingsStore.getState().settings
 
-      if (savedSettings) {
-        try {
-          const settings = JSON.parse(savedSettings)
-          audioDeviceId = settings.audioInputDeviceId
-        } catch (error) {
-          console.warn('[WebRTC] Failed to parse settings:', error)
-        }
-      }
-
-      // Build audio constraints
+      // Build audio constraints from voice settings
       const audioConstraints: MediaTrackConstraints = {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
+        echoCancellation: voiceSettings.input.echoCancellation,
+        noiseSuppression: voiceSettings.input.noiseSuppression,
+        autoGainControl: voiceSettings.input.autoGainControl,
       }
 
       // Use specific device if selected
-      if (audioDeviceId && audioDeviceId !== 'default') {
-        console.log(`[WebRTC] Using selected audio device: ${audioDeviceId}`)
-        audioConstraints.deviceId = { exact: audioDeviceId }
+      if (voiceSettings.input.deviceId && voiceSettings.input.deviceId !== 'default') {
+        console.log(`[WebRTC] Using selected audio device: ${voiceSettings.input.deviceId}`)
+        audioConstraints.deviceId = { exact: voiceSettings.input.deviceId }
       } else {
         console.log('[WebRTC] Using default audio device')
       }
@@ -80,12 +392,18 @@ class WebRTCService {
       )
 
       this.localStream = stream
-      useVoiceStore.getState().setLocalStream(stream)
 
-      // Set up audio context for speaking detection
-      this.setupSpeakingDetection(stream)
+      // Apply noise suppression
+      const processedStream = await this.initializeNoiseSuppression(stream)
 
-      return stream
+      // Store both streams
+      this.processedStream = processedStream
+      useVoiceStore.getState().setLocalStream(processedStream)
+
+      // Initialize enhanced speaking detection (use processed stream for analysis)
+      this.initializeSpeakingDetection(processedStream)
+
+      return processedStream
     } catch (error) {
       console.error('[WebRTC] Failed to get user media:', error)
 
@@ -105,85 +423,110 @@ class WebRTCService {
   }
 
   /**
-   * Set up audio analysis for detecting when user is speaking
+   * Initialize enhanced speaking detection
    */
-  private setupSpeakingDetection(stream: MediaStream) {
+  private initializeSpeakingDetection(stream: MediaStream) {
     try {
-      this.audioContext = new AudioContext()
-      this.analyser = this.audioContext.createAnalyser()
-      this.analyser.fftSize = 512
-      this.analyser.smoothingTimeConstant = 0.8
+      // Get speaking detection settings from the voice settings store
+      const voiceSettings = useVoiceSettingsStore.getState().settings
 
-      const source = this.audioContext.createMediaStreamSource(stream)
-      source.connect(this.analyser)
+      const speakingConfig: SpeakingDetectionConfig = {
+        mode: voiceSettings.detection.mode,
+        sensitivity: voiceSettings.input.sensitivity,
+        noiseGate: voiceSettings.input.noiseGate,
+        holdTime: voiceSettings.detection.holdTime,
+        cooldownTime: voiceSettings.detection.cooldownTime,
+        pttKey: voiceSettings.detection.pttKey,
+      }
 
-      // Start checking for speaking
-      this.startSpeakingCheck()
+      this.speakingDetector = new EnhancedSpeakingDetector(speakingConfig)
+      this.speakingDetector.initialize(stream)
+
+      console.log('[WebRTC] Enhanced speaking detection initialized with config:', speakingConfig)
     } catch (error) {
-      console.error('Failed to set up speaking detection:', error)
+      console.error('[WebRTC] Failed to initialize speaking detection:', error)
     }
   }
 
   /**
-   * Start periodic check for speaking activity
+   * Initialize noise suppression
    */
-  private startSpeakingCheck() {
-    if (this.speakingCheckInterval) {
-      return
-    }
+  private async initializeNoiseSuppression(stream: MediaStream): Promise<MediaStream> {
+    try {
+      // Get voice settings for noise suppression config
+      const voiceSettings = useVoiceSettingsStore.getState().settings
 
-    let lastSpeakingState = false
-
-    this.speakingCheckInterval = window.setInterval(() => {
-      const isSpeaking = this.checkIfSpeaking()
-
-      // Update local user's speaking status immediately
-      const user = useAuthStore.getState().user
-      if (user) {
-        useVoiceStore.getState().updateUserSpeaking(user.id, isSpeaking)
+      const noiseConfig: NoiseSuppressionConfig = {
+        method: voiceSettings.input.noiseSuppressionMethod,
+        intensity: voiceSettings.input.noiseSuppressionIntensity,
+        noiseGateThreshold: voiceSettings.input.noiseGate,
+        attackTime: 10,
+        releaseTime: 100,
+        enabled: voiceSettings.input.noiseSuppression,
       }
 
-      // Only emit when speaking state changes to reduce network traffic
-      if (isSpeaking !== lastSpeakingState && this.currentChannelId) {
-        lastSpeakingState = isSpeaking
-        wsService.getSocket()?.emit('voice-speaking', {
-          channelId: this.currentChannelId,
-          isSpeaking: isSpeaking,
-        })
+      // Initialize noise suppressor
+      this.noiseSuppressor = new NoiseSuppressionProcessor(noiseConfig)
+      const processedStream = await this.noiseSuppressor.initialize(stream)
+
+      console.log('[WebRTC] Noise suppression initialized:', noiseConfig)
+      return processedStream
+    } catch (error) {
+      console.error('[WebRTC] Failed to initialize noise suppression:', error)
+      // Return original stream on error
+      return stream
+    }
+  }
+
+  /**
+   * Update noise suppression configuration
+   */
+  updateNoiseSuppressionConfig(config: Partial<NoiseSuppressionConfig>): void {
+    if (this.noiseSuppressor) {
+      this.noiseSuppressor.updateConfig(config)
+      console.log('[WebRTC] Noise suppression config updated:', config)
+    }
+  }
+
+  /**
+   * Update speaking detection configuration
+   */
+  updateSpeakingConfig(config: Partial<SpeakingDetectionConfig>): void {
+    if (this.speakingDetector) {
+      this.speakingDetector.updateConfig(config)
+
+      // Update the voice settings store
+      const voiceSettingsStore = useVoiceSettingsStore.getState()
+
+      if (
+        config.mode !== undefined ||
+        config.pttKey !== undefined ||
+        config.holdTime !== undefined ||
+        config.cooldownTime !== undefined
+      ) {
+        const detectionUpdates: any = {}
+        if (config.mode !== undefined) detectionUpdates.mode = config.mode
+        if (config.pttKey !== undefined) detectionUpdates.pttKey = config.pttKey
+        if (config.holdTime !== undefined) detectionUpdates.holdTime = config.holdTime
+        if (config.cooldownTime !== undefined) detectionUpdates.cooldownTime = config.cooldownTime
+
+        voiceSettingsStore.updateDetectionSettings(detectionUpdates)
       }
-    }, this.SPEAKING_CHECK_INTERVAL)
-  }
 
-  /**
-   * Stop speaking detection
-   */
-  private stopSpeakingCheck() {
-    if (this.speakingCheckInterval) {
-      clearInterval(this.speakingCheckInterval)
-      this.speakingCheckInterval = null
+      if (config.sensitivity !== undefined || config.noiseGate !== undefined) {
+        const inputUpdates: any = {}
+        if (config.sensitivity !== undefined) inputUpdates.sensitivity = config.sensitivity
+        if (config.noiseGate !== undefined) inputUpdates.noiseGate = config.noiseGate
+
+        voiceSettingsStore.updateInputSettings(inputUpdates)
+      }
+
+      console.log('[WebRTC] Speaking config updated:', config)
     }
   }
 
   /**
-   * Check if user is currently speaking based on audio analysis
-   */
-  private checkIfSpeaking(): boolean {
-    if (!this.analyser) {
-      return false
-    }
-
-    const bufferLength = this.analyser.frequencyBinCount
-    const dataArray = new Uint8Array(bufferLength)
-    this.analyser.getByteFrequencyData(dataArray)
-
-    // Calculate average volume
-    const average = dataArray.reduce((a, b) => a + b) / bufferLength
-
-    return average > this.SPEAKING_THRESHOLD
-  }
-
-  /**
-   * Create a peer connection to another user
+   * Create a peer connection to another user with enhanced reliability
    */
   createPeerConnection(
     userId: number,
@@ -197,15 +540,59 @@ class WebRTCService {
       throw new Error('Local stream not initialized')
     }
 
+    // Initialize connection state
+    this.connectionStates.set(userId, {
+      quality: 'connecting',
+      retryCount: 0,
+      lastConnected: new Date(),
+      reconnecting: false,
+    })
+
     // Remove existing peer if it exists
     this.removePeer(userId)
 
+    const peer = this.createPeerWithRetry(
+      userId,
+      username,
+      isInitiator,
+      onSignal,
+      onStream,
+      onClose
+    )
+
+    // Store peer connection
+    this.peers.set(userId, { peer, userId, username })
+
+    return peer
+  }
+
+  /**
+   * Create peer with retry logic and enhanced error handling
+   */
+  private createPeerWithRetry(
+    userId: number,
+    username: string,
+    isInitiator: boolean,
+    onSignal: (signal: SimplePeer.SignalData) => void,
+    onStream: (stream: MediaStream) => void,
+    onClose: () => void
+  ): SimplePeer.Instance {
     const peer = new SimplePeer({
       initiator: isInitiator,
-      stream: this.localStream,
+      stream: this.localStream!,
       config: this.rtcConfig,
       trickle: true,
     })
+
+    let connectionTimeout: number | null = null
+
+    // Set connection timeout
+    connectionTimeout = window.setTimeout(() => {
+      if (!peer.connected) {
+        console.warn(`[WebRTC] Connection timeout for ${username}`)
+        this.handlePeerError(userId, new Error('Connection timeout'))
+      }
+    }, this.CONNECTION_TIMEOUT)
 
     // Handle signaling
     peer.on('signal', (signal) => {
@@ -214,7 +601,13 @@ class WebRTCService {
 
     // Handle incoming stream
     peer.on('stream', (stream) => {
-      console.log('Received stream from user:', username)
+      console.log(`[WebRTC] Received stream from ${username}`)
+      if (connectionTimeout) {
+        clearTimeout(connectionTimeout)
+        connectionTimeout = null
+      }
+
+      this.updateConnectionQuality(userId, 'excellent')
       useVoiceStore.getState().updateUserStream(userId, stream)
       onStream(stream)
 
@@ -226,24 +619,294 @@ class WebRTCService {
       }
     })
 
-    // Handle connection errors
+    // Handle connection established
+    peer.on('connect', () => {
+      console.log(`[WebRTC] Peer connection established with ${username}`)
+      if (connectionTimeout) {
+        clearTimeout(connectionTimeout)
+        connectionTimeout = null
+      }
+
+      this.updateConnectionQuality(userId, 'excellent')
+      useVoiceStore.getState().updateUserConnectionStatus(userId, 'connected')
+    })
+
+    // Enhanced error handling with retry logic
     peer.on('error', (err) => {
-      console.error('Peer connection error:', err)
-      this.removePeer(userId)
-      onClose()
+      console.error(`[WebRTC] Peer connection error for ${username}:`, err)
+      if (connectionTimeout) {
+        clearTimeout(connectionTimeout)
+        connectionTimeout = null
+      }
+      this.handlePeerError(userId, err, onClose)
     })
 
     // Handle peer disconnection
     peer.on('close', () => {
-      console.log('Peer connection closed:', username)
-      this.removePeer(userId)
-      onClose()
+      console.log(`[WebRTC] Peer connection closed: ${username}`)
+      if (connectionTimeout) {
+        clearTimeout(connectionTimeout)
+        connectionTimeout = null
+      }
+      this.handlePeerDisconnect(userId, onClose)
     })
 
-    // Store peer connection
-    this.peers.set(userId, { peer, userId, username })
+    // Monitor ICE connection state for quality assessment
+    this.setupICEConnectionMonitoring(peer, userId, username)
 
     return peer
+  }
+
+  /**
+   * Set up ICE connection state monitoring
+   */
+  private setupICEConnectionMonitoring(
+    peer: SimplePeer.Instance,
+    userId: number,
+    username: string
+  ) {
+    // Access the underlying RTCPeerConnection
+    const rtcPeerConnection = (peer as any)._pc as RTCPeerConnection
+
+    if (rtcPeerConnection) {
+      rtcPeerConnection.addEventListener('iceconnectionstatechange', () => {
+        const state = rtcPeerConnection.iceConnectionState
+        console.log(`[WebRTC] ICE state change for ${username}: ${state}`)
+
+        this.updateConnectionState(userId, { iceState: state })
+
+        switch (state) {
+          case 'connected':
+          case 'completed':
+            this.updateConnectionQuality(userId, 'excellent')
+            break
+          case 'disconnected':
+            this.updateConnectionQuality(userId, 'poor')
+            break
+          case 'failed':
+          case 'closed':
+            this.updateConnectionQuality(userId, 'critical')
+            break
+          default:
+            // Keep current quality for other states
+            break
+        }
+      })
+
+      // Monitor connection quality periodically
+      this.startConnectionQualityMonitoring(userId, rtcPeerConnection)
+    }
+  }
+
+  /**
+   * Monitor connection quality using RTCPeerConnection stats
+   */
+  private startConnectionQualityMonitoring(userId: number, rtcPeerConnection: RTCPeerConnection) {
+    const monitor = async () => {
+      try {
+        const stats = await rtcPeerConnection.getStats()
+        let packetsLost = 0
+        let packetsReceived = 0
+        let bytesReceived = 0
+        let jitter = 0
+
+        stats.forEach((report) => {
+          if (report.type === 'inbound-rtp' && report.mediaType === 'audio') {
+            packetsLost += report.packetsLost || 0
+            packetsReceived += report.packetsReceived || 0
+            bytesReceived += report.bytesReceived || 0
+            jitter = Math.max(jitter, report.jitter || 0)
+          }
+        })
+
+        if (packetsReceived > 0) {
+          const lossRate = packetsLost / (packetsLost + packetsReceived)
+          const quality = this.calculateQualityFromStats(lossRate, jitter)
+
+          this.updateConnectionQuality(userId, quality)
+        }
+      } catch (error) {
+        console.warn(`[WebRTC] Failed to get connection stats for user ${userId}:`, error)
+      }
+    }
+
+    // Monitor every 5 seconds
+    const intervalId = window.setInterval(monitor, 5000)
+
+    // Store interval ID for cleanup
+    const state = this.connectionStates.get(userId)
+    if (state) {
+      ;(state as any).qualityMonitorInterval = intervalId
+    }
+  }
+
+  /**
+   * Calculate connection quality from WebRTC stats
+   */
+  private calculateQualityFromStats(lossRate: number, jitter: number): ConnectionState['quality'] {
+    // High packet loss or jitter indicates poor quality
+    if (lossRate > 0.1 || jitter > 0.1) {
+      return 'critical'
+    } else if (lossRate > 0.05 || jitter > 0.05) {
+      return 'poor'
+    } else if (lossRate > 0.01 || jitter > 0.02) {
+      return 'good'
+    } else {
+      return 'excellent'
+    }
+  }
+
+  /**
+   * Handle peer connection errors with retry logic
+   */
+  private handlePeerError(userId: number, error: Error, onClose?: () => void) {
+    const state = this.connectionStates.get(userId)
+    if (!state) return
+
+    console.error(`[WebRTC] Handling peer error for user ${userId}:`, error)
+
+    // Update connection status
+    useVoiceStore.getState().updateUserConnectionStatus(userId, 'failed')
+
+    if (state.retryCount < this.MAX_RETRY_ATTEMPTS && !state.reconnecting) {
+      state.retryCount++
+      state.reconnecting = true
+      this.connectionStates.set(userId, state)
+
+      const delay = this.RECONNECT_DELAY_BASE * Math.pow(2, state.retryCount - 1) // Exponential backoff
+
+      console.log(
+        `[WebRTC] Retrying connection to user ${userId} in ${delay}ms (attempt ${state.retryCount}/${this.MAX_RETRY_ATTEMPTS})`
+      )
+
+      setTimeout(() => {
+        this.attemptReconnection(userId)
+      }, delay)
+    } else {
+      console.error(`[WebRTC] Max retry attempts reached for user ${userId}`)
+      // Give up and clean up
+      this.removePeer(userId)
+      onClose?.()
+    }
+  }
+
+  /**
+   * Handle peer disconnection
+   */
+  private handlePeerDisconnect(userId: number, onClose?: () => void) {
+    const state = this.connectionStates.get(userId)
+    if (state) {
+      state.quality = 'critical'
+      this.connectionStates.set(userId, state)
+    }
+
+    useVoiceStore.getState().updateUserConnectionStatus(userId, 'disconnected')
+    onClose?.()
+  }
+
+  /**
+   * Attempt to reconnect to a peer
+   */
+  private attemptReconnection(userId: number) {
+    const state = this.connectionStates.get(userId)
+    if (!state || !this.currentChannelId) return
+
+    console.log(`[WebRTC] Attempting reconnection to user ${userId}`)
+
+    state.reconnecting = false
+    this.connectionStates.set(userId, state)
+
+    // Emit reconnection signal through WebSocket
+    // This will trigger the voice manager to create a new peer connection
+    wsService.getSocket()?.emit('voice-reconnect-request', {
+      channelId: this.currentChannelId,
+      targetUserId: userId,
+    })
+  }
+
+  /**
+   * Update connection quality for a user
+   */
+  private updateConnectionQuality(userId: number, quality: ConnectionState['quality']) {
+    const state = this.connectionStates.get(userId)
+    if (state) {
+      state.quality = quality
+      state.lastConnected = new Date()
+      this.connectionStates.set(userId, state)
+    }
+
+    // Update store with both status and quality
+    const storeStatus =
+      quality === 'critical' ? 'failed' : quality === 'poor' ? 'connecting' : 'connected'
+    useVoiceStore.getState().updateUserConnectionStatus(userId, storeStatus)
+    useVoiceStore.getState().updateUserConnectionQuality(userId, quality)
+
+    // Update overall quality based on all connections
+    this.updateOverallQuality()
+
+    // Add/remove quality warnings
+    this.updateQualityWarnings(userId, quality)
+  }
+
+  /**
+   * Update overall voice quality based on all connections
+   */
+  private updateOverallQuality() {
+    const qualities = Array.from(this.connectionStates.values()).map((state) => state.quality)
+
+    if (qualities.length === 0) {
+      useVoiceStore.getState().setOverallQuality('unknown')
+      return
+    }
+
+    // Overall quality is the worst quality among all connections
+    const qualityPriority = {
+      critical: 4,
+      poor: 3,
+      good: 2,
+      excellent: 1,
+      connecting: 0,
+      unknown: 0,
+    }
+    const worstQuality = qualities.reduce((worst, current) =>
+      qualityPriority[current] > qualityPriority[worst] ? current : worst
+    )
+
+    useVoiceStore.getState().setOverallQuality(worstQuality as any)
+  }
+
+  /**
+   * Update quality warnings based on connection quality
+   */
+  private updateQualityWarnings(userId: number, quality: ConnectionState['quality']) {
+    const store = useVoiceStore.getState()
+    const peerConnection = this.peers.get(userId)
+
+    if (!peerConnection) return
+
+    const warningKey = `user-${userId}`
+
+    // Remove existing warnings for this user
+    store.removeQualityWarning(`${warningKey}-poor`)
+    store.removeQualityWarning(`${warningKey}-critical`)
+
+    // Add new warnings
+    if (quality === 'poor') {
+      store.addQualityWarning(`${warningKey}-poor`)
+    } else if (quality === 'critical') {
+      store.addQualityWarning(`${warningKey}-critical`)
+    }
+  }
+
+  /**
+   * Update connection state properties
+   */
+  private updateConnectionState(userId: number, updates: Partial<ConnectionState>) {
+    const state = this.connectionStates.get(userId)
+    if (state) {
+      Object.assign(state, updates)
+      this.connectionStates.set(userId, state)
+    }
   }
 
   /**
@@ -410,7 +1073,23 @@ class WebRTCService {
     console.log('[WebRTC] Cleaning up all connections and streams')
 
     // Stop speaking detection
-    this.stopSpeakingCheck()
+    if (this.speakingDetector) {
+      this.speakingDetector.destroy()
+      this.speakingDetector = null
+    }
+
+    // Stop noise suppression
+    if (this.noiseSuppressor) {
+      this.noiseSuppressor.destroy()
+      this.noiseSuppressor = null
+    }
+
+    // Clean up connection quality monitoring intervals
+    this.connectionStates.forEach((state) => {
+      if ((state as any).qualityMonitorInterval) {
+        clearInterval((state as any).qualityMonitorInterval)
+      }
+    })
 
     // Destroy all peer connections and remove audio elements
     this.peers.forEach((peerConnection, userId) => {
@@ -431,7 +1110,18 @@ class WebRTCService {
     })
     this.peers.clear()
 
-    // Stop local stream
+    // Clear connection states
+    this.connectionStates.clear()
+
+    // Stop local and processed streams
+    if (this.processedStream) {
+      this.processedStream.getTracks().forEach((track) => {
+        console.log('[WebRTC] Stopping processed track:', track.kind)
+        track.stop()
+      })
+      this.processedStream = null
+    }
+
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => {
         console.log('[WebRTC] Stopping local track:', track.kind)
@@ -440,13 +1130,6 @@ class WebRTCService {
       this.localStream = null
     }
 
-    // Close audio context
-    if (this.audioContext) {
-      this.audioContext.close()
-      this.audioContext = null
-    }
-
-    this.analyser = null
     this.currentChannelId = null
 
     // Reset voice store
@@ -477,6 +1160,27 @@ class WebRTCService {
   }
 
   /**
+   * Get speaking detector instance
+   */
+  getSpeakingDetector(): EnhancedSpeakingDetector | null {
+    return this.speakingDetector
+  }
+
+  /**
+   * Get noise suppression stats
+   */
+  getNoiseSuppressionStats() {
+    return this.noiseSuppressor ? this.noiseSuppressor.getStats() : null
+  }
+
+  /**
+   * Get current noise suppression method
+   */
+  getNoiseSuppressionMethod() {
+    return this.noiseSuppressor ? this.noiseSuppressor.getCurrentMethod() : 'none'
+  }
+
+  /**
    * Set local mute for a specific user
    */
   setUserLocalMuted(userId: number, muted: boolean) {
@@ -490,18 +1194,60 @@ class WebRTCService {
   }
 
   /**
-   * Set volume for a specific user
+   * Set volume for a specific user (combines user volume with master volume and attenuation)
    */
   setUserVolume(userId: number, volume: number) {
     const peerConnection = this.peers.get(userId)
     if (peerConnection?.audioElement) {
+      // Get voice settings for attenuation and master volume
+      const voiceSettings = useVoiceSettingsStore.getState().settings
+
+      // Apply attenuation (reduction from master volume)
+      const attenuationFactor = (100 - voiceSettings.output.attenuation) / 100
+
+      // Combine master volume, user volume, and attenuation
+      const masterVolumeFactor = voiceSettings.output.masterVolume / 100
+      const userVolumeFactor = volume / 100
+      const finalVolume = masterVolumeFactor * userVolumeFactor * attenuationFactor
+
       // Clamp volume between 0 and 2 (0% to 200%)
-      const clampedVolume = Math.max(0, Math.min(2, volume))
+      const clampedVolume = Math.max(0, Math.min(2, finalVolume))
+
       peerConnection.audioElement.volume = clampedVolume
       console.log(
-        `[WebRTC] Set volume for ${peerConnection.username} to ${(clampedVolume * 100).toFixed(0)}%`
+        `[WebRTC] Set volume for ${peerConnection.username} to ${(clampedVolume * 100).toFixed(0)}% (master: ${voiceSettings.output.masterVolume}%, user: ${volume}%, attenuation: ${voiceSettings.output.attenuation}%)`
       )
     }
+  }
+
+  /**
+   * Apply attenuation to all connected users
+   */
+  applyAttenuationToAll(attenuation: number) {
+    console.log(`[WebRTC] Applying attenuation of ${attenuation}% to all users`)
+
+    this.peers.forEach((peerConnection, userId) => {
+      if (peerConnection.audioElement) {
+        // Get current user volume from voice store
+        const userVolume = useVoiceStore.getState().connectedUsers.get(userId)?.localVolume || 100
+        this.setUserVolume(userId, userVolume)
+      }
+    })
+  }
+
+  /**
+   * Apply master volume to all connected users
+   */
+  applyMasterVolumeToAll(masterVolume: number) {
+    console.log(`[WebRTC] Applying master volume of ${masterVolume}% to all users`)
+
+    this.peers.forEach((peerConnection, userId) => {
+      if (peerConnection.audioElement) {
+        // Get current user volume from voice store
+        const userVolume = useVoiceStore.getState().connectedUsers.get(userId)?.localVolume || 100
+        this.setUserVolume(userId, userVolume)
+      }
+    })
   }
 }
 

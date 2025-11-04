@@ -1,6 +1,13 @@
 import { create } from 'zustand'
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'failed' | 'disconnected'
+export type ConnectionQuality =
+  | 'excellent'
+  | 'good'
+  | 'poor'
+  | 'critical'
+  | 'connecting'
+  | 'unknown'
 
 export interface VoiceUser {
   userId: number
@@ -8,6 +15,7 @@ export interface VoiceUser {
   isSpeaking: boolean
   isMuted: boolean
   connectionStatus: ConnectionStatus
+  connectionQuality: ConnectionQuality
   stream?: MediaStream
   localMuted: boolean
   localVolume: number
@@ -18,6 +26,10 @@ interface VoiceState {
   connectedChannelId: number | null
   isConnecting: boolean
   connectionError: string | null
+
+  // Quality monitoring
+  overallQuality: ConnectionQuality
+  qualityWarnings: string[]
 
   // User state
   isMuted: boolean
@@ -40,8 +52,13 @@ interface VoiceState {
   updateUserMuted: (userId: number, isMuted: boolean) => void
   updateUserStream: (userId: number, stream: MediaStream) => void
   updateUserConnectionStatus: (userId: number, status: ConnectionStatus) => void
+  updateUserConnectionQuality: (userId: number, quality: ConnectionQuality) => void
   setUserLocalMuted: (userId: number, muted: boolean) => void
   setUserLocalVolume: (userId: number, volume: number) => void
+  setOverallQuality: (quality: ConnectionQuality) => void
+  addQualityWarning: (warning: string) => void
+  removeQualityWarning: (warning: string) => void
+  clearQualityWarnings: () => void
   clearConnectedUsers: () => void
   reset: () => void
 }
@@ -51,6 +68,8 @@ export const useVoiceStore = create<VoiceState>((set) => ({
   connectedChannelId: null,
   isConnecting: false,
   connectionError: null,
+  overallQuality: 'unknown',
+  qualityWarnings: [],
   isMuted: false,
   isDeafened: false,
   localStream: null,
@@ -89,7 +108,12 @@ export const useVoiceStore = create<VoiceState>((set) => ({
   addConnectedUser: (user) =>
     set((state) => {
       const newUsers = new Map(state.connectedUsers)
-      newUsers.set(user.userId, user)
+      // Ensure connectionQuality is set
+      const userWithQuality = {
+        ...user,
+        connectionQuality: user.connectionQuality || 'unknown',
+      }
+      newUsers.set(user.userId, userWithQuality)
       return { connectedUsers: newUsers }
     }),
 
@@ -164,6 +188,30 @@ export const useVoiceStore = create<VoiceState>((set) => ({
       return { connectedUsers: newUsers }
     }),
 
+  updateUserConnectionQuality: (userId, quality) =>
+    set((state) => {
+      const newUsers = new Map(state.connectedUsers)
+      const user = newUsers.get(userId)
+      if (user) {
+        newUsers.set(userId, { ...user, connectionQuality: quality })
+      }
+      return { connectedUsers: newUsers }
+    }),
+
+  setOverallQuality: (quality) => set({ overallQuality: quality }),
+
+  addQualityWarning: (warning) =>
+    set((state) => ({
+      qualityWarnings: [...state.qualityWarnings.filter((w) => w !== warning), warning],
+    })),
+
+  removeQualityWarning: (warning) =>
+    set((state) => ({
+      qualityWarnings: state.qualityWarnings.filter((w) => w !== warning),
+    })),
+
+  clearQualityWarnings: () => set({ qualityWarnings: [] }),
+
   clearConnectedUsers: () =>
     set((state) => {
       // Stop all streams
@@ -193,6 +241,8 @@ export const useVoiceStore = create<VoiceState>((set) => ({
         connectedChannelId: null,
         isConnecting: false,
         connectionError: null,
+        overallQuality: 'unknown',
+        qualityWarnings: [],
         isMuted: false,
         isDeafened: false,
         localStream: null,

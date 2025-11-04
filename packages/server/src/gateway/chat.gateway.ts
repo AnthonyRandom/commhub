@@ -999,6 +999,44 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
+  @SubscribeMessage('voice-reconnect-request')
+  handleVoiceReconnectRequest(
+    @MessageBody() data: { channelId: number; targetUserId: number },
+    @ConnectedSocket() client: AuthenticatedSocket
+  ) {
+    try {
+      // Validate input
+      if (
+        !data.channelId ||
+        !data.targetUserId ||
+        typeof data.channelId !== 'number' ||
+        typeof data.targetUserId !== 'number' ||
+        data.channelId <= 0 ||
+        data.targetUserId <= 0
+      ) {
+        client.emit('error', { message: 'Invalid reconnection request data' });
+        return;
+      }
+
+      const targetSocketId = this.onlineUsers.get(data.targetUserId);
+      if (targetSocketId) {
+        this.server.to(targetSocketId).emit('voice-reconnect-request', {
+          channelId: data.channelId,
+          targetUserId: data.targetUserId,
+        });
+        this.logger.log(
+          `[Voice] Reconnection request from ${client.username} to user ${data.targetUserId}`
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        'Error handling voice reconnection request:',
+        error.message
+      );
+      client.emit('error', { message: 'Failed to send reconnection request' });
+    }
+  }
+
   private async broadcastVoiceChannelMembers(channelId: number) {
     try {
       const members = this.voiceChannelMembers.get(channelId);

@@ -21,6 +21,7 @@ import type { UpdateManifest } from '@tauri-apps/api/updater'
 import { useVoiceSettingsStore } from '../stores/voice-settings'
 import { voiceManager } from '../services/voice-manager'
 import { useVoiceStore } from '../stores/voice'
+import { webrtcService } from '../services/webrtc'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -69,6 +70,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
   // Voice settings state
   const voiceSettings = useVoiceSettingsStore((state) => state.settings)
+  const voiceSettingsStore = useVoiceSettingsStore()
   const voiceStore = useVoiceStore()
   const [isRecordingPTT, setIsRecordingPTT] = useState(false)
   const [pttKeyDisplay, setPttKeyDisplay] = useState('')
@@ -130,6 +132,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setPttKeyDisplay('Not set')
     }
   }, [voiceSettings.detection.pttKey])
+
+  // Debug voice settings changes
+  useEffect(() => {
+    console.log('[Settings] Voice settings updated:', voiceSettings)
+  }, [voiceSettings])
 
   // Load available audio devices
   const loadAudioDevices = async () => {
@@ -276,7 +283,44 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   // Voice settings update functions
   const updateVoiceSetting = (updates: any) => {
     console.log('[Settings] Updating voice setting:', updates)
-    voiceManager.updateVoiceSettings(updates)
+    console.log('[Settings] Current voice settings before update:', voiceSettings)
+
+    // Update the store directly
+    if (updates.detection) {
+      voiceSettingsStore.updateDetectionSettings(updates.detection)
+
+      // Update speaking detector configuration
+      const speakingConfig: any = {}
+      if (updates.detection.mode !== undefined) speakingConfig.mode = updates.detection.mode
+      if (updates.detection.pttKey !== undefined) speakingConfig.pttKey = updates.detection.pttKey
+      if (updates.detection.holdTime !== undefined)
+        speakingConfig.holdTime = updates.detection.holdTime
+      if (updates.detection.cooldownTime !== undefined)
+        speakingConfig.cooldownTime = updates.detection.cooldownTime
+
+      webrtcService.updateSpeakingConfig(speakingConfig)
+    }
+
+    if (updates.input) {
+      voiceSettingsStore.updateInputSettings(updates.input)
+
+      // Update WebRTC audio constraints if device changed
+      if (updates.input.deviceId !== undefined) {
+        console.log('[Settings] Input device changed, may require stream reinitialization')
+      }
+    }
+
+    if (updates.output) {
+      voiceSettingsStore.updateOutputSettings(updates.output)
+
+      // Apply volume changes immediately
+      if (updates.output.masterVolume !== undefined) {
+        voiceManager.setMasterVolume(updates.output.masterVolume)
+      }
+      if (updates.output.attenuation !== undefined) {
+        voiceManager.setAttenuation(updates.output.attenuation)
+      }
+    }
   }
 
   // PTT key recording

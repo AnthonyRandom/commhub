@@ -4,6 +4,8 @@ import { ChatGateway } from './chat.gateway';
 import { MessagesModule } from '../messages/messages.module';
 import { UsersModule } from '../users/users.module';
 import { DirectMessagesModule } from '../direct-messages/direct-messages.module';
+import { ChannelsModule } from '../channels/channels.module';
+import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
   imports: [
@@ -15,6 +17,8 @@ import { DirectMessagesModule } from '../direct-messages/direct-messages.module'
     MessagesModule,
     UsersModule,
     DirectMessagesModule,
+    ChannelsModule,
+    PrismaModule,
   ],
   providers: [ChatGateway],
   exports: [ChatGateway],

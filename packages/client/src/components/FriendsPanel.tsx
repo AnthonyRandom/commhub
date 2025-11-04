@@ -15,14 +15,22 @@ import {
 import { useFriendsStore } from '../stores/friends'
 import { useAuthStore } from '../stores/auth'
 import { useDirectMessagesStore } from '../stores/directMessages'
+import { useSettingsStore } from '../stores/settings'
 import { apiService, type DirectMessage } from '../services/api'
 
 interface FriendsPanelProps {
   selectedDMUserId?: number | null
+  onStartDM?: (userId: number) => void
+  onBackFromDM?: () => void
 }
 
-const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
+const FriendsPanel: React.FC<FriendsPanelProps> = ({
+  selectedDMUserId,
+  onStartDM,
+  onBackFromDM,
+}) => {
   const { user } = useAuthStore()
+  const { getTimeFormat } = useSettingsStore()
   const {
     friends,
     receivedRequests,
@@ -40,7 +48,6 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
     unblockUser,
   } = useFriendsStore()
   const messages = useDirectMessagesStore((state) => state.messages)
-  const conversations = useDirectMessagesStore((state) => state.conversations)
 
   const {
     setActiveConversation,
@@ -52,7 +59,7 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
     markConversationAsRead,
   } = useDirectMessagesStore()
 
-  const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'blocked' | 'messages'>('all')
+  const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'blocked'>('all')
   const [messageInput, setMessageInput] = useState('')
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
   const [editContent, setEditContent] = useState('')
@@ -64,7 +71,9 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
   const [conversationMessages, setConversationMessages] = useState<DirectMessage[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
-  const [isNearBottom, setIsNearBottom] = useState(true)
+  const [hasUserScrolledUp, setHasUserScrolledUp] = useState(false)
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const selectedFriend = friends.find((f) => f.id === selectedDMUserId)
 
@@ -74,38 +83,79 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
     setConversationMessages(newMessages)
   }, [messages, selectedDMUserId])
 
-  // Handle scroll events to track if user is near bottom
+  // Handle scroll events to detect manual scrolling away from bottom (debounced)
   const handleScroll = () => {
+    // Clear existing timeout
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current)
+    }
+
+    // Set new timeout to debounce scroll events
+    scrollTimeoutRef.current = setTimeout(() => {
+      if (messagesContainerRef.current) {
+        const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current
+        const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+        const nearBottom = distanceFromBottom < 50 // Match threshold with scrollToBottom
+
+        // If user scrolls away from bottom, mark as manually scrolled
+        if (!nearBottom && !hasUserScrolledUp) {
+          setHasUserScrolledUp(true)
+        }
+
+        // If user scrolls back to bottom, reset the manual scroll flag
+        if (nearBottom && hasUserScrolledUp) {
+          setHasUserScrolledUp(false)
+        }
+      }
+    }, 100) // 100ms debounce
+  }
+
+  // Smart auto-scroll: only scroll on initial load or when user is near bottom
+  const scrollToBottom = () => {
+    // Always check current scroll position to be absolutely sure
     if (messagesContainerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current
       const distanceFromBottom = scrollHeight - scrollTop - clientHeight
-      setIsNearBottom(distanceFromBottom < 100) // Consider "near bottom" if within 100px
-    }
-  }
+      const isCurrentlyNearBottom = distanceFromBottom < 50 // More strict threshold
 
-  // Auto-scroll to bottom when conversation messages change (only if user is near bottom)
-  const scrollToBottom = () => {
-    if (isNearBottom) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      if (isInitialLoad || isCurrentlyNearBottom) {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      }
     }
   }
 
   useEffect(() => {
     scrollToBottom()
-  }, [conversationMessages, isNearBottom])
+    // After initial load, mark as no longer initial
+    if (isInitialLoad && conversationMessages.length > 0) {
+      setIsInitialLoad(false)
+    }
+  }, [conversationMessages, isInitialLoad, hasUserScrolledUp])
 
   // Set up scroll listener
   useEffect(() => {
     const container = messagesContainerRef.current
     if (container) {
       container.addEventListener('scroll', handleScroll)
-      return () => container.removeEventListener('scroll', handleScroll)
+      return () => {
+        container.removeEventListener('scroll', handleScroll)
+        // Clean up scroll timeout
+        if (scrollTimeoutRef.current) {
+          clearTimeout(scrollTimeoutRef.current)
+        }
+      }
     }
   }, [])
 
-  // Reset scroll position tracking when switching conversations
+  // Reset scroll tracking when switching conversations
   useEffect(() => {
-    setIsNearBottom(true)
+    // Clean up any pending scroll timeout
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current)
+      scrollTimeoutRef.current = null
+    }
+    setHasUserScrolledUp(false)
+    setIsInitialLoad(true)
   }, [selectedDMUserId])
 
   // Poll for new messages when DM conversation is active
@@ -144,7 +194,6 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
   useEffect(() => {
     if (selectedDMUserId) {
       setActiveConversation(selectedDMUserId)
-      setActiveTab('messages')
       fetchConversation(selectedDMUserId)
       markConversationAsRead(selectedDMUserId)
     }
@@ -211,11 +260,14 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
 
   const handleStartDM = async (friendId: number) => {
     try {
-      // This function is now handled by the parent component
-      // The selectedDMUserId is passed as a prop
-      setActiveTab('messages')
-      await fetchConversation(friendId)
-      await fetchConversations()
+      // Use the callback to start DM conversation
+      if (onStartDM) {
+        onStartDM(friendId)
+      } else {
+        // Fallback for backward compatibility
+        await fetchConversation(friendId)
+        await fetchConversations()
+      }
     } catch (err) {
       setError('Failed to start conversation')
       setTimeout(() => setError(''), 3000)
@@ -223,8 +275,13 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
   }
 
   const handleBackFromDM = () => {
-    // This is now handled by the parent component
-    setActiveTab('all')
+    // Use the callback to go back from DM
+    if (onBackFromDM) {
+      onBackFromDM()
+    } else {
+      // Fallback for backward compatibility
+      setActiveTab('all')
+    }
   }
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -271,10 +328,35 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
   }
 
   const formatTime = (date: string) => {
-    return new Date(date).toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-    })
+    const formatTimeFunc = getTimeFormat()
+    return formatTimeFunc(new Date(date))
+  }
+
+  const formatDateTime = (date: string) => {
+    const dateObj = new Date(date)
+    const formatTimeFunc = getTimeFormat()
+    return `${dateObj.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    })} ${formatTimeFunc(dateObj)}`
+  }
+
+  const shouldAddTimeSeparator = (
+    currentMessage: DirectMessage,
+    previousMessage: DirectMessage | null,
+    currentIndex: number
+  ): boolean => {
+    // Don't add separator for first message
+    if (currentIndex === 0) return false
+
+    // Check time gap between messages
+    const currentTime = new Date(currentMessage.createdAt).getTime()
+    const previousTime = new Date(previousMessage!.createdAt).getTime()
+    const timeGap = currentTime - previousTime
+
+    // Add separator if gap is more than 10 minutes (600,000 ms)
+    const tenMinutes = 10 * 60 * 1000
+    return timeGap > tenMinutes
   }
 
   const formatDate = (date: string) => {
@@ -404,129 +486,158 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
 
                   {/* Messages */}
                   <div className="space-y-3">
-                    {group.messages.map((message) => {
+                    {group.messages.map((message, messageIndex) => {
                       const isOwnMessage = message.senderId === user?.id
                       const isEditing = editingMessageId === message.id
                       const showContextMenu = contextMenuMessageId === message.id
+                      const globalIndex =
+                        messageGroups
+                          .slice(0, groupIndex)
+                          .reduce((acc, g) => acc + g.messages.length, 0) + messageIndex
+                      const previousMessage =
+                        globalIndex > 0 ? conversationMessages[globalIndex - 1] : null
+                      const addTimeSeparator = shouldAddTimeSeparator(
+                        message,
+                        previousMessage,
+                        globalIndex
+                      )
 
                       return (
-                        <div
-                          key={message.id}
-                          className={`group flex gap-3 ${isOwnMessage ? 'flex-row-reverse' : 'flex-row'}`}
-                        >
-                          {/* Avatar */}
-                          <div className="w-10 h-10 bg-white flex-shrink-0 flex items-center justify-center">
-                            <span className="text-black font-bold">
-                              {isOwnMessage
-                                ? user?.username.charAt(0).toUpperCase()
-                                : selectedFriend.username.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
+                        <div key={message.id}>
+                          {/* Time Separator */}
+                          {addTimeSeparator && (
+                            <div className="flex items-center gap-4 my-4">
+                              <div className="flex-1 h-[1px] bg-grey-800" />
+                              <span className="text-grey-500 text-xs">
+                                {formatDateTime(message.createdAt)}
+                              </span>
+                              <div className="flex-1 h-[1px] bg-grey-800" />
+                            </div>
+                          )}
 
-                          {/* Message Content */}
                           <div
-                            className={`flex-1 ${isOwnMessage ? 'items-end' : 'items-start'} flex flex-col`}
+                            className={`group flex gap-3 ${isOwnMessage ? 'flex-row-reverse' : 'flex-row'}`}
                           >
-                            <div className="flex items-center gap-2 mb-1">
-                              <span
-                                className={`text-sm font-bold ${isOwnMessage ? 'text-white' : 'text-grey-300'}`}
-                              >
-                                {isOwnMessage ? 'You' : selectedFriend.username}
+                            {/* Avatar */}
+                            <div className="w-10 h-10 bg-white flex-shrink-0 flex items-center justify-center">
+                              <span className="text-black font-bold">
+                                {isOwnMessage
+                                  ? user?.username.charAt(0).toUpperCase()
+                                  : selectedFriend.username.charAt(0).toUpperCase()}
                               </span>
-                              <span className="text-grey-600 text-xs">
-                                {formatTime(message.createdAt)}
-                              </span>
-                              {message.isEdited && (
-                                <span className="text-grey-600 text-xs">(edited)</span>
-                              )}
                             </div>
 
-                            {isEditing ? (
-                              <div className="w-full max-w-xl">
-                                <textarea
-                                  value={editContent}
-                                  onChange={(e) => setEditContent(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && !e.shiftKey) {
-                                      e.preventDefault()
-                                      handleEditMessage(message.id)
-                                    } else if (e.key === 'Escape') {
-                                      setEditingMessageId(null)
-                                      setEditContent('')
-                                    }
-                                  }}
-                                  className="w-full bg-grey-850 border-2 border-grey-700 px-3 py-2 text-white resize-none focus:border-white transition-colors"
-                                  rows={3}
-                                  autoFocus
-                                />
-                                <div className="flex gap-2 mt-2">
-                                  <button
-                                    onClick={() => handleEditMessage(message.id)}
-                                    className="px-3 py-1 bg-white text-black text-sm font-bold hover:bg-grey-100 transition-colors"
-                                  >
-                                    Save
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setEditingMessageId(null)
-                                      setEditContent('')
-                                    }}
-                                    className="px-3 py-1 bg-grey-800 text-white text-sm font-bold hover:bg-grey-700 transition-colors"
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="relative group/message">
-                                <div
-                                  className={`px-4 py-2 break-words max-w-xl ${
-                                    isOwnMessage
-                                      ? 'bg-white text-black'
-                                      : 'bg-grey-850 text-white border-2 border-grey-800'
-                                  }`}
+                            {/* Message Content */}
+                            <div
+                              className={`flex-1 ${isOwnMessage ? 'items-end' : 'items-start'} flex flex-col`}
+                            >
+                              <div className="flex items-center gap-2 mb-1">
+                                <span
+                                  className={`text-sm font-bold ${isOwnMessage ? 'text-white' : 'text-grey-300'}`}
                                 >
-                                  {message.content}
-                                </div>
-
-                                {/* Context Menu */}
-                                {canEditOrDelete(message) && (
-                                  <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/2">
-                                    <button
-                                      onClick={() =>
-                                        setContextMenuMessageId(showContextMenu ? null : message.id)
-                                      }
-                                      className="p-1 bg-grey-800 text-grey-300 hover:text-white opacity-0 group-hover/message:opacity-100 transition-opacity"
-                                    >
-                                      <MoreVertical className="w-4 h-4" />
-                                    </button>
-
-                                    {showContextMenu && (
-                                      <div className="absolute right-0 mt-1 bg-grey-850 border-2 border-grey-800 shadow-lg z-10 min-w-[120px]">
-                                        <button
-                                          onClick={() => {
-                                            setEditingMessageId(message.id)
-                                            setEditContent(message.content)
-                                            setContextMenuMessageId(null)
-                                          }}
-                                          className="w-full px-3 py-2 text-left text-sm text-white hover:bg-grey-800 transition-colors flex items-center gap-2"
-                                        >
-                                          <Edit2 className="w-3 h-3" />
-                                          Edit
-                                        </button>
-                                        <button
-                                          onClick={() => handleDeleteMessage(message)}
-                                          className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-grey-800 transition-colors flex items-center gap-2"
-                                        >
-                                          <Trash2 className="w-3 h-3" />
-                                          Delete
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
+                                  {isOwnMessage ? 'You' : selectedFriend.username}
+                                </span>
+                                <span className="text-grey-600 text-xs">
+                                  {formatTime(message.createdAt)}
+                                </span>
+                                {message.isEdited && (
+                                  <span className="text-grey-600 text-xs">(edited)</span>
                                 )}
                               </div>
-                            )}
+
+                              {isEditing ? (
+                                <div className="w-full max-w-xl">
+                                  <textarea
+                                    value={editContent}
+                                    onChange={(e) => setEditContent(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault()
+                                        handleEditMessage(message.id)
+                                      } else if (e.key === 'Escape') {
+                                        setEditingMessageId(null)
+                                        setEditContent('')
+                                      }
+                                    }}
+                                    className="w-full bg-grey-850 border-2 border-grey-700 px-3 py-2 text-white resize-none focus:border-white transition-colors"
+                                    rows={3}
+                                    autoFocus
+                                  />
+                                  <div className="flex gap-2 mt-2">
+                                    <button
+                                      onClick={() => handleEditMessage(message.id)}
+                                      className="px-3 py-1 bg-white text-black text-sm font-bold hover:bg-grey-100 transition-colors"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setEditingMessageId(null)
+                                        setEditContent('')
+                                      }}
+                                      className="px-3 py-1 bg-grey-800 text-white text-sm font-bold hover:bg-grey-700 transition-colors"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="relative group/message">
+                                  <div
+                                    className={`px-4 py-2 break-words max-w-xl ${
+                                      isOwnMessage
+                                        ? 'bg-white text-black'
+                                        : 'bg-grey-850 text-white border-2 border-grey-800'
+                                    }`}
+                                  >
+                                    {blockedUsers.some(
+                                      (blockedUser) => blockedUser.id === message.senderId
+                                    )
+                                      ? '[This user is blocked]'
+                                      : message.content}
+                                  </div>
+
+                                  {/* Context Menu */}
+                                  {canEditOrDelete(message) && (
+                                    <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/2">
+                                      <button
+                                        onClick={() =>
+                                          setContextMenuMessageId(
+                                            showContextMenu ? null : message.id
+                                          )
+                                        }
+                                        className="p-1 bg-grey-800 text-grey-300 hover:text-white opacity-0 group-hover/message:opacity-100 transition-opacity"
+                                      >
+                                        <MoreVertical className="w-4 h-4" />
+                                      </button>
+
+                                      {showContextMenu && (
+                                        <div className="absolute right-0 mt-1 bg-grey-850 border-2 border-grey-800 shadow-lg z-10 min-w-[120px]">
+                                          <button
+                                            onClick={() => {
+                                              setEditingMessageId(message.id)
+                                              setEditContent(message.content)
+                                              setContextMenuMessageId(null)
+                                            }}
+                                            className="w-full px-3 py-2 text-left text-sm text-white hover:bg-grey-800 transition-colors flex items-center gap-2"
+                                          >
+                                            <Edit2 className="w-3 h-3" />
+                                            Edit
+                                          </button>
+                                          <button
+                                            onClick={() => handleDeleteMessage(message)}
+                                            className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-grey-800 transition-colors flex items-center gap-2"
+                                          >
+                                            <Trash2 className="w-3 h-3" />
+                                            Delete
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       )
@@ -590,23 +701,6 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
           }`}
         >
           All Friends ({friends.length})
-        </button>
-        <button
-          onClick={() => {
-            setActiveTab('messages')
-          }}
-          className={`px-4 py-3 font-bold transition-colors ${
-            activeTab === 'messages'
-              ? 'text-white border-b-2 border-white -mb-[2px]'
-              : 'text-grey-400 hover:text-white'
-          }`}
-        >
-          Messages
-          {conversations.filter((c) => c.unreadCount > 0).length > 0 && (
-            <span className="ml-2 bg-white text-black text-xs font-bold px-2 py-0.5 rounded-full">
-              {conversations.filter((c) => c.unreadCount > 0).length}
-            </span>
-          )}
         </button>
         <button
           onClick={() => {
@@ -702,72 +796,6 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ selectedDMUserId }) => {
                   )
                 })}
               </div>
-            )}
-          </div>
-        )}
-
-        {/* Messages Tab */}
-        {activeTab === 'messages' && (
-          <div className="space-y-2">
-            {conversations.length === 0 ? (
-              <div className="text-center py-12">
-                <MessageSquare className="w-12 h-12 text-grey-700 mx-auto mb-3" />
-                <p className="text-grey-500 mb-2">No conversations yet</p>
-                <p className="text-grey-600 text-sm">
-                  Click the message icon next to a friend to start chatting
-                </p>
-              </div>
-            ) : (
-              conversations.map((conversation) => {
-                const hasUnread = conversation.unreadCount > 0
-                const lastMessage = conversation.lastMessage
-
-                return (
-                  <button
-                    key={conversation.user.id}
-                    onClick={() => handleStartDM(conversation.user.id)}
-                    className="w-full flex items-center gap-3 p-3 bg-grey-850 border-2 border-grey-800 hover:border-grey-700 transition-colors group text-left"
-                  >
-                    <div className="w-10 h-10 bg-white flex-shrink-0 flex items-center justify-center">
-                      <span className="text-black font-bold">
-                        {conversation.user.username.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <p
-                          className={`font-bold truncate ${hasUnread ? 'text-white' : 'text-grey-300'}`}
-                        >
-                          {conversation.user.username}
-                        </p>
-                        {lastMessage && (
-                          <span className="text-grey-500 text-xs flex-shrink-0">
-                            {new Date(lastMessage.createdAt).toLocaleTimeString('en-US', {
-                              hour: 'numeric',
-                              minute: '2-digit',
-                            })}
-                          </span>
-                        )}
-                      </div>
-                      {lastMessage && (
-                        <p
-                          className={`text-sm truncate ${hasUnread ? 'text-grey-300 font-medium' : 'text-grey-500'}`}
-                        >
-                          {lastMessage.senderId === user?.id && 'You: '}
-                          {lastMessage.content.length > 40
-                            ? lastMessage.content.substring(0, 40) + '...'
-                            : lastMessage.content}
-                        </p>
-                      )}
-                    </div>
-                    {hasUnread && (
-                      <div className="bg-white text-black text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
-                        {conversation.unreadCount > 9 ? '9+' : conversation.unreadCount}
-                      </div>
-                    )}
-                  </button>
-                )
-              })
             )}
           </div>
         )}

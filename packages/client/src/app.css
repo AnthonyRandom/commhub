@@ -45,6 +45,9 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-size: var(--font-size-base, 16px);
+  background-color: var(--bg-primary, #141414);
+  color: var(--text-primary, #ffffff);
 }
 
 /* Custom scrollbar */

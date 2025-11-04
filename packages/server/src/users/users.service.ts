@@ -380,4 +380,30 @@ export class UsersService {
 
     return user.blockedUsers;
   }
+
+  async haveUsersBlockedEachOther(
+    userId1: number,
+    userId2: number
+  ): Promise<boolean> {
+    const blockCheck = await this.prisma.user.findMany({
+      where: {
+        OR: [
+          {
+            id: userId1,
+            blockedUsers: {
+              some: { id: userId2 },
+            },
+          },
+          {
+            id: userId2,
+            blockedUsers: {
+              some: { id: userId1 },
+            },
+          },
+        ],
+      },
+    });
+
+    return blockCheck.length > 0;
+  }
 }

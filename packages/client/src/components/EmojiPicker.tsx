@@ -556,7 +556,7 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({ isOpen, onClose, onSelectEmoj
       {/* Emoji Picker */}
       <div
         style={positionStyles}
-        className="bg-grey-900 border-2 border-grey-700 w-[360px] h-[420px] flex flex-col z-50 animate-slide-up"
+        className="bg-grey-900 border-2 border-grey-700 w-[372px] h-[420px] flex flex-col z-50 animate-slide-up"
       >
         {/* Header */}
         <div className="border-b-2 border-grey-700 p-3 flex items-center justify-between">
@@ -584,7 +584,7 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({ isOpen, onClose, onSelectEmoj
         </div>
 
         {/* Category Tabs */}
-        <div className="border-b-2 border-grey-800 flex overflow-x-auto">
+        <div className="border-b-2 border-grey-800 flex">
           {emojiCategories.map((category, index) => {
             const Icon = category.icon
             const isActive = selectedCategory === index

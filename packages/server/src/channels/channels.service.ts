@@ -306,6 +306,18 @@ export class ChannelsService {
             username: true,
           },
         },
+        replyTo: {
+          select: {
+            id: true,
+            content: true,
+            user: {
+              select: {
+                id: true,
+                username: true,
+              },
+            },
+          },
+        },
       },
       orderBy: {
         createdAt: 'asc',

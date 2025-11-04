@@ -39,9 +39,11 @@ export class AudioDeviceManager {
   private currentInputDevice: AudioDevice | null = null
   private currentOutputDevice: AudioDevice | null = null
   private isInitialized = false
+  private lastDeviceChangeTime = 0
 
   // Device monitoring
   private readonly MONITOR_INTERVAL = 2000 // Check every 2 seconds
+  private readonly DEVICE_CHANGE_THROTTLE = 1000 // Throttle device changes to 1 second
   private readonly TEST_TIMEOUT = 5000 // 5 seconds to test a device
 
   constructor() {
@@ -150,7 +152,6 @@ export class AudioDeviceManager {
     // Use the modern devicechange event if available
     if (navigator.mediaDevices && navigator.mediaDevices.ondevicechange !== undefined) {
       navigator.mediaDevices.ondevicechange = () => {
-        console.log('[AudioDeviceManager] Device change detected')
         this.handleDeviceChange()
       }
     }
@@ -168,6 +169,15 @@ export class AudioDeviceManager {
    * Handle device change events
    */
   private async handleDeviceChange(): Promise<void> {
+    const now = Date.now()
+
+    // Throttle device change notifications
+    if (now - this.lastDeviceChangeTime < this.DEVICE_CHANGE_THROTTLE) {
+      return
+    }
+
+    this.lastDeviceChangeTime = now
+
     await this.refreshDevices()
 
     // Auto-switch to preferred devices if current device was removed
@@ -492,6 +502,12 @@ export class AudioDeviceManager {
    * Add device change listener
    */
   addDeviceChangeListener(callback: DeviceChangeCallback): () => void {
+    // Prevent duplicate listeners
+    if (this.deviceChangeListeners.includes(callback)) {
+      console.warn('[AudioDeviceManager] Attempted to add duplicate device change listener')
+      return () => {} // Return no-op unsubscribe function
+    }
+
     this.deviceChangeListeners.push(callback)
 
     // Return unsubscribe function

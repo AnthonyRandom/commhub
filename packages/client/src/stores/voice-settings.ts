@@ -146,10 +146,19 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>((set, get) => ({
 
   loadDevices: async () => {
     try {
+      // Prevent multiple simultaneous calls
+      const currentState = get()
+      if (currentState.isLoadingDevices) {
+        return
+      }
+
       set({ isLoadingDevices: true })
 
       // Use the audio device manager to get properly formatted devices
       await audioDeviceManager.initialize()
+
+      // Setup device change listener on first load
+      setupDeviceChangeListener()
 
       const inputDevices = audioDeviceManager.getDevicesByType('audioinput')
       const outputDevices = audioDeviceManager.getDevicesByType('audiooutput')
@@ -214,11 +223,22 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>((set, get) => ({
 // Initialize settings on store creation
 useVoiceSettingsStore.getState().loadSettings()
 
-// Set up device change listener through audio device manager
-audioDeviceManager.addDeviceChangeListener(() => {
-  console.log('[VoiceSettings] Audio devices changed, reloading...')
-  useVoiceSettingsStore.getState().loadDevices()
-})
+// Device change listener setup flag
+let deviceChangeListenerSetup = false
+
+// Function to setup device change listener (called only once)
+const setupDeviceChangeListener = () => {
+  if (!deviceChangeListenerSetup) {
+    audioDeviceManager.addDeviceChangeListener(() => {
+      // Only log if not already loading devices
+      if (!useVoiceSettingsStore.getState().isLoadingDevices) {
+        console.log('[VoiceSettings] Audio devices changed, reloading...')
+      }
+      useVoiceSettingsStore.getState().loadDevices()
+    })
+    deviceChangeListenerSetup = true
+  }
+}
 
 // Export helper functions
 export const getVoiceSettings = () => useVoiceSettingsStore.getState().settings

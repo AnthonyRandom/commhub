@@ -215,23 +215,16 @@ class EnhancedSpeakingDetector {
    * Determine if audio contains speech using multiple criteria
    */
   private shouldDetectSpeaking(metrics: ReturnType<typeof this.calculateAudioMetrics>): boolean {
-    const { rms, lowAvg, highAvg, spectralCentroid } = metrics
+    const { rms } = metrics
 
-    // Adaptive threshold based on sensitivity setting
-    const baseThreshold = this.speakingConfig.noiseGate || 30
-    const adaptiveThreshold = baseThreshold * (1 + (100 - this.speakingConfig.sensitivity) / 100)
+    // Very low threshold to detect any microphone noise
+    // Use sensitivity to adjust how easily it triggers (lower sensitivity = easier to trigger)
+    const baseThreshold = 5 // Much lower base threshold
+    const sensitivityFactor = (100 - this.speakingConfig.sensitivity) / 100 // 0-1 scale where higher sensitivity = lower threshold
+    const threshold = baseThreshold * (0.1 + sensitivityFactor * 2) // Range from 0.5 to 5.0
 
-    // Volume check
-    if (rms < adaptiveThreshold) return false
-
-    // Voice typically has more energy in lower frequencies
-    const voiceRatio = lowAvg / (highAvg + 1)
-    if (voiceRatio < 1.2) return false
-
-    // Spectral centroid should be in speech range (roughly 0.3-0.7 of spectrum)
-    if (spectralCentroid < 0.2 || spectralCentroid > 0.8) return false
-
-    return true
+    // Simple volume check - trigger on any detectable noise
+    return rms > threshold
   }
 
   /**

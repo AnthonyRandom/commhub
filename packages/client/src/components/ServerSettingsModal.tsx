@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { X, Trash2, RefreshCw, Copy, Check } from 'lucide-react'
+import { X, Trash2 } from 'lucide-react'
 import { apiService, type Server } from '../services/api'
 import { useServersStore } from '../stores/servers'
 import { useAuthStore } from '../stores/auth'
@@ -15,8 +15,6 @@ const ServerSettingsModal: React.FC<ServerSettingsModalProps> = ({ isOpen, onClo
   const [serverDescription, setServerDescription] = useState(server?.description || '')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const [inviteCode, setInviteCode] = useState(server?.inviteCode || '')
-  const [copiedInvite, setCopiedInvite] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const { user } = useAuthStore()
   const { fetchServers } = useServersStore()
@@ -61,28 +59,6 @@ const ServerSettingsModal: React.FC<ServerSettingsModalProps> = ({ isOpen, onClo
     } finally {
       setIsLoading(false)
     }
-  }
-
-  const handleRegenerateInvite = async () => {
-    if (!server || !isOwner) return
-
-    setIsLoading(true)
-    setError('')
-
-    try {
-      const response = await apiService.getServerInviteCode(server.id)
-      setInviteCode(response.inviteCode)
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to regenerate invite code')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleCopyInvite = () => {
-    navigator.clipboard.writeText(inviteCode)
-    setCopiedInvite(true)
-    setTimeout(() => setCopiedInvite(false), 2000)
   }
 
   const handleLeaveServer = async () => {
@@ -174,50 +150,6 @@ const ServerSettingsModal: React.FC<ServerSettingsModalProps> = ({ isOpen, onClo
                 )}
               </div>
             )}
-          </div>
-
-          {/* Invite Code Section */}
-          <div>
-            <h3 className="font-bold text-white text-lg mb-3 border-b border-grey-800 pb-2">
-              Invite Code
-            </h3>
-            <div className="space-y-3">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={inviteCode}
-                  readOnly
-                  className="flex-1 bg-grey-850 border-2 border-grey-700 px-4 py-2 text-white font-mono"
-                />
-                <button
-                  onClick={handleCopyInvite}
-                  className="px-4 py-2 bg-grey-850 text-white border-2 border-grey-700 hover:border-white transition-colors flex items-center gap-2"
-                  title="Copy invite code"
-                >
-                  {copiedInvite ? (
-                    <>
-                      <Check className="w-4 h-4" />
-                      Copied
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-4 h-4" />
-                      Copy
-                    </>
-                  )}
-                </button>
-              </div>
-              {isOwner && (
-                <button
-                  onClick={handleRegenerateInvite}
-                  disabled={isLoading}
-                  className="px-4 py-2 bg-grey-850 text-white border-2 border-grey-700 hover:border-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Regenerate Code
-                </button>
-              )}
-            </div>
           </div>
 
           {/* Members Section */}

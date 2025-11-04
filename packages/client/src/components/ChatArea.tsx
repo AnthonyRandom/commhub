@@ -21,6 +21,9 @@ import { wsManager } from '../services/websocket-manager'
 import { useAuthStore } from '../stores/auth'
 import { useVoiceStore } from '../stores/voice'
 import { voiceManager } from '../services/voice-manager'
+import { useServersStore } from '../stores/servers'
+import { useSettingsStore } from '../stores/settings'
+import { useFriendsStore } from '../stores/friends'
 import MembersModal from './MembersModal'
 import VoiceControls from './VoiceControls'
 import GifPicker from './GifPicker'
@@ -112,7 +115,7 @@ const VoiceChannelParticipants: React.FC = () => {
     <div className="w-full max-w-6xl">
       {/* Grid of participants - centered layout */}
       <div
-        className="grid gap-3 justify-items-center items-start"
+        className="grid gap-5 justify-items-center items-start"
         style={{
           gridTemplateColumns: `repeat(${gridCols}, minmax(0, max-content))`,
           justifyContent: 'center',
@@ -306,10 +309,18 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   const editMessage = useMessagesStore((state) => state.editMessage)
   const deleteMessage = useMessagesStore((state) => state.deleteMessage)
   const { user } = useAuthStore()
+  const { fetchServers } = useServersStore()
+  const { getTimeFormat } = useSettingsStore()
+  const { blockedUsers } = useFriendsStore()
 
   const { connectedChannelId, isConnecting } = useVoiceStore()
   const isVoiceChannel = selectedChannel?.type === 'voice'
   const isConnectedToVoice = connectedChannelId === selectedChannel?.id
+
+  // Helper function to check if a user is blocked
+  const isUserBlocked = (userId: number) => {
+    return blockedUsers.some((blockedUser) => blockedUser.id === userId)
+  }
 
   // Fetch messages when channel changes (text channels only)
   useEffect(() => {
@@ -449,6 +460,27 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
     return isOwner && timeSinceCreation <= fifteenMinutes
   }
 
+  const shouldSeparateMessages = (
+    currentMessage: Message,
+    previousMessage: Message | null,
+    currentIndex: number
+  ): boolean => {
+    // Always show user info for the first message
+    if (currentIndex === 0) return true
+
+    // Always separate if different users
+    if (!previousMessage || previousMessage.user?.id !== currentMessage.user?.id) return true
+
+    // Check time gap between messages
+    const currentTime = new Date(currentMessage.createdAt).getTime()
+    const previousTime = new Date(previousMessage.createdAt).getTime()
+    const timeGap = currentTime - previousTime
+
+    // Separate if gap is more than 10 minutes (600,000 ms)
+    const tenMinutes = 10 * 60 * 1000
+    return timeGap > tenMinutes
+  }
+
   const isServerOwner = server && user && server.ownerId === user.id
 
   useEffect(() => {
@@ -457,29 +489,45 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
     }
   }, [editingMessageId])
 
+  // Poll for server member updates when members modal is open
+  useEffect(() => {
+    if (!showMembersModal || !server) return
+
+    const pollInterval = setInterval(async () => {
+      try {
+        await fetchServers()
+      } catch (error) {
+        console.error('Error polling for server member updates:', error)
+      }
+    }, 10000) // Poll every 10 seconds (less frequent than DM polling)
+
+    return () => clearInterval(pollInterval)
+  }, [showMembersModal, server, fetchServers])
+
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp)
     const now = new Date()
     const isToday = date.toDateString() === now.toDateString()
+    const formatTime = getTimeFormat()
 
     if (isToday) {
-      return date.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
+      return formatTime(date)
     }
 
-    return date.toLocaleDateString('en-US', {
+    return `${date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    })} ${formatTime(date)}`
   }
 
   const extractUrls = (text: string): string[] => {
     const urlRegex = /(https?:\/\/[^\s]+)/g
     return text.match(urlRegex) || []
+  }
+
+  const removeUrlsFromText = (text: string): string => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g
+    return text.replace(urlRegex, '').trim()
   }
 
   const isGifUrl = (url: string): boolean => {
@@ -549,6 +597,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
 
         {/* Members Modal */}
         <MembersModal
+          key={`members-${server?.id}-${server?.members?.length || 0}`}
           isOpen={showMembersModal}
           onClose={() => setShowMembersModal(false)}
           server={server}
@@ -593,13 +642,15 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
         ) : (
           messages.map((message, index) => {
             const isOwnMessage = message.user?.id === user?.id
-            const showUserInfo = index === 0 || messages[index - 1]?.user?.id !== message.user?.id
+            const previousMessage = index > 0 ? messages[index - 1] : null
+            const showUserInfo = shouldSeparateMessages(message, previousMessage, index)
             const canModify = canEditOrDelete(message)
             const canDelete = isOwnMessage || isServerOwner
             const isEditing = editingMessageId === message.id
             const urls = extractUrls(message.content)
             const messageIsGif =
               urls.length === 1 && isGifUrl(urls[0]) && message.content === urls[0]
+            const cleanedContent = removeUrlsFromText(message.content)
 
             return (
               <div key={message.id} className="message-enter group relative">
@@ -633,11 +684,15 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
                           <div className="flex items-center gap-1 mb-1">
                             <ReplyIcon className="w-3 h-3 text-grey-500" />
                             <span className="text-grey-400 font-bold text-xs">
-                              {message.replyTo.user.username}
+                              {isUserBlocked(message.replyTo.user.id)
+                                ? 'Blocked User'
+                                : message.replyTo.user.username}
                             </span>
                           </div>
                           <p className="text-grey-400 text-xs truncate">
-                            {message.replyTo.content}
+                            {isUserBlocked(message.replyTo.user.id)
+                              ? '[This user is blocked]'
+                              : removeUrlsFromText(message.replyTo.content)}
                           </p>
                         </div>
                       )}
@@ -683,9 +738,13 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
                             </div>
                           ) : (
                             <>
-                              <p className="text-grey-100 break-words whitespace-pre-wrap">
-                                {message.content}
-                              </p>
+                              {cleanedContent && (
+                                <p className="text-grey-100 break-words whitespace-pre-wrap">
+                                  {isUserBlocked(message.userId)
+                                    ? '[This user is blocked]'
+                                    : cleanedContent}
+                                </p>
+                              )}
                               {/* Display media embeds for URLs in the message */}
                               {urls.map((url, urlIndex) => (
                                 <MediaEmbed key={`${message.id}-${urlIndex}`} url={url} />
@@ -753,11 +812,15 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
                           <div className="flex items-center gap-1 mb-1">
                             <ReplyIcon className="w-3 h-3 text-grey-500" />
                             <span className="text-grey-400 font-bold text-xs">
-                              {message.replyTo.user.username}
+                              {isUserBlocked(message.replyTo.user.id)
+                                ? 'Blocked User'
+                                : message.replyTo.user.username}
                             </span>
                           </div>
                           <p className="text-grey-400 text-xs truncate">
-                            {message.replyTo.content}
+                            {isUserBlocked(message.replyTo.user.id)
+                              ? '[This user is blocked]'
+                              : removeUrlsFromText(message.replyTo.content)}
                           </p>
                         </div>
                       )}
@@ -802,9 +865,13 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
                             </div>
                           ) : (
                             <>
-                              <p className="text-grey-100 break-words whitespace-pre-wrap inline">
-                                {message.content}
-                              </p>
+                              {cleanedContent && (
+                                <p className="text-grey-100 break-words whitespace-pre-wrap inline">
+                                  {isUserBlocked(message.userId)
+                                    ? '[This user is blocked]'
+                                    : cleanedContent}
+                                </p>
+                              )}
                               {message.isEdited && (
                                 <span className="text-grey-600 text-xs ml-2 px-2 py-0.5 bg-grey-850 border border-grey-700 align-middle">
                                   edited
@@ -904,7 +971,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
               onChange={(e) => setMessageInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={`Message #${selectedChannel.name}`}
-              className="w-full bg-grey-850 border-2 border-grey-700 px-4 py-3 pr-24 text-white resize-none focus:border-white"
+              className="w-full bg-grey-850 border-2 border-grey-700 px-4 py-3 pr-32 text-white resize-none focus:border-white"
               rows={1}
               maxLength={2000}
               style={{
@@ -915,30 +982,30 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
             />
 
             {/* Action Buttons */}
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
+            <div className="absolute right-2 top-[10px] flex items-center gap-1 z-10">
               <button
                 type="button"
                 onClick={() => setShowGifPicker(!showGifPicker)}
-                className="p-2 hover:bg-grey-800 text-grey-400 hover:text-white transition-colors border-2 border-transparent hover:border-grey-600"
+                className="h-8 w-8 flex items-center justify-center hover:bg-grey-800 text-grey-400 hover:text-white transition-colors border-2 border-transparent hover:border-grey-600"
                 title="Send GIF"
               >
-                <ImageIcon className="w-5 h-5" />
+                <ImageIcon className="w-4 h-4" />
               </button>
               <button
                 type="button"
                 onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                className="p-2 hover:bg-grey-800 text-grey-400 hover:text-white transition-colors border-2 border-transparent hover:border-grey-600"
+                className="h-8 w-8 flex items-center justify-center hover:bg-grey-800 text-grey-400 hover:text-white transition-colors border-2 border-transparent hover:border-grey-600"
                 title="Add emoji"
               >
-                <Smile className="w-5 h-5" />
+                <Smile className="w-4 h-4" />
               </button>
               <button
                 type="submit"
                 disabled={!messageInput.trim()}
-                className="p-2 bg-white text-black hover:bg-grey-100 disabled:bg-grey-700 disabled:text-grey-500 disabled:cursor-not-allowed transition-colors border-2 border-transparent"
+                className="h-8 w-8 flex items-center justify-center bg-white text-black hover:bg-grey-100 disabled:bg-grey-700 disabled:text-grey-500 disabled:cursor-not-allowed transition-colors border-2 border-transparent"
                 title="Send message"
               >
-                <Send className="w-5 h-5" />
+                <Send className="w-4 h-4" />
               </button>
             </div>
           </form>
@@ -964,6 +1031,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
 
       {/* Members Modal */}
       <MembersModal
+        key={`members-mobile-${server?.id}-${server?.members?.length || 0}`}
         isOpen={showMembersModal}
         onClose={() => setShowMembersModal(false)}
         server={server}

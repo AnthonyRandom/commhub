@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { apiService, type DirectMessage, type Conversation } from '../services/api'
 import { useAuthStore } from './auth'
+import { useSettingsStore } from './settings'
+import { notificationService } from '../services/notifications'
 
 interface DirectMessagesState {
   conversations: Conversation[]
@@ -223,12 +225,24 @@ export const useDirectMessagesStore = create<DirectMessagesState>((set, get) => 
       }
 
       // Add new message normally
-      return {
+      const newState = {
         messages: {
           ...state.messages,
           [otherUserId]: [...conversationMessages, message],
         },
       }
+
+      // Trigger notification for incoming messages (not from current user)
+      if (message.senderId !== currentUser.id) {
+        const settings = useSettingsStore.getState()
+        notificationService.showDMNotification(
+          message.sender.username,
+          message.content,
+          settings
+        )
+      }
+
+      return newState
     })
   },
 

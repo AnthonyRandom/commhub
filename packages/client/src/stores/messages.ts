@@ -153,6 +153,9 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
             userId: message.userId,
             channelId: message.channelId,
             createdAt: message.createdAt,
+            isEdited: message.isEdited,
+            editedAt: message.editedAt,
+            replyTo: message.replyTo,
             user: {
               id: message.userId,
               username: message.username,

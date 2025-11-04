@@ -10,6 +10,7 @@ import FriendsPanel from './components/FriendsPanel'
 import { useAuthStore } from './stores/auth'
 import { useServersStore } from './stores/servers'
 import { useDirectMessagesStore } from './stores/directMessages'
+import { useVoiceStore } from './stores/voice'
 import { wsManager } from './services/websocket-manager'
 import type { Server, Channel } from './services/api'
 import './app.css'
@@ -27,6 +28,7 @@ function App() {
   const { isAuthenticated, isLoading } = useAuthStore()
   const selectServer = useServersStore((state) => state.selectServer)
   const { conversations, fetchConversations, deleteConversation } = useDirectMessagesStore()
+  const { connectedChannelId } = useVoiceStore()
 
   // Initialize WebSocket manager and check auth on mount
   useEffect(() => {
@@ -95,6 +97,10 @@ function App() {
     }
   }
 
+  const handleBackFromDM = () => {
+    setSelectedDMUserId(null)
+  }
+
   const handleCreateServer = () => {
     setShowServerModal(true)
   }
@@ -143,11 +149,25 @@ function App() {
             onDeleteDM={handleDeleteDM}
           />
           {showFriendsPanel ? (
-            <FriendsPanel selectedDMUserId={selectedDMUserId} />
+            <FriendsPanel
+              selectedDMUserId={selectedDMUserId}
+              onStartDM={handleDMSelect}
+              onBackFromDM={handleBackFromDM}
+            />
           ) : (
             <ChatArea selectedChannel={selectedChannel} server={selectedServer} />
           )}
         </main>
+
+        {/* Persistent Voice Indicator */}
+        {connectedChannelId && (
+          <div className="fixed bottom-4 left-4 z-50">
+            <div className="bg-grey-900 border-2 border-grey-700 px-3 py-2 flex items-center gap-2 animate-fade-in">
+              <div className="w-2 h-2 bg-green-500 animate-pulse"></div>
+              <span className="text-white text-sm font-medium">Connected to Voice</span>
+            </div>
+          </div>
+        )}
 
         {/* Modals */}
         <ServerModal isOpen={showServerModal} onClose={() => setShowServerModal(false)} />

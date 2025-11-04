@@ -2,10 +2,19 @@ import { wsService } from './websocket'
 import { webrtcService } from './webrtc'
 import { useVoiceStore } from '../stores/voice'
 import { soundManager } from './sound-manager'
+import { useSettingsStore } from '../stores/settings'
+import { useAuthStore } from '../stores/auth'
 import type SimplePeer from 'simple-peer'
 
 class VoiceManager {
   private isInitialized = false
+
+  /**
+   * Check if sounds are enabled in settings
+   */
+  private shouldPlaySounds(): boolean {
+    return useSettingsStore.getState().sounds
+  }
 
   /**
    * Initialize voice manager and set up WebSocket listeners
@@ -75,8 +84,10 @@ class VoiceManager {
       // Join the voice channel via WebSocket
       wsService.getSocket()?.emit('join-voice-channel', { channelId })
 
-      // Play join sound for ourselves
-      soundManager.playUserJoined()
+      // Play join sound for ourselves (if enabled)
+      if (this.shouldPlaySounds()) {
+        soundManager.playUserJoined()
+      }
 
       useVoiceStore.getState().setIsConnecting(false)
     } catch (error) {
@@ -99,8 +110,16 @@ class VoiceManager {
       return
     }
 
-    // Play leave sound for ourselves
-    soundManager.playUserLeft()
+    // Play leave sound for ourselves (if enabled)
+    if (this.shouldPlaySounds()) {
+      soundManager.playUserLeft()
+    }
+
+    // Remove local user from voice store
+    const localUser = useAuthStore.getState().user
+    if (localUser) {
+      useVoiceStore.getState().removeConnectedUser(localUser.id)
+    }
 
     // Notify server
     wsService.getSocket()?.emit('leave-voice-channel', { channelId })
@@ -132,8 +151,8 @@ class VoiceManager {
   private handleVoiceUserJoined(data: { channelId: number; userId: number; username: string }) {
     console.log(`[VoiceManager] ➕ User joined voice channel: ${data.username} (${data.userId})`)
 
-    // Play join sound (only if we're already in the channel)
-    if (webrtcService.getCurrentChannelId() === data.channelId) {
+    // Play join sound (only if we're already in the channel and sounds are enabled)
+    if (webrtcService.getCurrentChannelId() === data.channelId && this.shouldPlaySounds()) {
       soundManager.playUserJoined()
     }
 
@@ -159,8 +178,8 @@ class VoiceManager {
   private handleVoiceUserLeft(data: { channelId: number; userId: number; username: string }) {
     console.log('User left voice channel:', data.username)
 
-    // Play leave sound (only if we're still in the channel)
-    if (webrtcService.getCurrentChannelId() === data.channelId) {
+    // Play leave sound (only if we're still in the channel and sounds are enabled)
+    if (webrtcService.getCurrentChannelId() === data.channelId && this.shouldPlaySounds()) {
       soundManager.playUserLeft()
     }
 

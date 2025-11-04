@@ -22,19 +22,11 @@ import { useVoiceSettingsStore } from '../stores/voice-settings'
 import { voiceManager } from '../services/voice-manager'
 import { useVoiceStore } from '../stores/voice'
 import { webrtcService } from '../services/webrtc'
+import { useSettingsStore } from '../stores/settings'
 
 interface SettingsModalProps {
   isOpen: boolean
   onClose: () => void
-}
-
-interface UserSettings {
-  notifications: boolean
-  sounds: boolean
-  fontSize: 'small' | 'medium' | 'large'
-  timestampFormat: '12h' | '24h'
-  audioInputDeviceId?: string
-  audioOutputDeviceId?: string
 }
 
 interface AudioDevice {
@@ -60,13 +52,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [micLevel, setMicLevel] = useState(0)
   const [testStream, setTestStream] = useState<MediaStream | null>(null)
 
-  // User preferences state
-  const [settings, setSettings] = useState<UserSettings>({
-    notifications: true,
-    sounds: true,
-    fontSize: 'medium',
-    timestampFormat: '12h',
-  })
+  // User preferences from global store
+  const settings = useSettingsStore()
+  const updateSetting = useSettingsStore((state) => state.updateSetting)
 
   // Voice settings state
   const voiceSettings = useVoiceSettingsStore((state) => state.settings)
@@ -75,18 +63,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [isRecordingPTT, setIsRecordingPTT] = useState(false)
   const [pttKeyDisplay, setPttKeyDisplay] = useState('')
 
-  // Load settings from localStorage on mount
+  // Load audio devices
   useEffect(() => {
-    const savedSettings = localStorage.getItem('commhub-settings')
-    if (savedSettings) {
-      try {
-        setSettings(JSON.parse(savedSettings))
-      } catch (error) {
-        console.error('Failed to load settings:', error)
-      }
-    }
-
-    // Load audio devices
     loadAudioDevices()
   }, [])
 
@@ -272,13 +250,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   }
 
   // Save settings to localStorage when they change
-  const updateSetting = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
-    console.log('[Settings] Updating setting:', key, '=', value)
-    const newSettings = { ...settings, [key]: value }
-    setSettings(newSettings)
-    localStorage.setItem('commhub-settings', JSON.stringify(newSettings))
-    console.log('[Settings] Settings saved:', newSettings)
-  }
 
   // Voice settings update functions
   const updateVoiceSetting = (updates: any) => {
@@ -1023,7 +994,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-grey-400 text-sm">Version</span>
-                  <span className="text-white text-sm font-mono">1.1.2</span>
+                  <span className="text-white text-sm font-mono">1.1.3</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-grey-400 text-sm">Product</span>

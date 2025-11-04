@@ -8,11 +8,13 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, Inject } from '@nestjs/common';
+import { Logger, Inject, forwardRef } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { MessagesService } from '../messages/messages.service';
 import { UsersService } from '../users/users.service';
 import { DirectMessagesService } from '../direct-messages/direct-messages.service';
+import { ChannelsService } from '../channels/channels.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 interface AuthenticatedSocket extends Socket {
   userId?: number;
@@ -46,7 +48,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private jwtService: JwtService,
     private messagesService: MessagesService,
     private usersService: UsersService,
-    private directMessagesService: DirectMessagesService
+    private directMessagesService: DirectMessagesService,
+    private prisma: PrismaService,
+    @Inject(forwardRef(() => ChannelsService))
+    private channelsService: ChannelsService
   ) {}
 
   async handleConnection(client: AuthenticatedSocket) {
@@ -233,8 +238,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    // Note: Authorization check would require ChannelsService injection
-    // For now, we rely on the message sending authorization
+    // Check if user has access to this channel (is member of server)
+    try {
+      const channel = await this.channelsService.findOne(
+        data.channelId,
+        client.userId
+      );
+      if (!channel) {
+        client.emit('error', { message: 'Channel not found or access denied' });
+        return;
+      }
+    } catch (error) {
+      this.logger.error(
+        `Channel join authorization failed for channel ${data.channelId}:`,
+        error.message
+      );
+      client.emit('error', { message: 'Access denied' });
+      return;
+    }
+
     const roomName = `channel-${data.channelId}`;
     client.join(roomName);
     this.logger.log(`${client.username} joined channel room: ${roomName}`);
@@ -692,6 +714,30 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return;
       }
 
+      // Check if user has access to this channel (is member of server)
+      try {
+        const channel = await this.channelsService.findOne(
+          data.channelId,
+          client.userId
+        );
+        if (!channel) {
+          this.logger.error(
+            `[Voice] Channel ${data.channelId} not found or access denied for user ${client.userId}`
+          );
+          client.emit('error', {
+            message: 'Channel not found or access denied',
+          });
+          return;
+        }
+      } catch (error) {
+        this.logger.error(
+          `[Voice] Authorization check failed for channel ${data.channelId}:`,
+          error.message
+        );
+        client.emit('error', { message: 'Access denied' });
+        return;
+      }
+
       // If user is already in another voice channel, leave it first
       const currentVoiceChannel = this.userVoiceChannels.get(client.userId);
       if (currentVoiceChannel && currentVoiceChannel !== data.channelId) {
@@ -933,6 +979,27 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           return;
         }
 
+        // Check if user has access to this channel (is member of server)
+        try {
+          const channel = await this.channelsService.findOne(
+            data.channelId,
+            client.userId
+          );
+          if (!channel) {
+            client.emit('error', {
+              message: 'Channel not found or access denied',
+            });
+            return;
+          }
+        } catch (error) {
+          this.logger.error(
+            `[Voice] Authorization check failed for channel ${data.channelId}:`,
+            error.message
+          );
+          client.emit('error', { message: 'Access denied' });
+          return;
+        }
+
         const members = this.voiceChannelMembers.get(data.channelId);
         const membersList = members ? Array.from(members) : [];
 
@@ -947,6 +1014,38 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (data.serverId) {
         if (typeof data.serverId !== 'number' || data.serverId <= 0) {
           client.emit('error', { message: 'Invalid server ID' });
+          return;
+        }
+
+        // Check if user is a member of the server
+        try {
+          const server = await this.prisma.server.findUnique({
+            where: { id: data.serverId },
+            select: {
+              id: true,
+              members: {
+                select: { id: true },
+              },
+            },
+          });
+
+          if (!server) {
+            client.emit('error', { message: 'Server not found' });
+            return;
+          }
+
+          if (!server.members.some(member => member.id === client.userId)) {
+            client.emit('error', {
+              message: 'You are not a member of this server',
+            });
+            return;
+          }
+        } catch (error) {
+          this.logger.error(
+            `[Voice] Server membership check failed for server ${data.serverId}:`,
+            error.message
+          );
+          client.emit('error', { message: 'Access denied' });
           return;
         }
 
@@ -972,7 +1071,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('voice-speaking')
-  handleVoiceSpeaking(
+  async handleVoiceSpeaking(
     @MessageBody() data: { channelId: number; isSpeaking: boolean },
     @ConnectedSocket() client: AuthenticatedSocket
   ) {
@@ -983,6 +1082,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         data.channelId <= 0 ||
         typeof data.isSpeaking !== 'boolean'
       ) {
+        return;
+      }
+
+      // Verify user has access to this channel and is currently in it
+      const userVoiceChannel = this.userVoiceChannels.get(client.userId);
+      if (userVoiceChannel !== data.channelId) {
+        this.logger.warn(
+          `[Voice] User ${client.userId} attempted to speak in channel ${data.channelId} but is in channel ${userVoiceChannel}`
+        );
         return;
       }
 
@@ -1042,16 +1150,33 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const members = this.voiceChannelMembers.get(channelId);
       const membersList = members ? Array.from(members) : [];
 
-      // Broadcast to all users in the server room
-      // We need to get the serverId from the channelId (requires database lookup)
-      // For now, broadcast to everyone connected
+      // Get the serverId from the channelId
+      const channel = await this.channelsService.findOne(channelId);
+      if (!channel) {
+        this.logger.warn(
+          `Channel ${channelId} not found for voice member broadcast`
+        );
+        return;
+      }
+
+      const serverId = channel.server.id;
+      const roomName = `server-${serverId}`;
+
+      // Broadcast to users in the server room first
+      this.server.to(roomName).emit('voice-channel-members', {
+        channelId,
+        members: membersList,
+      });
+
+      // Also broadcast to all connected users for backward compatibility
+      // This ensures older clients that haven't joined server rooms still receive updates
       this.server.emit('voice-channel-members', {
         channelId,
         members: membersList,
       });
 
       this.logger.log(
-        `[Voice] Broadcasted ${membersList.length} members for channel ${channelId}`
+        `[Voice] Broadcasted ${membersList.length} members for channel ${channelId} to server ${serverId} and all clients`
       );
     } catch (error) {
       this.logger.error(

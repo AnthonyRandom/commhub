@@ -36,7 +36,6 @@ const GifPicker: React.FC<GifPickerProps> = ({ isOpen, onClose, onSelectGif }) =
     { name: 'Angry' },
     { name: 'Thumbs Up' },
     { name: 'Thumbs Down' },
-    { name: 'Dancing' },
   ]
 
   useEffect(() => {
@@ -140,8 +139,8 @@ const GifPicker: React.FC<GifPickerProps> = ({ isOpen, onClose, onSelectGif }) =
         </div>
 
         {/* Categories */}
-        <div className="p-4 border-b-2 border-grey-800 overflow-x-auto">
-          <div className="flex gap-2">
+        <div className="p-4 border-b-2 border-grey-800">
+          <div className="flex flex-wrap gap-2">
             {categories.map((category) => {
               const Icon = category.icon
               const isActive = selectedCategory === category.name

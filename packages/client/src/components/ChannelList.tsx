@@ -51,7 +51,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
   const leaveServer = useServersStore((state) => state.leaveServer)
   const getServerInviteCode = useServersStore((state) => state.getServerInviteCode)
   const { user, logout } = useAuthStore()
-  const { connectedChannelId } = useVoiceStore()
+  const { connectedChannelId, connectedUsers } = useVoiceStore()
 
   const [showServerMenu, setShowServerMenu] = React.useState(false)
   const [inviteCode, setInviteCode] = React.useState<string | null>(null)
@@ -81,7 +81,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
       } catch (error) {
         console.error('Error polling for voice channel members:', error)
       }
-    }, 5000) // Poll every 5 seconds (more sparingly than DM polling)
+    }, 15000) // Poll every 15 seconds (even less frequent)
 
     return () => clearInterval(pollInterval)
   }, [server])
@@ -92,11 +92,11 @@ const ChannelList: React.FC<ChannelListProps> = ({
       const { channelId, members } = event.detail
       setVoiceChannelMembers((prev) => {
         const newMap = new Map(prev)
-        if (members.length === 0) {
-          newMap.delete(channelId)
-        } else {
+        // Only update if we have actual members to prevent flickering from empty responses
+        if (members.length > 0) {
           newMap.set(channelId, members)
         }
+        // Never remove channels based on polling to prevent flickering
         return newMap
       })
     }
@@ -358,29 +358,40 @@ const ChannelList: React.FC<ChannelListProps> = ({
                               contextMenuChannelId === channel.id ? null : channel.id
                             )
                           }}
-                          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-grey-800 transition-opacity"
+                          className={`opacity-0 group-hover:opacity-100 p-1 transition-opacity ${
+                            selectedChannel?.id === channel.id
+                              ? 'hover:bg-white hover:text-black'
+                              : 'hover:bg-grey-800'
+                          }`}
                         >
                           <MoreVertical className="w-3 h-3" />
                         </button>
                       </div>
                     )}
                     {contextMenuChannelId === channel.id && isOwner && (
-                      <div className="absolute right-0 top-full bg-grey-900 border-2 border-grey-700 z-50 min-w-[150px] animate-fade-in">
-                        <button
-                          onClick={() => handleEditChannel(channel)}
-                          className="w-full px-4 py-2 text-left text-white hover:bg-grey-800 flex items-center gap-2"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteChannel(channel)}
-                          className="w-full px-4 py-2 text-left text-red-400 hover:bg-grey-800 flex items-center gap-2"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Delete
-                        </button>
-                      </div>
+                      <>
+                        {/* Backdrop to close menu on outside click */}
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setContextMenuChannelId(null)}
+                        />
+                        <div className="absolute right-0 top-full bg-grey-900 border-2 border-grey-700 z-50 min-w-[150px] animate-fade-in">
+                          <button
+                            onClick={() => handleEditChannel(channel)}
+                            className="w-full px-4 py-2 text-left text-white hover:bg-grey-800 flex items-center gap-2"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteChannel(channel)}
+                            className="w-full px-4 py-2 text-left text-red-400 hover:bg-grey-800 flex items-center gap-2"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Delete
+                          </button>
+                        </div>
+                      </>
                     )}
                   </div>
                 ))}
@@ -442,36 +453,41 @@ const ChannelList: React.FC<ChannelListProps> = ({
                       {/* Voice Channel Members List */}
                       {hasMember && channelMembers.length > 0 && (
                         <div className="ml-6 mt-1 space-y-1">
-                          {channelMembers.slice(0, 5).map((member) => (
-                            <div key={member.userId} className="flex items-center gap-2">
-                              <div
-                                className={`w-4 h-4 border flex items-center justify-center flex-shrink-0 transition-colors ${
-                                  selectedChannel?.id === channel.id
-                                    ? 'bg-white border-white'
-                                    : 'bg-grey-700 border-grey-600'
-                                }`}
-                              >
-                                <span
-                                  className={`text-xs font-bold ${
+                          {channelMembers.slice(0, 5).map((member) => {
+                            const voiceUser = connectedUsers.get(member.userId)
+                            const isSpeaking = voiceUser?.isSpeaking || false
+
+                            return (
+                              <div key={member.userId} className="flex items-center gap-2">
+                                <div
+                                  className={`w-4 h-4 border flex items-center justify-center flex-shrink-0 transition-colors ${
                                     selectedChannel?.id === channel.id
-                                      ? 'text-black'
-                                      : 'text-grey-300'
+                                      ? `bg-white border-white ${isSpeaking ? 'ring-2 ring-green-400' : ''}`
+                                      : `bg-grey-700 border-grey-600 ${isSpeaking ? 'ring-2 ring-green-400' : ''}`
                                   }`}
                                 >
-                                  {member.username.charAt(0).toUpperCase()}
+                                  <span
+                                    className={`text-xs font-bold ${
+                                      selectedChannel?.id === channel.id
+                                        ? 'text-black'
+                                        : 'text-grey-300'
+                                    }`}
+                                  >
+                                    {member.username.charAt(0).toUpperCase()}
+                                  </span>
+                                </div>
+                                <span
+                                  className={`text-xs truncate flex-1 ${
+                                    selectedChannel?.id === channel.id
+                                      ? 'text-white'
+                                      : 'text-grey-400'
+                                  }`}
+                                >
+                                  {member.username}
                                 </span>
                               </div>
-                              <span
-                                className={`text-xs truncate flex-1 ${
-                                  selectedChannel?.id === channel.id
-                                    ? 'text-white'
-                                    : 'text-grey-400'
-                                }`}
-                              >
-                                {member.username}
-                              </span>
-                            </div>
-                          ))}
+                            )
+                          })}
                           {channelMembers.length > 5 && (
                             <div
                               className={`text-xs ml-6 ${
@@ -603,15 +619,22 @@ const ChannelList: React.FC<ChannelListProps> = ({
                     </div>
 
                     {contextMenuDMId === conversation.user.id && (
-                      <div className="absolute right-0 top-full mt-1 bg-grey-900 border-2 border-grey-700 z-50 min-w-[140px] animate-fade-in shadow-lg">
-                        <button
-                          onClick={() => handleDeleteDM(conversation)}
-                          className="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-grey-800 flex items-center gap-3 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Delete Chat
-                        </button>
-                      </div>
+                      <>
+                        {/* Backdrop to close menu on outside click */}
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setContextMenuDMId(null)}
+                        />
+                        <div className="absolute right-0 top-full mt-1 bg-grey-900 border-2 border-grey-700 z-50 min-w-[140px] animate-fade-in shadow-lg">
+                          <button
+                            onClick={() => handleDeleteDM(conversation)}
+                            className="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-grey-800 flex items-center gap-3 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Delete Chat
+                          </button>
+                        </div>
+                      </>
                     )}
                   </div>
                 )
@@ -775,7 +798,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
           </button>
           <button
             onClick={handleLogout}
-            className="p-2 text-grey-400 hover:text-white hover:bg-grey-800 transition-colors border-2 border-transparent hover:border-grey-700"
+            className="p-2 text-grey-400 hover:text-red-500 hover:bg-grey-800 transition-colors border-2 border-transparent hover:border-red-500"
             title="Logout"
           >
             <LogOut className="w-4 h-4" />

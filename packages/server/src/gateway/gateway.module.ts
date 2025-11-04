@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ChatGateway } from './chat.gateway';
 import { MessagesModule } from '../messages/messages.module';
@@ -17,7 +17,7 @@ import { PrismaModule } from '../prisma/prisma.module';
     MessagesModule,
     UsersModule,
     DirectMessagesModule,
-    ChannelsModule,
+    forwardRef(() => ChannelsModule),
     PrismaModule,
   ],
   providers: [ChatGateway],

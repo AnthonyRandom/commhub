@@ -1,11 +1,11 @@
 {
-  "version": "1.1.6",
-  "notes": "Version 1.1.6 - Enhanced update system and user experience improvements. Added manual update check functionality in settings, improved custom update notifications to prevent default dialogs, enhanced voice settings with better noise suppression options, and fixed various UI consistency issues.",
-  "pub_date": "2025-11-07T12:00:00Z",
+  "version": "1.1.7",
+  "notes": "Version 1.1.7 - User Status System Implementation. Added comprehensive user status functionality similar to Discord with Online, Idle, Do Not Disturb, and Invisible modes. Features include automatic idle detection, real-time status updates, status indicators throughout the UI, and DND notification suppression. Enhanced user experience with professional status management across friends list, member lists, and direct messages.",
+  "pub_date": "2025-11-07T15:00:00Z",
   "platforms": {
     "windows-x86_64": {
       "signature": "",
-      "url": "https://github.com/AnthonyRandom/commhub/releases/download/v1.1.6/commhub_1.1.6_x64_en-US.msi"
+      "url": "https://github.com/AnthonyRandom/commhub/releases/download/v1.1.7/commhub_1.1.7_x64_en-US.msi"
     }
   }
 }

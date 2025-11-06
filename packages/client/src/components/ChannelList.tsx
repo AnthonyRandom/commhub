@@ -10,7 +10,6 @@ import {
   Edit2,
   Trash2,
   PhoneCall,
-  PhoneOff,
   MessageSquare,
   Users,
 } from 'lucide-react'
@@ -20,8 +19,8 @@ import { useAuthStore } from '../stores/auth'
 import { useVoiceStore } from '../stores/voice'
 import { apiService, type Conversation } from '../services/api'
 import { wsService } from '../services/websocket'
-import { voiceManager } from '../services/voice-manager'
 import StatusIndicator from './StatusIndicator'
+import VoiceStatus from './VoiceStatus'
 import type { Channel, Server } from '../services/api'
 
 interface ChannelListProps {
@@ -761,26 +760,8 @@ const ChannelList: React.FC<ChannelListProps> = ({
         )}
       </div>
 
-      {/* Current Voice Channel Status */}
-      {currentVoiceChannel && (
-        <div className="border-t-2 border-grey-800 bg-grey-900 p-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              <Volume2 className="w-4 h-4 text-grey-400 flex-shrink-0" />
-              <span className="text-grey-300 text-sm font-medium truncate">
-                {currentVoiceChannel.name}
-              </span>
-            </div>
-            <button
-              onClick={() => voiceManager.leaveVoiceChannel()}
-              className="p-1.5 text-grey-400 hover:text-red-400 hover:bg-grey-800 transition-colors border-2 border-transparent hover:border-red-700 flex-shrink-0"
-              title="Disconnect from voice"
-            >
-              <PhoneOff className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Enhanced Voice Status */}
+      <VoiceStatus currentVoiceChannel={currentVoiceChannel || null} />
 
       {/* User Info Footer */}
       <div className="border-t-2 border-grey-800 bg-grey-950 p-3 flex items-center justify-between">

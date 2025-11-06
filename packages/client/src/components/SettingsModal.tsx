@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { X, Bell, Volume2, Type, Clock, Mic, Zap, Shield, Gauge, Wifi } from 'lucide-react'
+import { X, Bell, Volume2, Type, Clock, Mic, Zap, Shield, Gauge } from 'lucide-react'
 import { useVoiceSettingsStore } from '../stores/voice-settings'
 import { voiceManager } from '../services/voice-manager'
-import { useVoiceStore } from '../stores/voice'
 import { webrtcService } from '../services/webrtc'
 import { useSettingsStore } from '../stores/settings'
 import { useStatusStore } from '../stores/status'
+import { apiService } from '../services/api'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -19,6 +19,11 @@ interface AudioDevice {
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'status' | 'appearance' | 'audio' | 'application'>(
+    'status'
+  )
+
   // Audio devices state
   const [audioInputDevices, setAudioInputDevices] = useState<AudioDevice[]>([])
   const [audioOutputDevices, setAudioOutputDevices] = useState<AudioDevice[]>([])
@@ -31,12 +36,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const updateSetting = useSettingsStore((state) => state.updateSetting)
 
   // Status settings
-  const { updateStatus } = useStatusStore()
+  const { updateStatus, getUserStatus } = useStatusStore()
+  const currentUser = apiService.getUser()
+  const currentStatus = currentUser ? getUserStatus(currentUser.id) : 'online'
 
   // Voice settings state
   const voiceSettings = useVoiceSettingsStore((state) => state.settings)
   const voiceSettingsStore = useVoiceSettingsStore()
-  const voiceStore = useVoiceStore()
   const [isRecordingPTT, setIsRecordingPTT] = useState(false)
   const [pttKeyDisplay, setPttKeyDisplay] = useState('')
 
@@ -242,8 +248,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     }
   }
 
-  // Save settings to localStorage when they change
-
   // Voice settings update functions
   const updateVoiceSetting = (updates: any) => {
     // Debug voice settings update (development only)
@@ -328,7 +332,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 animate-fade-in">
-      <div className="bg-grey-900 border-2 border-white w-[500px] max-h-[80vh] flex flex-col animate-slide-up">
+      <div className="bg-grey-900 border-2 border-white w-[600px] max-h-[80vh] flex flex-col animate-slide-up">
         {/* Header */}
         <div className="border-b-2 border-grey-800 p-4 flex items-center justify-between">
           <h3 className="font-bold text-white text-lg uppercase tracking-wider">Settings</h3>
@@ -340,255 +344,337 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           </button>
         </div>
 
+        {/* Tab Navigation */}
+        <div className="border-b-2 border-grey-800 px-6">
+          <div className="flex space-x-1">
+            <button
+              onClick={() => setActiveTab('status')}
+              className={`px-4 py-3 border-b-2 transition-colors text-sm font-bold uppercase tracking-wider ${
+                activeTab === 'status'
+                  ? 'border-white text-white'
+                  : 'border-transparent text-grey-400 hover:text-grey-300'
+              }`}
+            >
+              User Status
+            </button>
+            <button
+              onClick={() => setActiveTab('appearance')}
+              className={`px-4 py-3 border-b-2 transition-colors text-sm font-bold uppercase tracking-wider ${
+                activeTab === 'appearance'
+                  ? 'border-white text-white'
+                  : 'border-transparent text-grey-400 hover:text-grey-300'
+              }`}
+            >
+              Appearance
+            </button>
+            <button
+              onClick={() => setActiveTab('audio')}
+              className={`px-4 py-3 border-b-2 transition-colors text-sm font-bold uppercase tracking-wider ${
+                activeTab === 'audio'
+                  ? 'border-white text-white'
+                  : 'border-transparent text-grey-400 hover:text-grey-300'
+              }`}
+            >
+              Audio & Voice
+            </button>
+            <button
+              onClick={() => setActiveTab('application')}
+              className={`px-4 py-3 border-b-2 transition-colors text-sm font-bold uppercase tracking-wider ${
+                activeTab === 'application'
+                  ? 'border-white text-white'
+                  : 'border-transparent text-grey-400 hover:text-grey-300'
+              }`}
+            >
+              Application
+            </button>
+          </div>
+        </div>
+
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Preferences Section */}
-          <div>
-            <h4 className="text-xs font-bold text-grey-400 uppercase tracking-wider mb-3">
-              Preferences
-            </h4>
-            <div className="bg-grey-850 border-2 border-grey-700 p-4 space-y-4">
-              {/* Notifications Toggle */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Bell className="w-5 h-5 text-grey-400" />
-                  <div>
-                    <p className="text-white text-sm font-medium">Desktop Notifications</p>
-                    <p className="text-grey-500 text-xs">Show notifications for new messages</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => updateSetting('notifications', !settings.notifications)}
-                  className={`relative w-12 h-6 border-2 transition-colors ${
-                    settings.notifications ? 'bg-white border-white' : 'bg-grey-700 border-grey-600'
-                  }`}
-                >
-                  <div
-                    className={`absolute top-0.5 w-4 h-4 bg-black transition-transform ${
-                      settings.notifications ? 'translate-x-6' : 'translate-x-0.5'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {/* Sound Toggle */}
-              <div className="flex items-center justify-between pt-4 border-t border-grey-700">
-                <div className="flex items-center gap-3">
-                  <Volume2 className="w-5 h-5 text-grey-400" />
-                  <div>
-                    <p className="text-white text-sm font-medium">Sound Effects</p>
-                    <p className="text-grey-500 text-xs">Play sounds for events</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => updateSetting('sounds', !settings.sounds)}
-                  className={`relative w-12 h-6 border-2 transition-colors ${
-                    settings.sounds ? 'bg-white border-white' : 'bg-grey-700 border-grey-600'
-                  }`}
-                >
-                  <div
-                    className={`absolute top-0.5 w-4 h-4 bg-black transition-transform ${
-                      settings.sounds ? 'translate-x-6' : 'translate-x-0.5'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {/* Font Size Selector */}
-              <div className="pt-4 border-t border-grey-700">
-                <div className="flex items-center gap-3 mb-3">
-                  <Type className="w-5 h-5 text-grey-400" />
-                  <div>
-                    <p className="text-white text-sm font-medium">Font Size</p>
-                    <p className="text-grey-500 text-xs">Adjust message text size</p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  {(['small', 'medium', 'large'] as const).map((size) => (
-                    <button
-                      key={size}
-                      onClick={() => updateSetting('fontSize', size)}
-                      className={`flex-1 py-2 border-2 transition-colors uppercase text-xs font-bold tracking-wider ${
-                        settings.fontSize === size
-                          ? 'bg-white text-black border-white'
-                          : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
-                      }`}
-                    >
-                      {size}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Timestamp Format */}
-              <div className="pt-4 border-t border-grey-700">
-                <div className="flex items-center gap-3 mb-3">
-                  <Clock className="w-5 h-5 text-grey-400" />
-                  <div>
-                    <p className="text-white text-sm font-medium">Time Format</p>
-                    <p className="text-grey-500 text-xs">Message timestamp display</p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => updateSetting('timestampFormat', '12h')}
-                    className={`flex-1 py-2 border-2 transition-colors uppercase text-xs font-bold tracking-wider ${
-                      settings.timestampFormat === '12h'
-                        ? 'bg-white text-black border-white'
-                        : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
-                    }`}
-                  >
-                    12 Hour
-                  </button>
-                  <button
-                    onClick={() => updateSetting('timestampFormat', '24h')}
-                    className={`flex-1 py-2 border-2 transition-colors uppercase text-xs font-bold tracking-wider ${
-                      settings.timestampFormat === '24h'
-                        ? 'bg-white text-black border-white'
-                        : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
-                    }`}
-                  >
-                    24 Hour
-                  </button>
-                </div>
-              </div>
-
-              {/* Status Selector */}
-              <div className="pt-4 border-t border-grey-700">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-5 h-5 bg-green-500 border-2 border-green-600 rounded-full flex items-center justify-center">
-                    <div className="w-2 h-2 bg-white rounded-full"></div>
+        <div className="flex-1 overflow-y-auto p-6">
+          {/* User Status Tab */}
+          {activeTab === 'status' && (
+            <div className="space-y-6">
+              <div className="bg-grey-850 border-2 border-grey-700 p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-6 h-6 bg-green-500 border-2 border-green-600 rounded-full flex items-center justify-center">
+                    <div className="w-2.5 h-2.5 bg-white rounded-full"></div>
                   </div>
                   <div>
-                    <p className="text-white text-sm font-medium">Status</p>
-                    <p className="text-grey-500 text-xs">Set your online status</p>
+                    <p className="text-white text-lg font-medium">Online Status</p>
+                    <p className="text-grey-500 text-sm">Set your availability and visibility</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => updateStatus('online')}
-                    className="flex items-center gap-2 p-3 border-2 transition-colors bg-grey-800 text-grey-400 border-grey-700 hover:border-green-600 hover:text-green-400"
+                    className={`flex items-center gap-3 p-4 border-2 transition-colors ${
+                      currentStatus === 'online'
+                        ? 'bg-green-900 border-green-600 text-green-300'
+                        : 'bg-grey-800 text-grey-400 border-grey-700 hover:border-green-600 hover:text-green-400'
+                    }`}
                   >
-                    <div className="w-3 h-3 bg-green-500 border border-green-600 rounded-full"></div>
-                    <span className="text-sm font-medium">Online</span>
+                    <div className="w-4 h-4 bg-green-500 border border-green-600 rounded-full"></div>
+                    <span className="text-base font-medium">Online</span>
                   </button>
                   <button
                     onClick={() => updateStatus('idle')}
-                    className="flex items-center gap-2 p-3 border-2 transition-colors bg-grey-800 text-grey-400 border-grey-700 hover:border-yellow-600 hover:text-yellow-400"
+                    className={`flex items-center gap-3 p-4 border-2 transition-colors ${
+                      currentStatus === 'idle'
+                        ? 'bg-yellow-900 border-yellow-600 text-yellow-300'
+                        : 'bg-grey-800 text-grey-400 border-grey-700 hover:border-yellow-600 hover:text-yellow-400'
+                    }`}
                   >
-                    <div className="w-3 h-3 bg-yellow-500 border border-yellow-600 rounded-full flex items-center justify-center text-xs">
+                    <div className="w-4 h-4 bg-yellow-500 border border-yellow-600 rounded-full flex items-center justify-center text-sm">
                       🌙
                     </div>
-                    <span className="text-sm font-medium">Idle</span>
+                    <span className="text-base font-medium">Idle</span>
                   </button>
                   <button
                     onClick={() => updateStatus('dnd')}
-                    className="flex items-center gap-2 p-3 border-2 transition-colors bg-grey-800 text-grey-400 border-grey-700 hover:border-red-600 hover:text-red-400"
+                    className={`flex items-center gap-3 p-4 border-2 transition-colors ${
+                      currentStatus === 'dnd'
+                        ? 'bg-red-900 border-red-600 text-red-300'
+                        : 'bg-grey-800 text-grey-400 border-grey-700 hover:border-red-600 hover:text-red-400'
+                    }`}
                   >
-                    <div className="w-3 h-3 bg-red-500 border border-red-600 rounded-full flex items-center justify-center text-xs">
+                    <div className="w-4 h-4 bg-red-500 border border-red-600 rounded-full flex items-center justify-center text-sm">
                       ⭕
                     </div>
-                    <span className="text-sm font-medium">Do Not Disturb</span>
+                    <span className="text-base font-medium">Do Not Disturb</span>
                   </button>
                   <button
                     onClick={() => updateStatus('invisible')}
-                    className="flex items-center gap-2 p-3 border-2 transition-colors bg-grey-800 text-grey-400 border-grey-700 hover:border-grey-600 hover:text-grey-400"
+                    className={`flex items-center gap-3 p-4 border-2 transition-colors ${
+                      currentStatus === 'invisible'
+                        ? 'bg-grey-900 border-grey-600 text-grey-300'
+                        : 'bg-grey-800 text-grey-400 border-grey-700 hover:border-grey-600 hover:text-grey-400'
+                    }`}
                   >
                     <div className="w-3 h-3 bg-grey-500 border border-grey-600 rounded-full"></div>
-                    <span className="text-sm font-medium">Invisible</span>
+                    <span className="text-base font-medium">Invisible</span>
                   </button>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Audio Settings Section */}
-          <div>
-            <h4 className="text-xs font-bold text-grey-400 uppercase tracking-wider mb-3">
-              Audio Settings
-            </h4>
-            <div className="bg-grey-850 border-2 border-grey-700 p-4 space-y-4">
-              {/* Microphone Selection */}
-              <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <Volume2 className="w-5 h-5 text-grey-400" />
-                  <label className="text-white text-sm font-medium">
+          {/* Appearance Tab */}
+          {activeTab === 'appearance' && (
+            <div className="space-y-6">
+              <div className="bg-grey-850 border-2 border-grey-700 p-6 space-y-6">
+                {/* Font Size Selector */}
+                <div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <Type className="w-6 h-6 text-grey-400" />
+                    <div>
+                      <p className="text-white text-lg font-medium">Font Size</p>
+                      <p className="text-grey-500 text-sm">Adjust message text size</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    {(['small', 'medium', 'large'] as const).map((size) => (
+                      <button
+                        key={size}
+                        onClick={() => updateSetting('fontSize', size)}
+                        className={`flex-1 py-3 border-2 transition-colors uppercase text-sm font-bold tracking-wider ${
+                          settings.fontSize === size
+                            ? 'bg-white text-black border-white'
+                            : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
+                        }`}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Timestamp Format */}
+                <div className="pt-6 border-t border-grey-700">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Clock className="w-6 h-6 text-grey-400" />
+                    <div>
+                      <p className="text-white text-lg font-medium">Time Format</p>
+                      <p className="text-grey-500 text-sm">Message timestamp display</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => updateSetting('timestampFormat', '12h')}
+                      className={`flex-1 py-3 border-2 transition-colors uppercase text-sm font-bold tracking-wider ${
+                        settings.timestampFormat === '12h'
+                          ? 'bg-white text-black border-white'
+                          : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
+                      }`}
+                    >
+                      12 Hour
+                    </button>
+                    <button
+                      onClick={() => updateSetting('timestampFormat', '24h')}
+                      className={`flex-1 py-3 border-2 transition-colors uppercase text-sm font-bold tracking-wider ${
+                        settings.timestampFormat === '24h'
+                          ? 'bg-white text-black border-white'
+                          : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
+                      }`}
+                    >
+                      24 Hour
+                    </button>
+                  </div>
+                </div>
+
+                {/* Notifications Toggle */}
+                <div className="pt-6 border-t border-grey-700">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Bell className="w-6 h-6 text-grey-400" />
+                      <div>
+                        <p className="text-white text-lg font-medium">Desktop Notifications</p>
+                        <p className="text-grey-500 text-sm">Show notifications for new messages</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => updateSetting('notifications', !settings.notifications)}
+                      className={`relative w-14 h-7 border-2 transition-colors ${
+                        settings.notifications
+                          ? 'bg-white border-white'
+                          : 'bg-grey-700 border-grey-600'
+                      }`}
+                    >
+                      <div
+                        className={`absolute top-0.5 w-5 h-5 bg-black transition-transform ${
+                          settings.notifications ? 'translate-x-7' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sound Toggle */}
+                <div className="flex items-center justify-between pt-6 border-t border-grey-700">
+                  <div className="flex items-center gap-3">
+                    <Volume2 className="w-6 h-6 text-grey-400" />
+                    <div>
+                      <p className="text-white text-lg font-medium">Sound Effects</p>
+                      <p className="text-grey-500 text-sm">Play sounds for events</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => updateSetting('sounds', !settings.sounds)}
+                    className={`relative w-14 h-7 border-2 transition-colors ${
+                      settings.sounds ? 'bg-white border-white' : 'bg-grey-700 border-grey-600'
+                    }`}
+                  >
+                    <div
+                      className={`absolute top-0.5 w-5 h-5 bg-black transition-transform ${
+                        settings.sounds ? 'translate-x-7' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Audio & Voice Tab */}
+          {activeTab === 'audio' && (
+            <div className="space-y-6">
+              {/* Device Selection */}
+              <div className="bg-grey-850 border-2 border-grey-700 p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <Volume2 className="w-6 h-6 text-grey-400" />
+                  <div>
+                    <p className="text-white text-lg font-medium">Audio Devices</p>
+                    <p className="text-grey-500 text-sm">Select your input and output devices</p>
+                  </div>
+                </div>
+
+                {/* Microphone Selection */}
+                <div className="mb-6">
+                  <label className="text-grey-300 text-sm font-medium mb-3 block">
                     Input Device (Microphone)
                   </label>
+                  <select
+                    value={settings.audioInputDeviceId || 'default'}
+                    onChange={(e) => {
+                      // Debug audio device changes (development only)
+                      if (import.meta.env.DEV) {
+                        console.log('[Settings] Input device dropdown changed:', e.target.value)
+                        console.log(
+                          '[Settings] Available options:',
+                          Array.from(e.target.options).map((o) => ({
+                            value: o.value,
+                            text: o.text,
+                            selected: o.selected,
+                          }))
+                        )
+                      }
+                      updateSetting('audioInputDeviceId', e.target.value)
+                    }}
+                    className="w-full bg-grey-800 border-2 border-grey-700 px-4 py-3 text-white focus:border-white text-sm"
+                  >
+                    {audioInputDevices.map((device) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label}
+                      </option>
+                    ))}
+                    {audioInputDevices.length === 0 && (
+                      <option value="default">No devices found - check permissions</option>
+                    )}
+                  </select>
                 </div>
-                <select
-                  value={settings.audioInputDeviceId || 'default'}
-                  onChange={(e) => {
-                    // Debug audio device changes (development only)
-                    if (import.meta.env.DEV) {
-                      console.log('[Settings] Input device dropdown changed:', e.target.value)
-                      console.log(
-                        '[Settings] Available options:',
-                        Array.from(e.target.options).map((o) => ({
-                          value: o.value,
-                          text: o.text,
-                          selected: o.selected,
-                        }))
-                      )
-                    }
-                    updateSetting('audioInputDeviceId', e.target.value)
-                  }}
-                  className="w-full bg-grey-800 border-2 border-grey-700 px-3 py-2 text-white focus:border-white"
-                >
-                  {audioInputDevices.map((device) => (
-                    <option key={device.deviceId} value={device.deviceId}>
-                      {device.label}
-                    </option>
-                  ))}
-                  {audioInputDevices.length === 0 && (
-                    <option value="default">No devices found - check permissions</option>
-                  )}
-                </select>
-              </div>
 
-              {/* Speaker Selection */}
-              <div className="pt-4 border-t border-grey-700">
-                <div className="flex items-center gap-3 mb-2">
-                  <Volume2 className="w-5 h-5 text-grey-400" />
-                  <label className="text-white text-sm font-medium">
+                {/* Speaker Selection */}
+                <div className="mb-6">
+                  <label className="text-grey-300 text-sm font-medium mb-3 block">
                     Output Device (Speakers/Headphones)
                   </label>
+                  <select
+                    value={settings.audioOutputDeviceId || 'default'}
+                    onChange={(e) => {
+                      // Debug audio device changes (development only)
+                      if (import.meta.env.DEV) {
+                        console.log('[Settings] Output device dropdown changed:', e.target.value)
+                      }
+                      updateSetting('audioOutputDeviceId', e.target.value)
+                    }}
+                    className="w-full bg-grey-800 border-2 border-grey-700 px-4 py-3 text-white focus:border-white text-sm"
+                  >
+                    {audioOutputDevices.map((device) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label}
+                      </option>
+                    ))}
+                    {audioOutputDevices.length === 0 && (
+                      <option value="default">No devices found - check permissions</option>
+                    )}
+                  </select>
+                  <p className="text-grey-500 text-xs mt-2">
+                    Note: Output device selection may not be supported in all browsers
+                  </p>
                 </div>
-                <select
-                  value={settings.audioOutputDeviceId || 'default'}
-                  onChange={(e) => {
-                    // Debug audio device changes (development only)
-                    if (import.meta.env.DEV) {
-                      console.log('[Settings] Output device dropdown changed:', e.target.value)
-                    }
-                    updateSetting('audioOutputDeviceId', e.target.value)
-                  }}
-                  className="w-full bg-grey-800 border-2 border-grey-700 px-3 py-2 text-white focus:border-white"
+
+                {/* Refresh Devices Button */}
+                <button
+                  onClick={loadAudioDevices}
+                  className="w-full px-4 py-3 bg-grey-800 text-white border-2 border-grey-700 hover:border-white transition-colors text-sm font-bold uppercase tracking-wide"
                 >
-                  {audioOutputDevices.map((device) => (
-                    <option key={device.deviceId} value={device.deviceId}>
-                      {device.label}
-                    </option>
-                  ))}
-                  {audioOutputDevices.length === 0 && (
-                    <option value="default">No devices found - check permissions</option>
-                  )}
-                </select>
-                <p className="text-grey-500 text-xs mt-2">
-                  Note: Output device selection may not be supported in all browsers
+                  Refresh Devices
+                </button>
+                <p className="text-grey-500 text-xs mt-3 text-center">
+                  Click if you connected a new audio device
                 </p>
               </div>
 
               {/* Microphone Test */}
-              <div className="pt-4 border-t border-grey-700">
-                <div className="flex items-center justify-between mb-3">
+              <div className="bg-grey-850 border-2 border-grey-700 p-6">
+                <div className="flex items-center justify-between mb-4">
                   <div>
-                    <p className="text-white text-sm font-medium">Test Microphone</p>
-                    <p className="text-grey-500 text-xs">Speak to see the level indicator</p>
+                    <p className="text-white text-lg font-medium">Test Microphone</p>
+                    <p className="text-grey-500 text-sm">Speak to see the level indicator</p>
                   </div>
                   <button
                     onClick={isTesting ? stopMicTest : startMicTest}
-                    className={`px-4 py-2 border-2 font-bold text-sm transition-colors ${
+                    className={`px-6 py-3 border-2 font-bold text-sm transition-colors ${
                       isTesting
                         ? 'bg-red-900 border-red-700 text-white hover:bg-red-800'
                         : 'bg-white text-black border-white hover:bg-grey-100'
@@ -600,14 +686,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
                 {/* Microphone Level Indicator */}
                 {isTesting && (
-                  <div className="space-y-2">
-                    <div className="w-full h-6 bg-grey-800 border-2 border-grey-700 overflow-hidden">
+                  <div className="space-y-3">
+                    <div className="w-full h-8 bg-grey-800 border-2 border-grey-700 overflow-hidden">
                       <div
                         className="h-full bg-white transition-all duration-100"
                         style={{ width: `${micLevel}%` }}
                       />
                     </div>
-                    <p className="text-grey-400 text-xs text-center">
+                    <p className="text-grey-400 text-sm text-center">
                       {micLevel > 10
                         ? '🎤 Microphone is working!'
                         : 'Speak into your microphone...'}
@@ -616,345 +702,297 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 )}
               </div>
 
-              {/* Refresh Devices Button */}
-              <div className="pt-4 border-t border-grey-700">
-                <button
-                  onClick={loadAudioDevices}
-                  className="w-full px-4 py-2 bg-grey-800 text-white border-2 border-grey-700 hover:border-white transition-colors text-sm font-bold uppercase tracking-wide"
-                >
-                  Refresh Devices
-                </button>
-                <p className="text-grey-500 text-xs mt-2 text-center">
-                  Click if you connected a new audio device
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Voice Settings Section */}
-          <div>
-            <h4 className="text-xs font-bold text-grey-400 uppercase tracking-wider mb-3">
-              Voice Settings
-            </h4>
-            <div className="bg-grey-850 border-2 border-grey-700 p-4 space-y-4">
-              {/* Detection Mode */}
-              <div>
-                <div className="flex items-center gap-3 mb-3">
-                  <Mic className="w-5 h-5 text-grey-400" />
+              {/* Voice Settings */}
+              <div className="bg-grey-850 border-2 border-grey-700 p-6 space-y-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <Mic className="w-6 h-6 text-grey-400" />
                   <div>
-                    <p className="text-white text-sm font-medium">Voice Detection Mode</p>
-                    <p className="text-grey-500 text-xs">
-                      Choose how voice transmission is triggered
+                    <p className="text-white text-lg font-medium">Voice Settings</p>
+                    <p className="text-grey-500 text-sm">
+                      Configure voice detection and processing
                     </p>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => updateVoiceSetting({ detection: { mode: 'voice_activity' } })}
-                    className={`flex-1 py-2 border-2 transition-colors uppercase text-xs font-bold tracking-wider ${
-                      voiceSettings.detection.mode === 'voice_activity'
-                        ? 'bg-white text-black border-white'
-                        : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
-                    }`}
-                  >
-                    Voice Activity
-                  </button>
-                  <button
-                    onClick={() => updateVoiceSetting({ detection: { mode: 'push_to_talk' } })}
-                    className={`flex-1 py-2 border-2 transition-colors uppercase text-xs font-bold tracking-wider ${
-                      voiceSettings.detection.mode === 'push_to_talk'
-                        ? 'bg-white text-black border-white'
-                        : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
-                    }`}
-                  >
-                    Push to Talk
-                  </button>
-                </div>
-              </div>
 
-              {/* PTT Key Configuration */}
-              {voiceSettings.detection.mode === 'push_to_talk' && (
-                <div className="pt-4 border-t border-grey-700">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <Zap className="w-5 h-5 text-grey-400" />
-                      <div>
-                        <p className="text-white text-sm font-medium">Push-to-Talk Key</p>
-                        <p className="text-grey-500 text-xs">Key combination to transmit voice</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-white text-sm font-mono">{pttKeyDisplay}</p>
+                {/* Detection Mode */}
+                <div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div>
+                      <p className="text-white text-base font-medium">Voice Detection Mode</p>
+                      <p className="text-grey-500 text-sm">
+                        Choose how voice transmission is triggered
+                      </p>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-3">
                     <button
-                      onClick={isRecordingPTT ? cancelRecordingPTT : startRecordingPTT}
-                      className={`flex-1 py-2 border-2 transition-colors uppercase text-xs font-bold tracking-wider ${
-                        isRecordingPTT
-                          ? 'bg-red-900 border-red-700 text-white'
-                          : 'bg-white text-black border-white hover:bg-grey-100'
+                      onClick={() => updateVoiceSetting({ detection: { mode: 'voice_activity' } })}
+                      className={`flex-1 py-3 border-2 transition-colors uppercase text-sm font-bold tracking-wider ${
+                        voiceSettings.detection.mode === 'voice_activity'
+                          ? 'bg-white text-black border-white'
+                          : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
                       }`}
                     >
-                      {isRecordingPTT ? 'Cancel' : 'Set Key'}
+                      Voice Activity
+                    </button>
+                    <button
+                      onClick={() => updateVoiceSetting({ detection: { mode: 'push_to_talk' } })}
+                      className={`flex-1 py-3 border-2 transition-colors uppercase text-sm font-bold tracking-wider ${
+                        voiceSettings.detection.mode === 'push_to_talk'
+                          ? 'bg-white text-black border-white'
+                          : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
+                      }`}
+                    >
+                      Push to Talk
                     </button>
                   </div>
                 </div>
-              )}
 
-              {/* Sensitivity Slider */}
-              <div className="pt-4 border-t border-grey-700">
-                <div className="flex items-center gap-3 mb-3">
-                  <Gauge className="w-5 h-5 text-grey-400" />
-                  <div className="flex-1">
-                    <p className="text-white text-sm font-medium">Voice Sensitivity</p>
-                    <p className="text-grey-500 text-xs">
-                      How easily voice is detected ({voiceSettings.input.sensitivity}%)
-                    </p>
-                  </div>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={voiceSettings.input.sensitivity}
-                  onChange={(e) =>
-                    updateVoiceSetting({ input: { sensitivity: parseInt(e.target.value) } })
-                  }
-                  className="w-full h-2 bg-grey-700 appearance-none slider"
-                />
-                <div className="flex justify-between text-xs text-grey-500 mt-1">
-                  <span>Less Sensitive</span>
-                  <span>More Sensitive</span>
-                </div>
-              </div>
-
-              {/* Noise Suppression */}
-              <div className="pt-4 border-t border-grey-700">
-                <div className="flex items-center gap-3 mb-3">
-                  <Shield className="w-5 h-5 text-grey-400" />
-                  <div className="flex-1">
-                    <p className="text-white text-sm font-medium">Noise Suppression</p>
-                    <p className="text-grey-500 text-xs">Reduce background noise and echo</p>
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <select
-                    value={voiceSettings.input.noiseSuppressionMethod}
-                    onChange={(e) =>
-                      updateVoiceSetting({
-                        input: { noiseSuppressionMethod: e.target.value as any },
-                      })
-                    }
-                    className="w-full bg-grey-800 border-2 border-grey-700 px-3 py-2 text-white focus:border-white"
-                  >
-                    <option value="none">None</option>
-                    <option value="webrtc">WebRTC Built-in</option>
-                    <option value="noise-gate">Noise Gate</option>
-                    <option value="rnnoise">RNNoise (Advanced)</option>
-                    <option value="krisp">Krisp (Premium)</option>
-                  </select>
-
-                  {voiceSettings.input.noiseSuppressionMethod !== 'none' && (
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-grey-400 text-xs">Intensity</span>
-                        <span className="text-white text-xs">
-                          {voiceSettings.input.noiseSuppressionIntensity}%
-                        </span>
+                {/* PTT Key Configuration */}
+                {voiceSettings.detection.mode === 'push_to_talk' && (
+                  <div className="pt-6 border-t border-grey-700">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <Zap className="w-5 h-5 text-grey-400" />
+                        <div>
+                          <p className="text-white text-base font-medium">Push-to-Talk Key</p>
+                          <p className="text-grey-500 text-sm">Key combination to transmit voice</p>
+                        </div>
                       </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={voiceSettings.input.noiseSuppressionIntensity}
-                        onChange={(e) =>
-                          updateVoiceSetting({
-                            input: { noiseSuppressionIntensity: parseInt(e.target.value) },
-                          })
-                        }
-                        className="w-full h-2 bg-grey-700 appearance-none slider"
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Audio Processing Toggles */}
-              <div className="pt-4 border-t border-grey-700 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Volume2 className="w-5 h-5 text-grey-400" />
-                    <div>
-                      <p className="text-white text-sm font-medium">Echo Cancellation</p>
-                      <p className="text-grey-500 text-xs">Remove echo from your microphone</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() =>
-                      updateVoiceSetting({
-                        input: { echoCancellation: !voiceSettings.input.echoCancellation },
-                      })
-                    }
-                    className={`relative w-12 h-6 border-2 transition-colors ${
-                      voiceSettings.input.echoCancellation
-                        ? 'bg-white border-white'
-                        : 'bg-grey-700 border-grey-600'
-                    }`}
-                  >
-                    <div
-                      className={`absolute top-0.5 w-4 h-4 bg-black transition-transform ${
-                        voiceSettings.input.echoCancellation ? 'translate-x-6' : 'translate-x-0.5'
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Mic className="w-5 h-5 text-grey-400" />
-                    <div>
-                      <p className="text-white text-sm font-medium">Auto Gain Control</p>
-                      <p className="text-grey-500 text-xs">
-                        Automatically adjust microphone volume
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() =>
-                      updateVoiceSetting({
-                        input: { autoGainControl: !voiceSettings.input.autoGainControl },
-                      })
-                    }
-                    className={`relative w-12 h-6 border-2 transition-colors ${
-                      voiceSettings.input.autoGainControl
-                        ? 'bg-white border-white'
-                        : 'bg-grey-700 border-grey-600'
-                    }`}
-                  >
-                    <div
-                      className={`absolute top-0.5 w-4 h-4 bg-black transition-transform ${
-                        voiceSettings.input.autoGainControl ? 'translate-x-6' : 'translate-x-0.5'
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-
-              {/* Volume Controls */}
-              <div className="pt-4 border-t border-grey-700 space-y-4">
-                <div>
-                  <div className="flex items-center gap-3 mb-3">
-                    <Volume2 className="w-5 h-5 text-grey-400" />
-                    <div className="flex-1">
-                      <p className="text-white text-sm font-medium">Master Volume</p>
-                      <p className="text-grey-500 text-xs">
-                        Overall volume for all voice channels ({voiceSettings.output.masterVolume}%)
-                      </p>
-                    </div>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={voiceSettings.output.masterVolume}
-                    onChange={(e) =>
-                      updateVoiceSetting({ output: { masterVolume: parseInt(e.target.value) } })
-                    }
-                    className="w-full h-2 bg-grey-700 appearance-none slider"
-                  />
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-3 mb-3">
-                    <Volume2 className="w-5 h-5 text-grey-400" />
-                    <div className="flex-1">
-                      <p className="text-white text-sm font-medium">Voice Attenuation</p>
-                      <p className="text-grey-500 text-xs">
-                        Reduce volume of other users ({voiceSettings.output.attenuation}%)
-                      </p>
-                    </div>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={voiceSettings.output.attenuation}
-                    onChange={(e) =>
-                      updateVoiceSetting({ output: { attenuation: parseInt(e.target.value) } })
-                    }
-                    className="w-full h-2 bg-grey-700 appearance-none slider"
-                  />
-                </div>
-              </div>
-
-              {/* Connection Quality Indicator */}
-              <div className="pt-4 border-t border-grey-700">
-                <div className="flex items-center gap-3 mb-3">
-                  <Wifi className="w-5 h-5 text-grey-400" />
-                  <div className="flex-1">
-                    <p className="text-white text-sm font-medium">Voice Quality</p>
-                    <p className="text-grey-500 text-xs">
-                      {voiceManager.getQualityStatusDescription()}
-                    </p>
-                  </div>
-                  <div
-                    className={`px-2 py-1 border-2 text-xs font-bold uppercase tracking-wider ${
-                      voiceStore.overallQuality === 'excellent'
-                        ? 'bg-green-900 border-green-700 text-green-300'
-                        : voiceStore.overallQuality === 'good'
-                          ? 'bg-blue-900 border-blue-700 text-blue-300'
-                          : voiceStore.overallQuality === 'poor'
-                            ? 'bg-yellow-900 border-yellow-700 text-yellow-300'
-                            : voiceStore.overallQuality === 'critical'
-                              ? 'bg-red-900 border-red-700 text-red-300'
-                              : 'bg-grey-700 border-grey-600 text-grey-400'
-                    }`}
-                  >
-                    {voiceStore.overallQuality || 'Unknown'}
-                  </div>
-                </div>
-
-                {/* Quality Warnings */}
-                {voiceStore.qualityWarnings.length > 0 && (
-                  <div className="bg-yellow-900/20 border-2 border-yellow-700 p-3">
-                    <div className="flex items-start gap-2">
-                      <Wifi className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-yellow-300 text-xs font-medium">Connection Issues:</p>
-                        {voiceStore.qualityWarnings.map((warning, index) => (
-                          <p key={index} className="text-yellow-200 text-xs mt-1">
-                            {warning}
-                          </p>
-                        ))}
+                      <div className="text-right">
+                        <p className="text-white text-base font-mono">{pttKeyDisplay}</p>
                       </div>
+                    </div>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={isRecordingPTT ? cancelRecordingPTT : startRecordingPTT}
+                        className={`flex-1 py-3 border-2 transition-colors uppercase text-sm font-bold tracking-wider ${
+                          isRecordingPTT
+                            ? 'bg-red-900 border-red-700 text-white'
+                            : 'bg-white text-black border-white hover:bg-grey-100'
+                        }`}
+                      >
+                        {isRecordingPTT ? 'Cancel' : 'Set Key'}
+                      </button>
                     </div>
                   </div>
                 )}
+
+                {/* Sensitivity Slider */}
+                <div className="pt-6 border-t border-grey-700">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Gauge className="w-5 h-5 text-grey-400" />
+                    <div className="flex-1">
+                      <p className="text-white text-base font-medium">Voice Sensitivity</p>
+                      <p className="text-grey-500 text-sm">
+                        How easily voice is detected ({voiceSettings.input.sensitivity}%)
+                      </p>
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={voiceSettings.input.sensitivity}
+                    onChange={(e) =>
+                      updateVoiceSetting({ input: { sensitivity: parseInt(e.target.value) } })
+                    }
+                    className="w-full h-3 bg-grey-700 appearance-none slider"
+                  />
+                  <div className="flex justify-between text-sm text-grey-500 mt-2">
+                    <span>Less Sensitive</span>
+                    <span>More Sensitive</span>
+                  </div>
+                </div>
+
+                {/* Noise Suppression */}
+                <div className="pt-6 border-t border-grey-700">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Shield className="w-5 h-5 text-grey-400" />
+                    <div className="flex-1">
+                      <p className="text-white text-base font-medium">Noise Suppression</p>
+                      <p className="text-grey-500 text-sm">Reduce background noise and echo</p>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <select
+                      value={voiceSettings.input.noiseSuppressionMethod}
+                      onChange={(e) =>
+                        updateVoiceSetting({
+                          input: { noiseSuppressionMethod: e.target.value as any },
+                        })
+                      }
+                      className="w-full bg-grey-800 border-2 border-grey-700 px-4 py-3 text-white focus:border-white text-sm"
+                    >
+                      <option value="none">None</option>
+                      <option value="webrtc">WebRTC Built-in</option>
+                      <option value="noise-gate">Noise Gate</option>
+                      <option value="rnnoise">RNNoise (Advanced)</option>
+                      <option value="krisp">Krisp (Premium)</option>
+                    </select>
+
+                    {voiceSettings.input.noiseSuppressionMethod !== 'none' && (
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-grey-400 text-sm">Intensity</span>
+                          <span className="text-white text-sm">
+                            {voiceSettings.input.noiseSuppressionIntensity}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={voiceSettings.input.noiseSuppressionIntensity}
+                          onChange={(e) =>
+                            updateVoiceSetting({
+                              input: { noiseSuppressionIntensity: parseInt(e.target.value) },
+                            })
+                          }
+                          className="w-full h-3 bg-grey-700 appearance-none slider"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Audio Processing Toggles */}
+                <div className="pt-6 border-t border-grey-700 space-y-5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Volume2 className="w-5 h-5 text-grey-400" />
+                      <div>
+                        <p className="text-white text-base font-medium">Echo Cancellation</p>
+                        <p className="text-grey-500 text-sm">Remove echo from your microphone</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() =>
+                        updateVoiceSetting({
+                          input: { echoCancellation: !voiceSettings.input.echoCancellation },
+                        })
+                      }
+                      className={`relative w-14 h-7 border-2 transition-colors ${
+                        voiceSettings.input.echoCancellation
+                          ? 'bg-white border-white'
+                          : 'bg-grey-700 border-grey-600'
+                      }`}
+                    >
+                      <div
+                        className={`absolute top-0.5 w-5 h-5 bg-black transition-transform ${
+                          voiceSettings.input.echoCancellation ? 'translate-x-7' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Mic className="w-5 h-5 text-grey-400" />
+                      <div>
+                        <p className="text-white text-base font-medium">Auto Gain Control</p>
+                        <p className="text-grey-500 text-sm">
+                          Automatically adjust microphone volume
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() =>
+                        updateVoiceSetting({
+                          input: { autoGainControl: !voiceSettings.input.autoGainControl },
+                        })
+                      }
+                      className={`relative w-14 h-7 border-2 transition-colors ${
+                        voiceSettings.input.autoGainControl
+                          ? 'bg-white border-white'
+                          : 'bg-grey-700 border-grey-600'
+                      }`}
+                    >
+                      <div
+                        className={`absolute top-0.5 w-5 h-5 bg-black transition-transform ${
+                          voiceSettings.input.autoGainControl ? 'translate-x-7' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Volume Controls */}
+                <div className="pt-6 border-t border-grey-700 space-y-6">
+                  <div>
+                    <div className="flex items-center gap-3 mb-4">
+                      <Volume2 className="w-5 h-5 text-grey-400" />
+                      <div className="flex-1">
+                        <p className="text-white text-base font-medium">Master Volume</p>
+                        <p className="text-grey-500 text-sm">
+                          Overall volume for all voice channels ({voiceSettings.output.masterVolume}
+                          %)
+                        </p>
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={voiceSettings.output.masterVolume}
+                      onChange={(e) =>
+                        updateVoiceSetting({ output: { masterVolume: parseInt(e.target.value) } })
+                      }
+                      className="w-full h-3 bg-grey-700 appearance-none slider"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-3 mb-4">
+                      <Volume2 className="w-5 h-5 text-grey-400" />
+                      <div className="flex-1">
+                        <p className="text-white text-base font-medium">Voice Attenuation</p>
+                        <p className="text-grey-500 text-sm">
+                          Reduce volume of other users ({voiceSettings.output.attenuation}%)
+                        </p>
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={voiceSettings.output.attenuation}
+                      onChange={(e) =>
+                        updateVoiceSetting({ output: { attenuation: parseInt(e.target.value) } })
+                      }
+                      className="w-full h-3 bg-grey-700 appearance-none slider"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* App Info Section */}
-          <div>
-            <h4 className="text-xs font-bold text-grey-400 uppercase tracking-wider mb-3">
-              Application
-            </h4>
-            <div className="bg-grey-850 border-2 border-grey-700 p-4">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-grey-400 text-sm">Version</span>
-                    <span className="text-white text-sm font-mono">1.1.7</span>
+          {/* Application Tab */}
+          {activeTab === 'application' && (
+            <div className="space-y-6">
+              <div className="bg-grey-850 border-2 border-grey-700 p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <Shield className="w-6 h-6 text-grey-400" />
+                  <div>
+                    <p className="text-white text-lg font-medium">Application Info</p>
+                    <p className="text-grey-500 text-sm">Version information and updates</p>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-grey-400 text-sm">Product</span>
-                    <span className="text-white text-sm">CommHub</span>
+                </div>
+
+                <div className="space-y-4 mb-8">
+                  <div className="flex justify-between items-center py-3 border-b border-grey-700">
+                    <span className="text-grey-400 text-base">Version</span>
+                    <span className="text-white text-base font-mono">1.1.7</span>
+                  </div>
+                  <div className="flex justify-between items-center py-3 border-b border-grey-700">
+                    <span className="text-grey-400 text-base">Product</span>
+                    <span className="text-white text-base">CommHub</span>
                   </div>
                 </div>
 
                 {/* Check for Updates Button */}
-                <div className="pt-4 border-t border-grey-700">
+                <div className="pt-6 border-t border-grey-700">
                   <button
                     onClick={() => {
                       console.log('[Settings] Check for updates button clicked')
@@ -976,30 +1014,27 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
                       console.log('[Settings] Event dispatched successfully')
                     }}
-                    className="w-full px-4 py-2 bg-grey-800 text-white border-2 border-grey-700 hover:border-white transition-colors text-sm font-bold uppercase tracking-wide"
+                    className="w-full px-6 py-4 bg-grey-800 text-white border-2 border-grey-700 hover:border-white transition-colors text-base font-bold uppercase tracking-wide"
                   >
                     Check for Updates
                   </button>
-                  <p className="text-grey-500 text-xs mt-2 text-center">
+                  <p className="text-grey-500 text-sm mt-3 text-center">
                     Manually check for new versions of the application
                   </p>
                 </div>
               </div>
-            </div>
-          </div>
 
-          {/* Updates Section */}
-
-          {/* About Section */}
-          <div>
-            <h4 className="text-xs font-bold text-grey-400 uppercase tracking-wider mb-3">About</h4>
-            <div className="bg-grey-850 border-2 border-grey-700 p-4">
-              <p className="text-grey-300 text-sm leading-relaxed">
-                A lightweight, cross-platform communication application for real-time text and voice
-                chats.
-              </p>
+              {/* About Section */}
+              <div className="bg-grey-850 border-2 border-grey-700 p-6">
+                <h4 className="text-white text-lg font-medium mb-4">About</h4>
+                <p className="text-grey-300 text-base leading-relaxed">
+                  A lightweight, cross-platform communication application for real-time text and
+                  voice chats. Built with modern web technologies for seamless communication across
+                  devices.
+                </p>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Footer */}

@@ -99,7 +99,7 @@ export const useStatusStore = create<StatusState>((set, get) => ({
     const idleCheckInterval = setInterval(checkIdleStatus, 60000)
 
     // Store cleanup function
-    ;(get() as any).cleanup = () => {
+    ;(get() as any).storedCleanup = () => {
       window.removeEventListener('mousedown', handleActivity)
       window.removeEventListener('keydown', handleActivity)
       window.removeEventListener('scroll', handleActivity)
@@ -109,9 +109,9 @@ export const useStatusStore = create<StatusState>((set, get) => ({
   },
 
   cleanup: () => {
-    const cleanup = (get() as any).cleanup
-    if (cleanup) {
-      cleanup()
+    const cleanupFunc = (get() as any).storedCleanup
+    if (cleanupFunc) {
+      cleanupFunc()
     }
   },
 }))

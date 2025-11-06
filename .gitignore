@@ -2,8 +2,6 @@
 packages/client/commhub.key
 packages/client/commhub.key.pub
 packages/client/commhub.key.*
-packages/client/src-tauri/key.pem
-packages/client/src-tauri/*.key
 
 # Private documentation and setup files
 PRD.md

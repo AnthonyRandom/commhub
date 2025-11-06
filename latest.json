@@ -1,12 +1,11 @@
 {
   "version": "1.1.5",
   "notes": "Version 1.1.5 - Critical voice channel fixes and volume control improvements. Fixed WebSocket reconnection issues that caused voice channel synchronization problems, resolved volume slider not working properly (users had to leave/rejoin calls), improved voice channel member tracking consistency, and enhanced speaking detection reliability.",
-  "pub_date": "2025-11-06T12:00:00.000Z",
+  "pub_date": "2025-11-06T12:00:00Z",
   "platforms": {
     "windows-x86_64": {
       "signature": "",
-      "download": "https://github.com/AnthonyRandom/commhub/releases/download/v1.1.5/commhub_1.1.5_x64_en-US.msi.zip",
-      "install": "commhub_1.1.5_x64_en-US.msi"
+      "url": "https://github.com/AnthonyRandom/commhub/releases/download/v1.1.5/commhub_1.1.5_x64_en-US.msi"
     }
   }
 }

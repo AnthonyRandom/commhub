@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Download, X, AlertCircle, CheckCircle } from 'lucide-react'
+import { Download, X, AlertCircle } from 'lucide-react'
 import { checkUpdate, installUpdate } from '@tauri-apps/api/updater'
-import { relaunch } from '@tauri-apps/api/process'
 import type { UpdateManifest } from '@tauri-apps/api/updater'
 
 interface UpdateNotificationProps {
@@ -10,78 +9,59 @@ interface UpdateNotificationProps {
 
 const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) => {
   const [manifest, setManifest] = useState<UpdateManifest | null>(null)
-  const [downloadProgress, setDownloadProgress] = useState(0)
+  const [isInstalling, setIsInstalling] = useState(false)
+  const [installProgress, setInstallProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
-  const [updateStatus, setUpdateStatus] = useState<
-    'checking' | 'available' | 'downloading' | 'ready' | 'error'
-  >('checking')
 
   useEffect(() => {
     // Check for updates when component mounts
     checkForUpdates()
   }, [])
 
-  // Note: Detailed progress tracking via onUpdaterEvent is complex in Tauri
-  // The basic checkUpdate/installUpdate flow works reliably
-
   const checkForUpdates = async () => {
     try {
-      setUpdateStatus('checking')
-      setError(null)
       const { shouldUpdate, manifest: updateManifest } = await checkUpdate()
       if (shouldUpdate && updateManifest) {
         setManifest(updateManifest)
-        setUpdateStatus('available')
-      } else {
-        setUpdateStatus('available') // No update available, component will hide
       }
     } catch (err) {
       console.error('Failed to check for updates:', err)
       setError('Failed to check for updates')
-      setUpdateStatus('error')
     }
   }
 
   const handleInstallUpdate = async () => {
     if (!manifest) return
 
-    setUpdateStatus('downloading')
+    setIsInstalling(true)
     setError(null)
 
     try {
-      // Simulate download progress for better UX
+      // Simulate progress for better UX
       const progressInterval = setInterval(() => {
-        setDownloadProgress((prev) => {
+        setInstallProgress((prev) => {
           if (prev >= 90) {
             clearInterval(progressInterval)
             return prev
           }
-          return prev + Math.random() * 15
+          return prev + Math.random() * 10
         })
-      }, 300)
+      }, 500)
 
       await installUpdate()
 
+      setInstallProgress(100)
       clearInterval(progressInterval)
-      setDownloadProgress(100)
-      setUpdateStatus('ready')
+
+      // App will restart automatically after install
     } catch (err: any) {
-      setError(err.message || 'Failed to download update')
-      setUpdateStatus('error')
+      setError(err.message || 'Failed to install update')
+      setIsInstalling(false)
     }
   }
 
-  const handleRestart = async () => {
-    try {
-      await relaunch()
-    } catch (err) {
-      console.error('Failed to restart app:', err)
-    }
-  }
-
-  // Don't show if no update available and not checking
-  if (!manifest && !error && updateStatus !== 'checking') {
-    return null
+  if (!manifest && !error) {
+    return null // Don't show anything if no update available
   }
 
   return (
@@ -92,19 +72,11 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) =>
             <div className="flex items-center gap-2">
               {error ? (
                 <AlertCircle className="w-5 h-5 text-red-400" />
-              ) : updateStatus === 'ready' ? (
-                <CheckCircle className="w-5 h-5 text-green-400" />
               ) : (
                 <Download className="w-5 h-5 text-green-400" />
               )}
               <h3 className="font-bold text-white text-lg">
-                {error
-                  ? 'Update Error'
-                  : updateStatus === 'ready'
-                    ? 'Update Ready'
-                    : updateStatus === 'downloading'
-                      ? 'Downloading Update'
-                      : 'Update Available'}
+                {error ? 'Update Error' : 'Update Available'}
               </h3>
             </div>
             <button
@@ -128,26 +100,6 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) =>
                 Try Again
               </button>
             </div>
-          ) : updateStatus === 'ready' ? (
-            <div className="text-center space-y-4">
-              <p className="text-grey-300 text-sm">
-                Update downloaded successfully! Restart CommHub to apply the changes.
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleRestart}
-                  className="flex-1 px-4 py-2 bg-green-900 text-white border-2 border-green-700 hover:bg-green-800 hover:border-green-500 transition-colors font-bold text-sm"
-                >
-                  Restart Now
-                </button>
-                <button
-                  onClick={onDismiss}
-                  className="px-4 py-2 bg-grey-800 text-white border-2 border-grey-700 hover:border-white transition-colors text-sm"
-                >
-                  Later
-                </button>
-              </div>
-            </div>
           ) : manifest ? (
             <>
               <p className="text-grey-300 text-sm mb-3">
@@ -161,21 +113,20 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) =>
                 </div>
               )}
 
-              {updateStatus === 'downloading' ? (
+              {isInstalling ? (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin"></div>
-                    <span className="text-white text-sm">Downloading and installing update...</span>
+                    <span className="text-white text-sm">Installing update...</span>
                   </div>
                   <div className="w-full bg-grey-800 border border-grey-700 h-2">
                     <div
-                      className="bg-blue-500 h-full transition-all duration-300"
-                      style={{ width: `${downloadProgress}%` }}
+                      className="bg-green-500 h-full transition-all duration-300"
+                      style={{ width: `${installProgress}%` }}
                     ></div>
                   </div>
                   <p className="text-grey-500 text-xs">
-                    {Math.round(downloadProgress)}% complete - The app will restart automatically
-                    when done.
+                    The app will restart automatically when complete.
                   </p>
                 </div>
               ) : (
@@ -184,7 +135,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) =>
                     onClick={handleInstallUpdate}
                     className="flex-1 px-4 py-2 bg-green-900 text-white border-2 border-green-700 hover:bg-green-800 hover:border-green-500 transition-colors font-bold text-sm"
                   >
-                    Download & Install
+                    Install Update
                   </button>
                   <button
                     onClick={onDismiss}
@@ -195,13 +146,6 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) =>
                 </div>
               )}
             </>
-          ) : updateStatus === 'checking' ? (
-            <div className="text-center">
-              <div className="flex items-center justify-center gap-2 mb-4">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin"></div>
-                <span className="text-white text-sm">Checking for updates...</span>
-              </div>
-            </div>
           ) : null}
         </div>
       </div>

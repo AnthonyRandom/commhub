@@ -40,27 +40,13 @@ function App() {
         // Check authentication status
         await useAuthStore.getState().checkAuth()
 
-        // Check for updates automatically on launch (like Discord)
-        if (window.__TAURI__) {
-          // Check immediately for updates
-          const checkUpdates = async () => {
-            try {
-              const { checkUpdate } = await import('@tauri-apps/api/updater')
-              const { shouldUpdate } = await checkUpdate()
-
-              if (shouldUpdate) {
-                // Show update notification if update is available
-                setShowUpdateNotification(true)
-              }
-              // Note: We don't set sessionStorage to prevent checking again
-              // This allows users to see updates even if they dismiss them
-            } catch (error) {
-              console.error('Failed to check for updates on launch:', error)
-            }
-          }
-
-          // Small delay to not interfere with app initialization
-          setTimeout(checkUpdates, 1000)
+        // Check for updates (only in Tauri environment and only once per session)
+        if (window.__TAURI__ && !sessionStorage.getItem('updateChecked')) {
+          // Delay update check to avoid interfering with initial app load
+          setTimeout(() => {
+            setShowUpdateNotification(true)
+            sessionStorage.setItem('updateChecked', 'true')
+          }, 2000)
         }
       } catch (error) {
         console.error('App initialization error:', error)
@@ -193,11 +179,7 @@ function App() {
           serverId={selectedServer?.id || null}
           onClose={() => setShowChannelModal(false)}
         />
-        <SettingsModal
-          isOpen={showAppSettings}
-          onClose={() => setShowAppSettings(false)}
-          onCheckForUpdates={() => setShowUpdateNotification(true)}
-        />
+        <SettingsModal isOpen={showAppSettings} onClose={() => setShowAppSettings(false)} />
 
         {/* Server Settings Modal */}
         <ServerSettingsModal

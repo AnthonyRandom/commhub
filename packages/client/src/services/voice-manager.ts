@@ -99,6 +99,9 @@ class VoiceManager {
       // Join the voice channel via WebSocket
       wsService.getSocket()?.emit('join-voice-channel', { channelId })
 
+      // Track voice channel state in WebSocket service for reconnection
+      wsService.setVoiceChannelState(channelId)
+
       // Play join sound for ourselves (if enabled)
       if (this.shouldPlaySounds()) {
         soundManager.playUserJoined()
@@ -138,6 +141,9 @@ class VoiceManager {
 
     // Notify server
     wsService.getSocket()?.emit('leave-voice-channel', { channelId })
+
+    // Clear voice channel state tracking
+    wsService.clearVoiceChannelState()
 
     // Clean up
     this.cleanup()

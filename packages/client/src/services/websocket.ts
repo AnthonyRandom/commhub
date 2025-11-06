@@ -66,6 +66,10 @@ class WebSocketService {
   private socket: Socket | null = null
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
+  private joinedServers: Set<number> = new Set()
+  private joinedChannels: Set<number> = new Set()
+  private wasInVoiceChannel: boolean = false
+  private voiceChannelId: number | null = null
 
   // Event listeners
   private messageListeners: ((message: WSMessage) => void)[] = []
@@ -94,6 +98,9 @@ class WebSocketService {
     this.socket.on('connect', () => {
       console.log('WebSocket connected')
       this.reconnectAttempts = 0
+
+      // Restore previous state after reconnection
+      this.restoreConnectionState()
     })
 
     this.socket.on('disconnect', (reason) => {
@@ -175,12 +182,81 @@ class WebSocketService {
       this.socket = null
     }
     this.reconnectAttempts = 0
+    // Clear state on manual disconnect
+    this.clearConnectionState()
+  }
+
+  /**
+   * Restore connection state after reconnection
+   */
+  private restoreConnectionState(): void {
+    // Rejoin server rooms
+    this.joinedServers.forEach((serverId) => {
+      if (this.socket) {
+        console.log(`[WebSocket] Rejoining server room: ${serverId}`)
+        this.socket.emit('join-server', { serverId })
+      }
+    })
+
+    // Rejoin channel rooms
+    this.joinedChannels.forEach((channelId) => {
+      if (this.socket) {
+        console.log(`[WebSocket] Rejoining channel room: ${channelId}`)
+        this.socket.emit('join-channel', { channelId })
+      }
+    })
+
+    // Rejoin voice channel if we were in one
+    if (this.wasInVoiceChannel && this.voiceChannelId) {
+      console.log(`[WebSocket] Rejoining voice channel: ${this.voiceChannelId}`)
+      // Import voice manager dynamically to avoid circular dependency
+      import('./voice-manager').then(({ voiceManager }) => {
+        // Only rejoin if we're still supposed to be in a voice channel
+        const currentChannelId = voiceManager.getCurrentChannelId()
+        if (currentChannelId === this.voiceChannelId) {
+          voiceManager.joinVoiceChannel(this.voiceChannelId).catch((error) => {
+            console.error('[WebSocket] Failed to rejoin voice channel:', error)
+            // Clear voice state if rejoin fails
+            this.clearVoiceChannelState()
+          })
+        } else {
+          // Voice state has changed, clear our tracking
+          this.clearVoiceChannelState()
+        }
+      })
+    }
+  }
+
+  /**
+   * Clear all connection state
+   */
+  private clearConnectionState(): void {
+    this.joinedServers.clear()
+    this.joinedChannels.clear()
+    this.clearVoiceChannelState()
+  }
+
+  /**
+   * Set voice channel state
+   */
+  setVoiceChannelState(channelId: number): void {
+    this.wasInVoiceChannel = true
+    this.voiceChannelId = channelId
+  }
+
+  /**
+   * Clear voice channel state
+   */
+  clearVoiceChannelState(): void {
+    this.wasInVoiceChannel = false
+    this.voiceChannelId = null
   }
 
   // Server room management
   joinServer(serverId: number): void {
     if (this.socket) {
       this.socket.emit('join-server', { serverId })
+      this.joinedServers.add(serverId)
     }
   }
 
@@ -188,12 +264,14 @@ class WebSocketService {
     if (this.socket) {
       this.socket.emit('leave-server', { serverId })
     }
+    this.joinedServers.delete(serverId)
   }
 
   // Channel room management
   joinChannel(channelId: number): void {
     if (this.socket) {
       this.socket.emit('join-channel', { channelId })
+      this.joinedChannels.add(channelId)
     }
   }
 
@@ -201,6 +279,7 @@ class WebSocketService {
     if (this.socket) {
       this.socket.emit('leave-channel', { channelId })
     }
+    this.joinedChannels.delete(channelId)
   }
 
   // Messaging

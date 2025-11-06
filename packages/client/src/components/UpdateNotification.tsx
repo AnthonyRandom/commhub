@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Download, X, AlertCircle, CheckCircle } from 'lucide-react'
-import { checkUpdate, installUpdate, onUpdaterEvent } from '@tauri-apps/api/updater'
+import { checkUpdate, installUpdate } from '@tauri-apps/api/updater'
 import { relaunch } from '@tauri-apps/api/process'
 import type { UpdateManifest } from '@tauri-apps/api/updater'
 
@@ -10,13 +10,10 @@ interface UpdateNotificationProps {
 
 const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) => {
   const [manifest, setManifest] = useState<UpdateManifest | null>(null)
-  const [isInstalling, setIsInstalling] = useState(false)
-  const [isDownloading, setIsDownloading] = useState(false)
-  const [installProgress, setInstallProgress] = useState(0)
   const [downloadProgress, setDownloadProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [updateStatus, setUpdateStatus] = useState<
-    'checking' | 'available' | 'downloading' | 'installing' | 'ready' | 'error'
+    'checking' | 'available' | 'downloading' | 'ready' | 'error'
   >('checking')
 
   useEffect(() => {
@@ -24,35 +21,8 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) =>
     checkForUpdates()
   }, [])
 
-  useEffect(() => {
-    // Listen for updater events
-    const unlisten = onUpdaterEvent(({ event, payload }) => {
-      switch (event) {
-        case 'DownloadProgress':
-          const progress = payload.chunkLength
-            ? (payload.contentLength / payload.chunkLength) * 100
-            : 0
-          setDownloadProgress(Math.min(100, progress))
-          break
-        case 'UpdateDownloaded':
-          setUpdateStatus('ready')
-          setIsDownloading(false)
-          setIsInstalling(false)
-          setInstallProgress(100)
-          break
-        case 'UpdateAvailable':
-          setUpdateStatus('available')
-          break
-        case 'UpdateNotAvailable':
-          setUpdateStatus('available') // This will hide the component
-          break
-      }
-    })
-
-    return () => {
-      unlisten.then((fn) => fn())
-    }
-  }, [])
+  // Note: Detailed progress tracking via onUpdaterEvent is complex in Tauri
+  // The basic checkUpdate/installUpdate flow works reliably
 
   const checkForUpdates = async () => {
     try {
@@ -75,16 +45,28 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) =>
   const handleInstallUpdate = async () => {
     if (!manifest) return
 
-    setIsDownloading(true)
     setUpdateStatus('downloading')
     setError(null)
 
     try {
+      // Simulate download progress for better UX
+      const progressInterval = setInterval(() => {
+        setDownloadProgress((prev) => {
+          if (prev >= 90) {
+            clearInterval(progressInterval)
+            return prev
+          }
+          return prev + Math.random() * 15
+        })
+      }, 300)
+
       await installUpdate()
-      // The updater event will handle the rest
+
+      clearInterval(progressInterval)
+      setDownloadProgress(100)
+      setUpdateStatus('ready')
     } catch (err: any) {
       setError(err.message || 'Failed to download update')
-      setIsDownloading(false)
       setUpdateStatus('error')
     }
   }
@@ -122,9 +104,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) =>
                     ? 'Update Ready'
                     : updateStatus === 'downloading'
                       ? 'Downloading Update'
-                      : updateStatus === 'installing'
-                        ? 'Installing Update'
-                        : 'Update Available'}
+                      : 'Update Available'}
               </h3>
             </div>
             <button
@@ -185,7 +165,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) =>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin"></div>
-                    <span className="text-white text-sm">Downloading update...</span>
+                    <span className="text-white text-sm">Downloading and installing update...</span>
                   </div>
                   <div className="w-full bg-grey-800 border border-grey-700 h-2">
                     <div
@@ -193,22 +173,9 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) =>
                       style={{ width: `${downloadProgress}%` }}
                     ></div>
                   </div>
-                  <p className="text-grey-500 text-xs">{Math.round(downloadProgress)}% complete</p>
-                </div>
-              ) : updateStatus === 'installing' ? (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin"></div>
-                    <span className="text-white text-sm">Installing update...</span>
-                  </div>
-                  <div className="w-full bg-grey-800 border border-grey-700 h-2">
-                    <div
-                      className="bg-green-500 h-full transition-all duration-300"
-                      style={{ width: `${installProgress}%` }}
-                    ></div>
-                  </div>
                   <p className="text-grey-500 text-xs">
-                    The app will restart automatically when complete.
+                    {Math.round(downloadProgress)}% complete - The app will restart automatically
+                    when done.
                   </p>
                 </div>
               ) : (

@@ -1221,9 +1221,12 @@ class WebRTCService {
 
     this.peers.forEach((peerConnection, userId) => {
       if (peerConnection.audioElement) {
-        // Get current user volume from voice store
-        const userVolume = useVoiceStore.getState().connectedUsers.get(userId)?.localVolume || 100
-        this.setUserVolume(userId, userVolume)
+        // Get current user volume from voice store (stored as decimal 0-2)
+        const userVolumeDecimal =
+          useVoiceStore.getState().connectedUsers.get(userId)?.localVolume || 1.0
+        // Convert to percentage for setUserVolume
+        const userVolumePercentage = userVolumeDecimal * 100
+        this.setUserVolume(userId, userVolumePercentage)
       }
     })
   }
@@ -1236,9 +1239,12 @@ class WebRTCService {
 
     this.peers.forEach((peerConnection, userId) => {
       if (peerConnection.audioElement) {
-        // Get current user volume from voice store
-        const userVolume = useVoiceStore.getState().connectedUsers.get(userId)?.localVolume || 100
-        this.setUserVolume(userId, userVolume)
+        // Get current user volume from voice store (stored as decimal 0-2)
+        const userVolumeDecimal =
+          useVoiceStore.getState().connectedUsers.get(userId)?.localVolume || 1.0
+        // Convert to percentage for setUserVolume
+        const userVolumePercentage = userVolumeDecimal * 100
+        this.setUserVolume(userId, userVolumePercentage)
       }
     })
   }

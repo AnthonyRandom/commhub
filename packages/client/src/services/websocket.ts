@@ -4,7 +4,7 @@ import { io, Socket } from 'socket.io-client'
 const WS_BASE_URL = 'https://commhub-production.up.railway.app/chat'
 
 // Client version - should match package.json version
-const CLIENT_VERSION = '1.1.4'
+const CLIENT_VERSION = '1.1.5'
 
 export interface WSMessage {
   id: number
@@ -213,8 +213,8 @@ class WebSocketService {
       import('./voice-manager').then(({ voiceManager }) => {
         // Only rejoin if we're still supposed to be in a voice channel
         const currentChannelId = voiceManager.getCurrentChannelId()
-        if (currentChannelId === this.voiceChannelId) {
-          voiceManager.joinVoiceChannel(this.voiceChannelId).catch((error) => {
+        if (currentChannelId === this.voiceChannelId! && this.voiceChannelId) {
+          voiceManager.joinVoiceChannel(this.voiceChannelId!).catch((error) => {
             console.error('[WebSocket] Failed to rejoin voice channel:', error)
             // Clear voice state if rejoin fails
             this.clearVoiceChannelState()

@@ -384,7 +384,9 @@ class VoiceManager {
    * Set volume for a specific user
    */
   setUserVolume(userId: number, volume: number) {
-    webrtcService.setUserVolume(userId, volume)
+    // Convert from decimal (0-2) to percentage (0-200) for WebRTC service
+    const volumePercentage = volume * 100
+    webrtcService.setUserVolume(userId, volumePercentage)
     useVoiceStore.getState().setUserLocalVolume(userId, volume)
   }
 

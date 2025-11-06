@@ -9,6 +9,7 @@ import { useSettingsStore } from '../stores/settings'
 interface SettingsModalProps {
   isOpen: boolean
   onClose: () => void
+  onCheckForUpdates?: () => void
 }
 
 interface AudioDevice {
@@ -17,7 +18,7 @@ interface AudioDevice {
   kind: string
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
+const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onCheckForUpdates }) => {
   // Audio devices state
   const [audioInputDevices, setAudioInputDevices] = useState<AudioDevice[]>([])
   const [audioOutputDevices, setAudioOutputDevices] = useState<AudioDevice[]>([])
@@ -864,16 +865,29 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             <h4 className="text-xs font-bold text-grey-400 uppercase tracking-wider mb-3">
               Application
             </h4>
-            <div className="bg-grey-850 border-2 border-grey-700 p-4">
+            <div className="bg-grey-850 border-2 border-grey-700 p-4 space-y-4">
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-grey-400 text-sm">Version</span>
-                  <span className="text-white text-sm font-mono">1.1.5</span>
+                  <span className="text-white text-sm font-mono">1.1.6</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-grey-400 text-sm">Product</span>
                   <span className="text-white text-sm">CommHub</span>
                 </div>
+              </div>
+
+              {/* Check for Updates Button */}
+              <div className="pt-4 border-t border-grey-700">
+                <button
+                  onClick={onCheckForUpdates}
+                  className="w-full px-4 py-2 bg-grey-800 text-white border-2 border-grey-700 hover:border-white transition-colors text-sm font-bold uppercase tracking-wide"
+                >
+                  Check for Updates
+                </button>
+                <p className="text-grey-500 text-xs mt-2 text-center">
+                  Check if a newer version is available
+                </p>
               </div>
             </div>
           </div>

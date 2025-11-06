@@ -9,7 +9,7 @@
   },
   "package": {
     "productName": "CommHub",
-    "version": "1.1.5"
+    "version": "1.1.6"
   },
   "tauri": {
     "allowlist": {
@@ -71,7 +71,12 @@
       "csp": null
     },
     "updater": {
-      "active": false
+      "active": true,
+      "endpoints": [
+        "https://github.com/AnthonyRandom/commhub/releases/download/{{target}}/{{current_version}}"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIxNUY4NTNGRjBFMzE3OApSV1I0TVE3L1UvZ1ZBdVFOMEEvUmx3cGFnaHprcFhHamRwQURhOFRlbk1tRk0vWm5QS2QwVGVnMQo=",
+      "dialog": false
     },
     "windows": [
       {

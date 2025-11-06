@@ -72,7 +72,7 @@ function App() {
     }
 
     // Listen for manual update check events from settings
-    const handleShowUpdateNotification = (event: CustomEvent) => {
+    const handleShowUpdateNotification = (_event: CustomEvent) => {
       // If an update manifest is provided via the event, show the notification
       // Otherwise, let the UpdateNotification component handle the check itself
       setShowUpdateNotification(true)

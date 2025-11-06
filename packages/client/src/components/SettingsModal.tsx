@@ -47,8 +47,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       stopMicTest()
     }
 
-    // Debug: Log current settings when modal opens
-    if (isOpen) {
+    // Debug: Log current settings when modal opens (for development only)
+    if (isOpen && import.meta.env.DEV) {
       console.log('[Settings] Modal opened with settings:', settings)
       console.log('[Settings] Available input devices:', audioInputDevices)
       console.log('[Settings] Available output devices:', audioOutputDevices)
@@ -84,9 +84,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     }
   }, [voiceSettings.detection.pttKey])
 
-  // Debug voice settings changes
+  // Debug voice settings changes (development only)
   useEffect(() => {
-    console.log('[Settings] Voice settings updated:', voiceSettings)
+    if (import.meta.env.DEV) {
+      console.log('[Settings] Voice settings updated:', voiceSettings)
+    }
   }, [voiceSettings])
 
   // Load available audio devices
@@ -113,7 +115,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           kind: device.kind,
         }))
 
-      console.log('[Settings] Loaded audio devices:', { inputs, outputs })
+      // Debug audio devices loading (development only)
+      if (import.meta.env.DEV) {
+        console.log('[Settings] Loaded audio devices:', { inputs, outputs })
+      }
 
       setAudioInputDevices(inputs)
       setAudioOutputDevices(outputs)
@@ -134,18 +139,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         audio: deviceId && deviceId !== 'default' ? { deviceId: { exact: deviceId } } : true,
       }
 
-      console.log('[Settings] Starting mic test with constraints:', constraints)
+      // Debug microphone test (development only)
+      if (import.meta.env.DEV) {
+        console.log('[Settings] Starting mic test with constraints:', constraints)
+      }
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
 
-      console.log(
-        '[Settings] Got mic stream:',
-        stream.getAudioTracks().map((t) => ({
-          label: t.label,
-          enabled: t.enabled,
-          readyState: t.readyState,
-        }))
-      )
+      if (import.meta.env.DEV) {
+        console.log(
+          '[Settings] Got mic stream:',
+          stream.getAudioTracks().map((t) => ({
+            label: t.label,
+            enabled: t.enabled,
+            readyState: t.readyState,
+          }))
+        )
+      }
 
       setTestStream(stream)
       setIsTesting(true)
@@ -167,7 +177,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         const average = dataArray.reduce((a, b) => a + b) / dataArray.length
         const scaledLevel = Math.min(100, (average / 128) * 100) // Better scaling
 
-        console.log('[Settings] Mic level:', average, 'scaled:', scaledLevel)
+        // Debug microphone level (development only)
+        if (import.meta.env.DEV) {
+          console.log('[Settings] Mic level:', average, 'scaled:', scaledLevel)
+        }
         setMicLevel(scaledLevel)
 
         animationId = requestAnimationFrame(updateLevel)
@@ -219,15 +232,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     }
     setIsTesting(false)
     setMicLevel(0)
-    console.log('[Settings] Mic test stopped')
+    // Debug mic test stopped (development only)
+    if (import.meta.env.DEV) {
+      console.log('[Settings] Mic test stopped')
+    }
   }
 
   // Save settings to localStorage when they change
 
   // Voice settings update functions
   const updateVoiceSetting = (updates: any) => {
-    console.log('[Settings] Updating voice setting:', updates)
-    console.log('[Settings] Current voice settings before update:', voiceSettings)
+    // Debug voice settings update (development only)
+    if (import.meta.env.DEV) {
+      console.log('[Settings] Updating voice setting:', updates)
+      console.log('[Settings] Current voice settings before update:', voiceSettings)
+    }
 
     // Update the store directly
     if (updates.detection) {
@@ -249,7 +268,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       voiceSettingsStore.updateInputSettings(updates.input)
 
       // Update WebRTC audio constraints if device changed
-      if (updates.input.deviceId !== undefined) {
+      if (updates.input.deviceId !== undefined && import.meta.env.DEV) {
         console.log('[Settings] Input device changed, may require stream reinitialization')
       }
     }
@@ -449,15 +468,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 <select
                   value={settings.audioInputDeviceId || 'default'}
                   onChange={(e) => {
-                    console.log('[Settings] Input device dropdown changed:', e.target.value)
-                    console.log(
-                      '[Settings] Available options:',
-                      Array.from(e.target.options).map((o) => ({
-                        value: o.value,
-                        text: o.text,
-                        selected: o.selected,
-                      }))
-                    )
+                    // Debug audio device changes (development only)
+                    if (import.meta.env.DEV) {
+                      console.log('[Settings] Input device dropdown changed:', e.target.value)
+                      console.log(
+                        '[Settings] Available options:',
+                        Array.from(e.target.options).map((o) => ({
+                          value: o.value,
+                          text: o.text,
+                          selected: o.selected,
+                        }))
+                      )
+                    }
                     updateSetting('audioInputDeviceId', e.target.value)
                   }}
                   className="w-full bg-grey-800 border-2 border-grey-700 px-3 py-2 text-white focus:border-white"
@@ -484,7 +506,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 <select
                   value={settings.audioOutputDeviceId || 'default'}
                   onChange={(e) => {
-                    console.log('[Settings] Output device dropdown changed:', e.target.value)
+                    // Debug audio device changes (development only)
+                    if (import.meta.env.DEV) {
+                      console.log('[Settings] Output device dropdown changed:', e.target.value)
+                    }
                     updateSetting('audioOutputDeviceId', e.target.value)
                   }}
                   className="w-full bg-grey-800 border-2 border-grey-700 px-3 py-2 text-white focus:border-white"
@@ -881,25 +906,24 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 <div className="pt-4 border-t border-grey-700">
                   <button
                     onClick={() => {
-                      // Import and use the checkUpdate function
-                      import('@tauri-apps/api/updater').then(({ checkUpdate }) => {
-                        checkUpdate()
-                          .then(({ shouldUpdate, manifest }) => {
-                            if (shouldUpdate && manifest) {
-                              // Trigger the update notification by dispatching a custom event
-                              window.dispatchEvent(
-                                new CustomEvent('showUpdateNotification', { detail: manifest })
-                              )
-                            } else {
-                              // Show a message that no update is available
-                              alert('You are running the latest version of CommHub.')
-                            }
-                          })
-                          .catch((error) => {
-                            console.error('Failed to check for updates:', error)
-                            alert('Failed to check for updates. Please try again later.')
-                          })
-                      })
+                      console.log('[Settings] Check for updates button clicked')
+
+                      // Check if we're in Tauri environment
+                      if (!window.__TAURI__) {
+                        console.log('[Settings] Not in Tauri environment, showing message')
+                        alert('Update checking is only available in the desktop application.')
+                        return
+                      }
+
+                      console.log(
+                        '[Settings] In Tauri environment, dispatching showUpdateNotification event'
+                      )
+
+                      // Dispatch event to show the update notification
+                      // The UpdateNotification component will handle the actual update check
+                      window.dispatchEvent(new CustomEvent('showUpdateNotification'))
+
+                      console.log('[Settings] Event dispatched successfully')
                     }}
                     className="w-full px-4 py-2 bg-grey-800 text-white border-2 border-grey-700 hover:border-white transition-colors text-sm font-bold uppercase tracking-wide"
                   >

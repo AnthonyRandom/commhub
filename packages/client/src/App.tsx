@@ -48,6 +48,13 @@ function App() {
   const selectServer = useServersStore((state) => state.selectServer)
   const { conversations, fetchConversations, deleteConversation } = useDirectMessagesStore()
 
+  // Debug showUpdateNotification state changes (development only)
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log('[App] showUpdateNotification state changed to:', showUpdateNotification)
+    }
+  }, [showUpdateNotification])
+
   // Initialize WebSocket manager and check auth on mount
   useEffect(() => {
     const initializeApp = async () => {
@@ -73,9 +80,20 @@ function App() {
 
     // Listen for manual update check events from settings
     const handleShowUpdateNotification = (_event: CustomEvent) => {
+      // Debug update notification events (development only)
+      if (import.meta.env.DEV) {
+        console.log('[App] Received showUpdateNotification event, showing update notification')
+        console.log(
+          '[App] Setting showUpdateNotification to true, current value:',
+          showUpdateNotification
+        )
+      }
       // If an update manifest is provided via the event, show the notification
       // Otherwise, let the UpdateNotification component handle the check itself
       setShowUpdateNotification(true)
+      if (import.meta.env.DEV) {
+        console.log('[App] showUpdateNotification should now be true')
+      }
     }
 
     window.addEventListener('showUpdateNotification', handleShowUpdateNotification as EventListener)

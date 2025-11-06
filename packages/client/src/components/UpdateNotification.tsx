@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { Download, X, AlertCircle } from 'lucide-react'
-import { checkUpdate, installUpdate } from '@tauri-apps/api/updater'
-import type { UpdateManifest } from '@tauri-apps/api/updater'
-import { appWindow } from '@tauri-apps/api/window'
+
+// Define our own UpdateManifest interface since we're not using Tauri's
+interface UpdateManifest {
+  version: string
+  date: string
+  body: string
+}
 
 interface UpdateNotificationProps {
   onDismiss: () => void
@@ -10,9 +14,8 @@ interface UpdateNotificationProps {
 
 const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) => {
   const [manifest, setManifest] = useState<UpdateManifest | null>(null)
-  const [isInstalling, setIsInstalling] = useState(false)
-  const [installProgress, setInstallProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [checkComplete, setCheckComplete] = useState(false)
 
   useEffect(() => {
     // Check for updates when component mounts
@@ -21,67 +24,141 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) =>
 
   const checkForUpdates = async () => {
     try {
-      // Prevent any default Tauri update dialogs by ensuring we handle updates ourselves
-      // This is a safeguard in case the updater config isn't fully disabling the default dialog
+      // Fetch the latest.json file from the repository
+      const response = await fetch(
+        'https://raw.githubusercontent.com/AnthonyRandom/commhub/main/latest.json'
+      )
 
-      // Listen for any update-related events that might trigger dialogs
-      const unlistenUpdate = await appWindow.listen('tauri://update-available', (_event: any) => {
-        console.log('Intercepted update-available event, preventing default dialog')
-        // Don't show the default dialog - our custom component handles this
-      })
-
-      const unlistenInstall = await appWindow.listen('tauri://update-install', (_event: any) => {
-        console.log('Intercepted update-install event')
-        // Don't show default install dialogs
-      })
-
-      const { shouldUpdate, manifest: updateManifest } = await checkUpdate()
-
-      // Clean up listeners
-      unlistenUpdate()
-      unlistenInstall()
-
-      if (shouldUpdate && updateManifest) {
-        setManifest(updateManifest)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch latest.json: ${response.status} ${response.statusText}`)
       }
+
+      const latestData = await response.json()
+
+      const latestVersion = latestData.version
+      const currentVersion = '1.1.6' // This should match the version in package.json
+
+      // Simple version comparison (assuming semantic versioning)
+      const isLatest = compareVersions(currentVersion, latestVersion) >= 0
+
+      if (isLatest) {
+        // No update available - will show "no updates" message
+      } else {
+        // Create a mock manifest for display
+        setManifest({
+          version: latestVersion,
+          date: latestData.pub_date,
+          body: latestData.notes,
+        })
+      }
+
+      setCheckComplete(true)
     } catch (err) {
       console.error('Failed to check for updates:', err)
-      setError('Failed to check for updates')
+      setError(
+        `Failed to check for updates: ${err instanceof Error ? err.message : 'Unknown error'}`
+      )
+      setCheckComplete(true)
     }
   }
 
-  const handleInstallUpdate = async () => {
+  // Simple version comparison function
+  const compareVersions = (version1: string, version2: string): number => {
+    const parts1 = version1.split('.').map(Number)
+    const parts2 = version2.split('.').map(Number)
+
+    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+      const part1 = parts1[i] || 0
+      const part2 = parts2[i] || 0
+
+      if (part1 > part2) return 1
+      if (part1 < part2) return -1
+    }
+
+    return 0
+  }
+
+  const handleInstallUpdate = () => {
     if (!manifest) return
 
-    setIsInstalling(true)
-    setError(null)
-
-    try {
-      // Simulate progress for better UX
-      const progressInterval = setInterval(() => {
-        setInstallProgress((prev) => {
-          if (prev >= 90) {
-            clearInterval(progressInterval)
-            return prev
-          }
-          return prev + Math.random() * 10
-        })
-      }, 500)
-
-      await installUpdate()
-
-      setInstallProgress(100)
-      clearInterval(progressInterval)
-
-      // App will restart automatically after install
-    } catch (err: any) {
-      setError(err.message || 'Failed to install update')
-      setIsInstalling(false)
-    }
+    // Open GitHub releases page for manual download
+    window.open('https://github.com/AnthonyRandom/commhub/releases', '_blank')
+    onDismiss() // Close the notification
   }
 
-  if (!manifest && !error) {
-    return null // Don't show anything if no update available
+  // Show a loading state while checking for updates
+  if (!checkComplete && !error) {
+    return (
+      <div className="fixed bottom-4 right-4 z-50 animate-slide-up">
+        <div className="bg-grey-900 border-2 border-grey-700 w-96 animate-fade-in shadow-xl">
+          <div className="border-b-2 border-grey-800 p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 border-2 border-white border-t-transparent animate-spin"></div>
+                <h3 className="font-bold text-white text-lg">Checking for Updates...</h3>
+              </div>
+              <button
+                onClick={onDismiss}
+                className="p-1 text-grey-400 hover:text-white transition-colors"
+                title="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          <div className="p-4">
+            <p className="text-grey-300 text-sm">
+              Please wait while we check for available updates.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Show "no updates available" message when check is complete but no update found
+  if (checkComplete && !manifest && !error) {
+    return (
+      <div className="fixed bottom-4 right-4 z-50 animate-slide-up">
+        <div className="bg-grey-900 border-2 border-grey-700 w-96 animate-fade-in shadow-xl">
+          <div className="border-b-2 border-grey-800 p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Download className="w-5 h-5 text-green-400" />
+                <h3 className="font-bold text-white text-lg">No Updates Available</h3>
+              </div>
+              <button
+                onClick={onDismiss}
+                className="p-1 text-grey-400 hover:text-white transition-colors"
+                title="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          <div className="p-4">
+            <p className="text-grey-300 text-sm mb-4">
+              You are running the latest version of CommHub (v1.1.6).
+            </p>
+            <p className="text-grey-400 text-xs mb-4">Check for new releases manually:</p>
+            <a
+              href="https://github.com/AnthonyRandom/commhub/releases"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block px-4 py-2 bg-blue-900 text-white border-2 border-blue-700 hover:bg-blue-800 hover:border-blue-500 transition-colors text-sm font-bold"
+            >
+              View Releases on GitHub
+            </a>
+            <button
+              onClick={onDismiss}
+              className="ml-2 px-4 py-2 bg-grey-800 text-white border-2 border-grey-700 hover:border-white transition-colors text-sm"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -133,38 +210,23 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) =>
                 </div>
               )}
 
-              {isInstalling ? (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin"></div>
-                    <span className="text-white text-sm">Installing update...</span>
-                  </div>
-                  <div className="w-full bg-grey-800 border border-grey-700 h-2">
-                    <div
-                      className="bg-green-500 h-full transition-all duration-300"
-                      style={{ width: `${installProgress}%` }}
-                    ></div>
-                  </div>
-                  <p className="text-grey-500 text-xs">
-                    The app will restart automatically when complete.
-                  </p>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleInstallUpdate}
-                    className="flex-1 px-4 py-2 bg-green-900 text-white border-2 border-green-700 hover:bg-green-800 hover:border-green-500 transition-colors font-bold text-sm"
-                  >
-                    Install Update
-                  </button>
-                  <button
-                    onClick={onDismiss}
-                    className="px-4 py-2 bg-grey-800 text-white border-2 border-grey-700 hover:border-white transition-colors text-sm"
-                  >
-                    Later
-                  </button>
-                </div>
-              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleInstallUpdate}
+                  className="flex-1 px-4 py-2 bg-green-900 text-white border-2 border-green-700 hover:bg-green-800 hover:border-green-500 transition-colors font-bold text-sm"
+                >
+                  Download Update
+                </button>
+                <button
+                  onClick={onDismiss}
+                  className="px-4 py-2 bg-grey-800 text-white border-2 border-grey-700 hover:border-white transition-colors text-sm"
+                >
+                  Later
+                </button>
+              </div>
+              <p className="text-grey-500 text-xs mt-2">
+                Download the latest version from GitHub releases.
+              </p>
             </>
           ) : null}
         </div>

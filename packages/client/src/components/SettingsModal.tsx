@@ -865,14 +865,49 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               Application
             </h4>
             <div className="bg-grey-850 border-2 border-grey-700 p-4">
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-grey-400 text-sm">Version</span>
-                  <span className="text-white text-sm font-mono">1.1.5</span>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-grey-400 text-sm">Version</span>
+                    <span className="text-white text-sm font-mono">1.1.6</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-grey-400 text-sm">Product</span>
+                    <span className="text-white text-sm">CommHub</span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-grey-400 text-sm">Product</span>
-                  <span className="text-white text-sm">CommHub</span>
+
+                {/* Check for Updates Button */}
+                <div className="pt-4 border-t border-grey-700">
+                  <button
+                    onClick={() => {
+                      // Import and use the checkUpdate function
+                      import('@tauri-apps/api/updater').then(({ checkUpdate }) => {
+                        checkUpdate()
+                          .then(({ shouldUpdate, manifest }) => {
+                            if (shouldUpdate && manifest) {
+                              // Trigger the update notification by dispatching a custom event
+                              window.dispatchEvent(
+                                new CustomEvent('showUpdateNotification', { detail: manifest })
+                              )
+                            } else {
+                              // Show a message that no update is available
+                              alert('You are running the latest version of CommHub.')
+                            }
+                          })
+                          .catch((error) => {
+                            console.error('Failed to check for updates:', error)
+                            alert('Failed to check for updates. Please try again later.')
+                          })
+                      })
+                    }}
+                    className="w-full px-4 py-2 bg-grey-800 text-white border-2 border-grey-700 hover:border-white transition-colors text-sm font-bold uppercase tracking-wide"
+                  >
+                    Check for Updates
+                  </button>
+                  <p className="text-grey-500 text-xs mt-2 text-center">
+                    Manually check for new versions of the application
+                  </p>
                 </div>
               </div>
             </div>

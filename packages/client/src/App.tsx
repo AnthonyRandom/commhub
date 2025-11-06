@@ -15,6 +15,24 @@ import { wsManager } from './services/websocket-manager'
 import type { Server, Channel } from './services/api'
 import './app.css'
 
+// Prevent default Tauri update dialogs globally
+if (window.__TAURI__) {
+  import('@tauri-apps/api/window').then(({ appWindow }) => {
+    // Intercept any update-related events to prevent default dialogs
+    appWindow.listen('tauri://update-available', (_event: any) => {
+      console.log('Global: Intercepted update-available event, custom dialog should handle this')
+    })
+
+    appWindow.listen('tauri://update-install', (_event: any) => {
+      console.log('Global: Intercepted update-install event')
+    })
+
+    appWindow.listen('tauri://update-status', (_event: any) => {
+      console.log('Global: Intercepted update-status event')
+    })
+  })
+}
+
 function App() {
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
   const [selectedServer, setSelectedServer] = useState<Server | null>(null)
@@ -53,7 +71,23 @@ function App() {
       }
     }
 
+    // Listen for manual update check events from settings
+    const handleShowUpdateNotification = (event: CustomEvent) => {
+      // If an update manifest is provided via the event, show the notification
+      // Otherwise, let the UpdateNotification component handle the check itself
+      setShowUpdateNotification(true)
+    }
+
+    window.addEventListener('showUpdateNotification', handleShowUpdateNotification as EventListener)
+
     initializeApp()
+
+    return () => {
+      window.removeEventListener(
+        'showUpdateNotification',
+        handleShowUpdateNotification as EventListener
+      )
+    }
   }, [])
 
   // Join server websocket room when server is selected

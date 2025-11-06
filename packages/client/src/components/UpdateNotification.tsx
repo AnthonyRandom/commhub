@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Download, X, AlertCircle } from 'lucide-react'
 import { checkUpdate, installUpdate } from '@tauri-apps/api/updater'
 import type { UpdateManifest } from '@tauri-apps/api/updater'
+import { appWindow } from '@tauri-apps/api/window'
 
 interface UpdateNotificationProps {
   onDismiss: () => void
@@ -20,7 +21,26 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) =>
 
   const checkForUpdates = async () => {
     try {
+      // Prevent any default Tauri update dialogs by ensuring we handle updates ourselves
+      // This is a safeguard in case the updater config isn't fully disabling the default dialog
+
+      // Listen for any update-related events that might trigger dialogs
+      const unlistenUpdate = await appWindow.listen('tauri://update-available', (_event: any) => {
+        console.log('Intercepted update-available event, preventing default dialog')
+        // Don't show the default dialog - our custom component handles this
+      })
+
+      const unlistenInstall = await appWindow.listen('tauri://update-install', (_event: any) => {
+        console.log('Intercepted update-install event')
+        // Don't show default install dialogs
+      })
+
       const { shouldUpdate, manifest: updateManifest } = await checkUpdate()
+
+      // Clean up listeners
+      unlistenUpdate()
+      unlistenInstall()
+
       if (shouldUpdate && updateManifest) {
         setManifest(updateManifest)
       }

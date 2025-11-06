@@ -134,6 +134,14 @@ class WebSocketManager {
     wsService.getOnlineFriends()
   }
 
+  notifyStatusChange(userId: number, status: string) {
+    wsService.notifyStatusChange(userId, status)
+  }
+
+  onStatusUpdate(callback: (data: { userId: number; status: string }) => void) {
+    wsService.onStatusUpdate(callback)
+  }
+
   get isConnected(): boolean {
     return wsService.isConnected
   }

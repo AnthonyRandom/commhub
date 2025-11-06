@@ -79,6 +79,7 @@ class WebSocketService {
   private onlineFriendsListeners: ((friends: any[]) => void)[] = []
   private directMessageListeners: ((message: DirectMessageWS) => void)[] = []
   private errorListeners: ((error: any) => void)[] = []
+  private statusUpdateListeners: ((data: { userId: number; status: string }) => void)[] = []
 
   connect(token: string): void {
     if (this.socket?.connected) {
@@ -153,6 +154,10 @@ class WebSocketService {
 
     this.socket.on('direct-message', (message: DirectMessageWS) => {
       this.directMessageListeners.forEach((listener) => listener(message))
+    })
+
+    this.socket.on('status-update', (data: { userId: number; status: string }) => {
+      this.statusUpdateListeners.forEach((listener) => listener(data))
     })
 
     this.socket.on('error', (error: any) => {
@@ -296,6 +301,13 @@ class WebSocketService {
     }
   }
 
+  // Status
+  notifyStatusChange(userId: number, status: string): void {
+    if (this.socket) {
+      this.socket.emit('status-change', { userId, status })
+    }
+  }
+
   // Event listener management
   onMessage(listener: (message: WSMessage) => void): () => void {
     this.messageListeners.push(listener)
@@ -363,6 +375,16 @@ class WebSocketService {
       const index = this.directMessageListeners.indexOf(listener)
       if (index > -1) {
         this.directMessageListeners.splice(index, 1)
+      }
+    }
+  }
+
+  onStatusUpdate(listener: (data: { userId: number; status: string }) => void): () => void {
+    this.statusUpdateListeners.push(listener)
+    return () => {
+      const index = this.statusUpdateListeners.indexOf(listener)
+      if (index > -1) {
+        this.statusUpdateListeners.splice(index, 1)
       }
     }
   }

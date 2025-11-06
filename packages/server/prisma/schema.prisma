@@ -13,13 +13,21 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserStatus {
+  online
+  idle
+  dnd
+  invisible
+}
+
 model User {
-  id        Int      @id @default(autoincrement())
-  username  String   @unique
-  email     String   @unique
+  id        Int        @id @default(autoincrement())
+  username  String     @unique
+  email     String     @unique
   password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  status    UserStatus @default(online)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 
   // Relations
   ownedServers       Server[]         @relation("ServerOwner")

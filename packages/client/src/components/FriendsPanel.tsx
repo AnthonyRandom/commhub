@@ -17,6 +17,7 @@ import { useAuthStore } from '../stores/auth'
 import { useDirectMessagesStore } from '../stores/directMessages'
 import { useSettingsStore } from '../stores/settings'
 import { apiService, type DirectMessage } from '../services/api'
+import StatusIndicator from './StatusIndicator'
 
 interface FriendsPanelProps {
   selectedDMUserId?: number | null
@@ -448,10 +449,15 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({
           >
             <ArrowLeft className="w-5 h-5 text-white" />
           </button>
-          <div className="w-8 h-8 bg-white flex items-center justify-center">
-            <span className="text-black font-bold text-sm">
-              {selectedFriend.username.charAt(0).toUpperCase()}
-            </span>
+          <div className="relative">
+            <div className="w-8 h-8 bg-white flex items-center justify-center">
+              <span className="text-black font-bold text-sm">
+                {selectedFriend.username.charAt(0).toUpperCase()}
+              </span>
+            </div>
+            <div className="absolute -bottom-1 -right-1">
+              <StatusIndicator userId={selectedFriend.id} size="sm" />
+            </div>
           </div>
           <div>
             <h2 className="font-bold text-white">{selectedFriend.username}</h2>
@@ -814,10 +820,15 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({
                   key={friend.id}
                   className="flex items-center gap-3 p-3 bg-grey-850 border-2 border-grey-800 hover:border-grey-700 transition-colors group"
                 >
-                  <div className="w-10 h-10 bg-white flex items-center justify-center">
-                    <span className="text-black font-bold">
-                      {friend.username.charAt(0).toUpperCase()}
-                    </span>
+                  <div className="relative">
+                    <div className="w-10 h-10 bg-white flex items-center justify-center">
+                      <span className="text-black font-bold">
+                        {friend.username.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="absolute -bottom-1 -right-1">
+                      <StatusIndicator userId={friend.id} size="md" />
+                    </div>
                   </div>
                   <div className="flex-1">
                     <p className="text-white font-bold">{friend.username}</p>

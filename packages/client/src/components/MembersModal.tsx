@@ -1,6 +1,7 @@
 import React from 'react'
 import { X, Crown } from 'lucide-react'
 import type { Server } from '../services/api'
+import StatusIndicator from './StatusIndicator'
 
 interface MembersModalProps {
   isOpen: boolean
@@ -34,10 +35,15 @@ const MembersModal: React.FC<MembersModalProps> = ({ isOpen, onClose, server }) 
                   key={member.id}
                   className="flex items-center gap-3 p-3 bg-grey-850 border-2 border-grey-700 hover:border-grey-600 transition-colors"
                 >
-                  <div className="w-8 h-8 bg-white flex items-center justify-center flex-shrink-0">
-                    <span className="text-black font-bold text-sm">
-                      {member.username.charAt(0).toUpperCase()}
-                    </span>
+                  <div className="relative">
+                    <div className="w-8 h-8 bg-white flex items-center justify-center flex-shrink-0">
+                      <span className="text-black font-bold text-sm">
+                        {member.username.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="absolute -bottom-1 -right-1">
+                      <StatusIndicator userId={member.id} size="sm" />
+                    </div>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">

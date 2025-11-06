@@ -5,6 +5,7 @@ import { voiceManager } from '../services/voice-manager'
 import { useVoiceStore } from '../stores/voice'
 import { webrtcService } from '../services/webrtc'
 import { useSettingsStore } from '../stores/settings'
+import { useStatusStore } from '../stores/status'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -28,6 +29,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   // User preferences from global store
   const settings = useSettingsStore()
   const updateSetting = useSettingsStore((state) => state.updateSetting)
+
+  // Status settings
+  const { updateStatus } = useStatusStore()
 
   // Voice settings state
   const voiceSettings = useVoiceSettingsStore((state) => state.settings)
@@ -445,6 +449,53 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                     }`}
                   >
                     24 Hour
+                  </button>
+                </div>
+              </div>
+
+              {/* Status Selector */}
+              <div className="pt-4 border-t border-grey-700">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-5 h-5 bg-green-500 border-2 border-green-600 rounded-full flex items-center justify-center">
+                    <div className="w-2 h-2 bg-white rounded-full"></div>
+                  </div>
+                  <div>
+                    <p className="text-white text-sm font-medium">Status</p>
+                    <p className="text-grey-500 text-xs">Set your online status</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => updateStatus('online')}
+                    className="flex items-center gap-2 p-3 border-2 transition-colors bg-grey-800 text-grey-400 border-grey-700 hover:border-green-600 hover:text-green-400"
+                  >
+                    <div className="w-3 h-3 bg-green-500 border border-green-600 rounded-full"></div>
+                    <span className="text-sm font-medium">Online</span>
+                  </button>
+                  <button
+                    onClick={() => updateStatus('idle')}
+                    className="flex items-center gap-2 p-3 border-2 transition-colors bg-grey-800 text-grey-400 border-grey-700 hover:border-yellow-600 hover:text-yellow-400"
+                  >
+                    <div className="w-3 h-3 bg-yellow-500 border border-yellow-600 rounded-full flex items-center justify-center text-xs">
+                      🌙
+                    </div>
+                    <span className="text-sm font-medium">Idle</span>
+                  </button>
+                  <button
+                    onClick={() => updateStatus('dnd')}
+                    className="flex items-center gap-2 p-3 border-2 transition-colors bg-grey-800 text-grey-400 border-grey-700 hover:border-red-600 hover:text-red-400"
+                  >
+                    <div className="w-3 h-3 bg-red-500 border border-red-600 rounded-full flex items-center justify-center text-xs">
+                      ⭕
+                    </div>
+                    <span className="text-sm font-medium">Do Not Disturb</span>
+                  </button>
+                  <button
+                    onClick={() => updateStatus('invisible')}
+                    className="flex items-center gap-2 p-3 border-2 transition-colors bg-grey-800 text-grey-400 border-grey-700 hover:border-grey-600 hover:text-grey-400"
+                  >
+                    <div className="w-3 h-3 bg-grey-500 border border-grey-600 rounded-full"></div>
+                    <span className="text-sm font-medium">Invisible</span>
                   </button>
                 </div>
               </div>

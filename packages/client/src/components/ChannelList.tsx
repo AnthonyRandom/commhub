@@ -21,6 +21,7 @@ import { useVoiceStore } from '../stores/voice'
 import { apiService, type Conversation } from '../services/api'
 import { wsService } from '../services/websocket'
 import { voiceManager } from '../services/voice-manager'
+import StatusIndicator from './StatusIndicator'
 import type { Channel, Server } from '../services/api'
 
 interface ChannelListProps {
@@ -562,10 +563,15 @@ const ChannelList: React.FC<ChannelListProps> = ({
                       onClick={() => onDMSelect?.(conversation.user.id)}
                       className="w-full flex items-center gap-3 p-3 bg-grey-850 border-2 border-grey-800 hover:border-grey-700 transition-colors text-left"
                     >
-                      <div className="w-10 h-10 bg-white flex-shrink-0 flex items-center justify-center">
-                        <span className="text-black font-bold">
-                          {conversation.user.username.charAt(0).toUpperCase()}
-                        </span>
+                      <div className="relative">
+                        <div className="w-10 h-10 bg-white flex-shrink-0 flex items-center justify-center">
+                          <span className="text-black font-bold">
+                            {conversation.user.username.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="absolute -bottom-1 -right-1">
+                          <StatusIndicator userId={conversation.user.id} size="md" />
+                        </div>
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2 mb-1">

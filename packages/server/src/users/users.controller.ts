@@ -104,4 +104,13 @@ export class UsersController {
   getBlockedUsers(@Param('id', ParseIntPipe) id: number) {
     return this.usersService.getBlockedUsers(id);
   }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id/status')
+  updateStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { status: 'online' | 'idle' | 'dnd' | 'invisible' }
+  ) {
+    return this.usersService.updateStatus(id, body.status);
+  }
 }

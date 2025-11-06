@@ -24,6 +24,7 @@ export class UsersService {
         id: true,
         username: true,
         email: true,
+        status: true,
         createdAt: true,
       },
     });
@@ -34,6 +35,7 @@ export class UsersService {
       select: {
         id: true,
         username: true,
+        status: true,
         createdAt: true,
       },
     });
@@ -45,6 +47,7 @@ export class UsersService {
       select: {
         id: true,
         username: true,
+        status: true,
         createdAt: true,
         ownedServers: {
           select: {
@@ -64,12 +67,14 @@ export class UsersService {
           select: {
             id: true,
             username: true,
+            status: true,
           },
         },
         friendsOf: {
           select: {
             id: true,
             username: true,
+            status: true,
           },
         },
       },
@@ -89,6 +94,7 @@ export class UsersService {
         id: true,
         username: true,
         email: true,
+        status: true,
         createdAt: true,
         ownedServers: {
           select: {
@@ -108,12 +114,14 @@ export class UsersService {
           select: {
             id: true,
             username: true,
+            status: true,
           },
         },
         friendsOf: {
           select: {
             id: true,
             username: true,
+            status: true,
           },
         },
       },
@@ -132,6 +140,7 @@ export class UsersService {
       select: {
         id: true,
         username: true,
+        status: true,
         createdAt: true,
       },
     });
@@ -155,6 +164,7 @@ export class UsersService {
         id: true,
         username: true,
         email: true,
+        status: true,
         createdAt: true,
       },
     });
@@ -256,6 +266,7 @@ export class UsersService {
           select: {
             id: true,
             username: true,
+            status: true,
           },
         },
       },
@@ -405,5 +416,26 @@ export class UsersService {
     });
 
     return blockCheck.length > 0;
+  }
+
+  async updateStatus(
+    userId: number,
+    status: 'online' | 'idle' | 'dnd' | 'invisible'
+  ) {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { status },
+      select: {
+        id: true,
+        username: true,
+        status: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user;
   }
 }

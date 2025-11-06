@@ -9,6 +9,7 @@ export interface User {
   id: number
   username: string
   email: string
+  status?: 'online' | 'idle' | 'dnd' | 'invisible'
 }
 
 export interface AuthResponse {
@@ -66,6 +67,7 @@ export interface Friend {
   id: number
   username: string
   email: string
+  status?: 'online' | 'idle' | 'dnd' | 'invisible'
 }
 
 export interface FriendRequest {
@@ -110,6 +112,7 @@ export interface Conversation {
     id: number
     username: string
     email: string
+    status?: 'online' | 'idle' | 'dnd' | 'invisible'
   }
   lastMessage: DirectMessage | null
   unreadCount: number
@@ -356,6 +359,18 @@ class ApiService {
   async getBlockedUsers(userId: number): Promise<Friend[]> {
     const response: AxiosResponse<Friend[]> = await this.axiosInstance.get(
       `/users/${userId}/blocked`
+    )
+    return response.data
+  }
+
+  // Status methods
+  async updateStatus(
+    userId: number,
+    status: 'online' | 'idle' | 'dnd' | 'invisible'
+  ): Promise<User> {
+    const response: AxiosResponse<User> = await this.axiosInstance.patch(
+      `/users/${userId}/status`,
+      { status }
     )
     return response.data
   }

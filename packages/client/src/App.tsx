@@ -11,6 +11,7 @@ import UpdateNotification from './components/UpdateNotification'
 import { useAuthStore } from './stores/auth'
 import { useServersStore } from './stores/servers'
 import { useDirectMessagesStore } from './stores/directMessages'
+import { useStatusStore } from './stores/status'
 import { wsManager } from './services/websocket-manager'
 import type { Server, Channel } from './services/api'
 import './app.css'
@@ -47,6 +48,7 @@ function App() {
   const { isAuthenticated, isLoading } = useAuthStore()
   const selectServer = useServersStore((state) => state.selectServer)
   const { conversations, fetchConversations, deleteConversation } = useDirectMessagesStore()
+  const { initializeStatusTracking, cleanup } = useStatusStore()
 
   // Debug showUpdateNotification state changes (development only)
   useEffect(() => {
@@ -64,6 +66,11 @@ function App() {
 
         // Check authentication status
         await useAuthStore.getState().checkAuth()
+
+        // Initialize status tracking if authenticated
+        if (useAuthStore.getState().isAuthenticated) {
+          initializeStatusTracking()
+        }
 
         // Check for updates (only in Tauri environment and only once per session)
         if (window.__TAURI__ && !sessionStorage.getItem('updateChecked')) {
@@ -105,6 +112,7 @@ function App() {
         'showUpdateNotification',
         handleShowUpdateNotification as EventListener
       )
+      cleanup()
     }
   }, [])
 

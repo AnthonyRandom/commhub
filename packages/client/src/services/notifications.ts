@@ -24,10 +24,21 @@ class NotificationService {
   /**
    * Show a desktop notification for a DM
    */
-  async showDMNotification(senderName: string, message: string, settings: any) {
+  async showDMNotification(
+    senderName: string,
+    message: string,
+    settings: any,
+    userStatus?: string
+  ) {
     // Check if notifications are enabled
     if (!settings.notifications) {
       console.log('[Notifications] Notifications disabled, skipping DM notification')
+      return
+    }
+
+    // Check if user is in Do Not Disturb mode
+    if (userStatus === 'dnd') {
+      console.log('[Notifications] User is in DND mode, suppressing notification')
       return
     }
 

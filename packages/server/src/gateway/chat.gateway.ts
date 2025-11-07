@@ -491,7 +491,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       // Use DirectMessagesService instead of MessagesService
-      const directMessage = await this.directMessagesService.create(
+      // Check if this is the first ever message between these two users
+      const preCount = await this.prisma.directMessage.count({
+        where: {
+          OR: [
+            { senderId: client.userId, receiverId: data.receiverId },
+            { senderId: data.receiverId, receiverId: client.userId },
+          ],
+        },
+      });
+
+      const messageData = await this.directMessagesService.create(
         {
           receiverId: data.receiverId,
           content: trimmedContent,
@@ -503,31 +513,42 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const senderSocketId = this.onlineUsers.get(client.userId);
 
       // Send the full message object to both sender and receiver
-      const messageData = {
-        id: directMessage.id,
-        content: directMessage.content,
-        senderId: directMessage.senderId,
-        receiverId: directMessage.receiverId,
-        createdAt: directMessage.createdAt,
-        isEdited: directMessage.isEdited,
-        editedAt: directMessage.editedAt,
+      const messageDto = {
+        id: messageData.id,
+        content: messageData.content,
+        senderId: messageData.senderId,
+        receiverId: messageData.receiverId,
+        createdAt: messageData.createdAt,
+        isEdited: messageData.isEdited,
+        editedAt: messageData.editedAt,
         isRead: false, // New messages are unread
         sender: {
-          id: directMessage.sender.id,
-          username: directMessage.sender.username,
+          id: messageData.sender.id,
+          username: messageData.sender.username,
         },
         receiver: {
-          id: directMessage.receiver.id,
-          username: directMessage.receiver.username,
+          id: messageData.receiver.id,
+          username: messageData.receiver.username,
         },
       };
 
       if (receiverSocketId) {
-        this.server.to(receiverSocketId).emit('direct-message', messageData);
+        this.server.to(receiverSocketId).emit('direct-message', messageDto);
       }
 
       if (senderSocketId) {
-        this.server.to(senderSocketId).emit('direct-message', messageData);
+        this.server.to(senderSocketId).emit('direct-message', messageDto);
+      }
+
+      // If this was the first message, emit dm-thread-created to both users so their conversation lists refresh
+      if (preCount === 0) {
+        const threadInfo = {
+          userA: { id: client.userId, username: client.username },
+          userB: { id: data.receiverId },
+          lastMessage: messageDto,
+        };
+        this.server.to(receiverSocketId).emit('dm-thread-created', threadInfo);
+        this.server.to(senderSocketId).emit('dm-thread-created', threadInfo);
       }
     } catch (error) {
       this.logger.error('Error sending direct message:', error.message);
@@ -622,6 +643,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     status: 'online' | 'idle' | 'dnd' | 'invisible' | 'offline'
   ) {
     try {
+      // Get the user whose status changed
+      const user = await this.usersService.findOne(userId);
+      if (!user) {
+        this.logger.error(`User ${userId} not found for presence notification`);
+        return;
+      }
+
       // Get user's friends
       const friends = await this.usersService.getFriends(userId);
 
@@ -634,7 +662,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         if (friendSocketId) {
           this.server.to(friendSocketId).emit('friend-presence', {
             userId,
-            username: friend.username, // Note: we might need to get the actual username
+            username: user.username,
             status: friendStatus,
           });
         }
@@ -739,6 +767,49 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     } catch (error) {
       this.logger.error('Error getting online friends:', error.message);
       client.emit('error', { message: 'Failed to get online friends' });
+    }
+  }
+
+  @SubscribeMessage('ready')
+  async handleReady(@ConnectedSocket() client: AuthenticatedSocket) {
+    try {
+      // Join all server and channel rooms the user has access to
+      const memberships = await this.prisma.server.findMany({
+        where: {
+          members: {
+            some: {
+              id: client.userId,
+            },
+          },
+        },
+        include: {
+          channels: {
+            select: { id: true },
+          },
+        },
+      });
+
+      memberships.forEach(membership => {
+        const serverRoom = `server-${membership.id}`;
+        client.join(serverRoom);
+
+        // Join all text/voice channels for background updates
+        membership.channels.forEach(channel => {
+          client.join(`channel-${channel.id}`);
+        });
+      });
+
+      // Compute online friends snapshot
+      const friends = await this.usersService.getFriends(client.userId);
+      const onlineFriends = friends.filter(f => this.onlineUsers.has(f.id));
+
+      // Send initial sync payload
+      client.emit('initial-sync', {
+        onlineFriends,
+      });
+    } catch (error) {
+      this.logger.error('Error during ready handshake:', error.message);
+      client.emit('error', { message: 'Failed to initialize connection' });
     }
   }
 
@@ -1291,6 +1362,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         'Error broadcasting voice channel members:',
         error.message
       );
+    }
+  }
+
+  private emitNotification(userId: number, payload: any) {
+    const socketId = this.onlineUsers.get(userId);
+    if (socketId) {
+      this.server.to(socketId).emit('notification', payload);
     }
   }
 }

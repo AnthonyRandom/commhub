@@ -4,7 +4,7 @@ import { io, Socket } from 'socket.io-client'
 const WS_BASE_URL = 'https://commhub-production.up.railway.app/chat'
 
 // Client version - should match package.json version
-const CLIENT_VERSION = '1.1.7'
+const CLIENT_VERSION = '1.1.8'
 
 export interface WSMessage {
   id: number

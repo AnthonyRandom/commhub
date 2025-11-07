@@ -18,7 +18,6 @@ import {
   ChevronDown,
 } from 'lucide-react'
 import { useMessagesStore } from '../stores/messages'
-import { wsManager } from '../services/websocket-manager'
 import { useAuthStore } from '../stores/auth'
 import { useVoiceStore } from '../stores/voice'
 import { voiceManager } from '../services/voice-manager'
@@ -334,14 +333,11 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   }
 
   // Fetch messages when channel changes (text channels only)
+  // Note: No need to join/leave channel rooms - the 'ready' event automatically
+  // joins users to all their channels for background updates (needed for @mentions, notifications, unread counts)
   useEffect(() => {
     if (selectedChannel && selectedChannel.type === 'text') {
       fetchMessages(selectedChannel.id)
-      wsManager.joinChannel(selectedChannel.id)
-
-      return () => {
-        wsManager.leaveChannel(selectedChannel.id)
-      }
     }
   }, [selectedChannel, fetchMessages])
 

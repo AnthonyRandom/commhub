@@ -22,6 +22,8 @@ interface FriendsState {
   blockUser: (userId: number, blockedUserId: number) => Promise<void>
   unblockUser: (userId: number, blockedUserId: number) => Promise<void>
   clearError: () => void
+  setOnlineFriends: (online: { id: number; status?: string }[]) => void
+  updateFriendStatus: (userId: number, status: string) => void
 }
 
 export const useFriendsStore = create<FriendsState>((set, get) => ({
@@ -208,5 +210,44 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
 
   clearError: () => {
     set({ error: null })
+  },
+
+  setOnlineFriends: (onlineFriends: { id: number; status?: string }[]) => {
+    set((state) => {
+      const allowedStatuses = ['online', 'idle', 'dnd', 'invisible'] as const
+      const updated = state.friends.map((f) => {
+        const online = onlineFriends.find((o) => o.id === f.id)
+        if (online) {
+          const status = allowedStatuses.includes(online.status as any)
+            ? (online.status as (typeof allowedStatuses)[number])
+            : 'online'
+          return { ...f, status }
+        }
+        return f
+      })
+      return { friends: updated }
+    })
+  },
+
+  updateFriendStatus: (userId: number, status: string) => {
+    set((state) => {
+      const allowedStatuses = ['online', 'idle', 'dnd', 'invisible'] as const
+
+      const updated = state.friends.map((f) => {
+        if (f.id === userId) {
+          // If status is 'offline', set to undefined (not online)
+          if (status === 'offline') {
+            return { ...f, status: undefined }
+          }
+          // Otherwise, validate and set the status
+          const validStatus = allowedStatuses.includes(status as any)
+            ? (status as (typeof allowedStatuses)[number])
+            : undefined
+          return { ...f, status: validStatus }
+        }
+        return f
+      })
+      return { friends: updated }
+    })
   },
 }))

@@ -40,27 +40,85 @@ class WebSocketManager {
     })
   }
 
-  private initializeChannelListeners() {
-    // Listen for new channels being created
-    wsService.getSocket()?.on('channel-created', (data) => {
+  // NEW: Attach listeners that require direct socket reference
+  private attachSocketListeners(socket: any) {
+    // Ensure we don't attach duplicates when reconnecting
+    socket.off('channel-created')
+    socket.off('channel-updated')
+    socket.off('channel-deleted')
+    socket.off('voice-channel-members')
+    socket.off('friend-request-received')
+    socket.off('friend-request-responded')
+    socket.off('initial-sync')
+    socket.off('friend-presence')
+    socket.off('dm-thread-created')
+
+    // Channel events
+    socket.on('channel-created', (data: any) => {
       console.log('[WebSocket] Channel created:', data)
       const { useChannelsStore } = require('../stores/channels')
       useChannelsStore.getState().addChannel(data.channel)
     })
-
-    // Listen for channels being updated
-    wsService.getSocket()?.on('channel-updated', (data) => {
+    socket.on('channel-updated', (data: any) => {
       console.log('[WebSocket] Channel updated:', data)
       const { useChannelsStore } = require('../stores/channels')
       useChannelsStore.getState().updateChannel(data.channel)
     })
-
-    // Listen for channels being deleted
-    wsService.getSocket()?.on('channel-deleted', (data) => {
+    socket.on('channel-deleted', (data: any) => {
       console.log('[WebSocket] Channel deleted:', data)
       const { useChannelsStore } = require('../stores/channels')
       useChannelsStore.getState().removeChannel(data.channelId)
     })
+
+    // Voice sidebar snapshots
+    socket.on('voice-channel-members', (data: { channelId: number; members: any[] }) => {
+      const { useVoiceMembersStore } = require('../stores/voiceMembers')
+      useVoiceMembersStore.getState().setMembers(data.channelId, data.members)
+    })
+
+    // Initial sync on connection
+    socket.on('initial-sync', (data: { onlineFriends: any[] }) => {
+      console.log('[WebSocket] Initial sync received:', data)
+      const { useFriendsStore } = require('../stores/friends')
+      useFriendsStore.getState().setOnlineFriends(data.onlineFriends)
+    })
+
+    // Friend presence updates (online/offline/idle/dnd status changes)
+    socket.on('friend-presence', (data: { userId: number; username: string; status: string }) => {
+      console.log('[WebSocket] Friend presence update:', data)
+      const { useFriendsStore } = require('../stores/friends')
+      useFriendsStore.getState().updateFriendStatus(data.userId, data.status)
+    })
+
+    // DM thread created (first message between two users)
+    socket.on('dm-thread-created', (data: any) => {
+      console.log('[WebSocket] DM thread created:', data)
+      const { useDirectMessagesStore } = require('../stores/directMessages')
+      // Refresh conversations to show the new thread
+      useDirectMessagesStore.getState().fetchConversations()
+    })
+
+    // Friend request events
+    socket.on('friend-request-received', (data: any) => {
+      console.log('[WebSocket] Friend request received:', data)
+      const { useFriendsStore } = require('../stores/friends')
+      useFriendsStore.getState().fetchReceivedRequests()
+    })
+    socket.on('friend-request-responded', (_data: any) => {
+      console.log('[WebSocket] Friend request responded:', _data)
+      const { useFriendsStore } = require('../stores/friends')
+      const { useAuthStore } = require('../stores/auth')
+      const user = useAuthStore.getState().user
+      if (user) {
+        useFriendsStore.getState().fetchSentRequests()
+        useFriendsStore.getState().fetchReceivedRequests()
+        useFriendsStore.getState().fetchFriends(user.id)
+      }
+    })
+  }
+
+  private initializeChannelListeners() {
+    /* Deprecated: Handled via attachSocketListeners() */
   }
 
   private initializeDirectMessageListeners() {
@@ -73,34 +131,32 @@ class WebSocketManager {
   }
 
   private initializeFriendRequestListeners() {
-    // Listen for incoming friend requests
-    wsService.getSocket()?.on('friend-request-received', (data) => {
-      console.log('[WebSocket] Friend request received:', data)
-      // Refresh received requests
-      const { useFriendsStore } = require('../stores/friends')
-      useFriendsStore.getState().fetchReceivedRequests()
-    })
-
-    // Listen for friend request responses
-    wsService.getSocket()?.on('friend-request-responded', (data) => {
-      console.log('[WebSocket] Friend request responded:', data)
-      // Refresh friend requests and friends list
-      const { useFriendsStore } = require('../stores/friends')
-      const { useAuthStore } = require('../stores/auth')
-      const user = useAuthStore.getState().user
-
-      if (user) {
-        useFriendsStore.getState().fetchSentRequests()
-        useFriendsStore.getState().fetchReceivedRequests()
-        useFriendsStore.getState().fetchFriends(user.id)
-      }
-    })
+    /* Deprecated: Handled via attachSocketListeners() */
   }
 
   connect() {
     const token = apiService.getAuthToken()
     if (token) {
       wsService.connect(token)
+      const socket = wsService.getSocket()
+      if (socket) {
+        // Attach listeners immediately if socket already connected/created
+        this.attachSocketListeners(socket)
+
+        // Set up connect handler for ready emission and listener reattachment
+        socket.on('connect', () => {
+          console.log('[WebSocket] Connected, emitting ready and reattaching listeners')
+          this.attachSocketListeners(socket)
+          // Emit ready on every connection/reconnection to join all rooms
+          socket.emit('ready')
+        })
+
+        // If already connected, emit ready immediately
+        if (socket.connected) {
+          console.log('[WebSocket] Already connected, emitting ready')
+          socket.emit('ready')
+        }
+      }
     }
   }
 

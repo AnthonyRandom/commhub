@@ -15,21 +15,63 @@ import { DirectMessagesService } from './direct-messages.service';
 import { CreateDirectMessageDto } from './dto/create-direct-message.dto';
 import { UpdateDirectMessageDto } from './dto/update-direct-message.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ChatGateway } from '../gateway/chat.gateway';
 
 @Controller('direct-messages')
 @UseGuards(JwtAuthGuard)
 export class DirectMessagesController {
-  constructor(private readonly directMessagesService: DirectMessagesService) {}
+  constructor(
+    private readonly directMessagesService: DirectMessagesService,
+    private readonly chatGateway: ChatGateway
+  ) {}
 
   @Post()
-  create(
+  async create(
     @Body() createDirectMessageDto: CreateDirectMessageDto,
     @Request() req
   ) {
-    return this.directMessagesService.create(
+    // Check if this is the first message between these two users
+    const preCount = await this.directMessagesService.countConversation(
+      req.user.id,
+      createDirectMessageDto.receiverId
+    );
+
+    const messageData = await this.directMessagesService.create(
       createDirectMessageDto,
       req.user.id
     );
+
+    // Emit WebSocket event to both sender and receiver for real-time updates
+    const messageDto = {
+      id: messageData.id,
+      content: messageData.content,
+      senderId: messageData.senderId,
+      receiverId: messageData.receiverId,
+      createdAt: messageData.createdAt,
+      isEdited: messageData.isEdited,
+      editedAt: messageData.editedAt,
+      isRead: false,
+      sender: {
+        id: messageData.sender.id,
+        username: messageData.sender.username,
+      },
+      receiver: {
+        id: messageData.receiver.id,
+        username: messageData.receiver.username,
+      },
+    };
+
+    // Emit to both users via WebSocket
+    this.chatGateway.emitDirectMessage(messageData.receiverId, messageDto);
+    this.chatGateway.emitDirectMessage(messageData.senderId, messageDto);
+
+    // If this was the first message, emit dm-thread-created to refresh conversation lists
+    if (preCount === 0) {
+      this.chatGateway.emitDMThreadCreated(messageData.receiverId);
+      this.chatGateway.emitDMThreadCreated(messageData.senderId);
+    }
+
+    return messageData;
   }
 
   @Get('conversations')

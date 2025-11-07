@@ -1413,4 +1413,34 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.server.to(socketId).emit('notification', payload);
     }
   }
+
+  /**
+   * Public method to emit direct message events from HTTP controller
+   */
+  emitDirectMessage(userId: number, messageDto: any) {
+    const socketId = this.onlineUsers.get(userId);
+    if (socketId) {
+      this.logger.log(
+        `[DM-HTTP] Emitting direct-message to user ${userId} (socket: ${socketId})`
+      );
+      this.server.to(socketId).emit('direct-message', messageDto);
+    } else {
+      this.logger.log(
+        `[DM-HTTP] User ${userId} is offline, skipping WebSocket emission`
+      );
+    }
+  }
+
+  /**
+   * Public method to emit dm-thread-created events from HTTP controller
+   */
+  emitDMThreadCreated(userId: number) {
+    const socketId = this.onlineUsers.get(userId);
+    if (socketId) {
+      this.logger.log(
+        `[DM-HTTP] Emitting dm-thread-created to user ${userId} (socket: ${socketId})`
+      );
+      this.server.to(socketId).emit('dm-thread-created', {});
+    }
+  }
 }

@@ -12,6 +12,17 @@ import { UpdateDirectMessageDto } from './dto/update-direct-message.dto';
 export class DirectMessagesService {
   constructor(private prisma: PrismaService) {}
 
+  async countConversation(userId: number, otherUserId: number) {
+    return this.prisma.directMessage.count({
+      where: {
+        OR: [
+          { senderId: userId, receiverId: otherUserId },
+          { senderId: otherUserId, receiverId: userId },
+        ],
+      },
+    });
+  }
+
   async create(
     createDirectMessageDto: CreateDirectMessageDto,
     senderId: number

@@ -35,12 +35,40 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
   error: null,
 
   fetchFriends: async (userId: number) => {
+    console.log(`[FriendsStore] fetchFriends called for userId: ${userId}`)
     set({ isLoading: true, error: null })
     try {
       const friends = await apiService.getFriends(userId)
-      set({ friends, isLoading: false })
+      console.log(`[FriendsStore] API returned ${friends.length} friends`)
+
+      // Preserve any existing status updates from WebSocket that came before fetch
+      const currentFriends = get().friends
+      console.log(`[FriendsStore] Current friends before fetch: ${currentFriends.length}`)
+
+      const friendsWithPreservedStatus = friends.map((friend) => {
+        const existingFriend = currentFriends.find((f) => f.id === friend.id)
+        // If friend already has a status from WebSocket, keep it
+        if (existingFriend?.status) {
+          console.log(
+            `[FriendsStore] Preserving status ${existingFriend.status} for friend ${friend.username} (${friend.id})`
+          )
+          return { ...friend, status: existingFriend.status }
+        }
+        return friend
+      })
+
+      console.log(
+        `[FriendsStore] Final friends with statuses:`,
+        friendsWithPreservedStatus.map((f) => ({
+          id: f.id,
+          username: f.username,
+          status: f.status,
+        }))
+      )
+      set({ friends: friendsWithPreservedStatus, isLoading: false })
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Failed to fetch friends'
+      console.error(`[FriendsStore] fetchFriends error:`, errorMessage)
       set({ isLoading: false, error: errorMessage })
     }
   },
@@ -230,11 +258,24 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
   },
 
   updateFriendStatus: (userId: number, status: string) => {
+    console.log(
+      `[FriendsStore] updateFriendStatus called for user ${userId} with status: ${status}`
+    )
+    console.log(`[FriendsStore] Current friends array length:`, get().friends.length)
+
+    const friendExists = get().friends.some((f) => f.id === userId)
+    if (!friendExists) {
+      console.warn(`[FriendsStore] Friend with userId ${userId} not found in friends array!`)
+    }
+
     set((state) => {
       const allowedStatuses = ['online', 'idle', 'dnd', 'invisible'] as const
 
       const updated = state.friends.map((f) => {
         if (f.id === userId) {
+          console.log(
+            `[FriendsStore] Updating friend ${f.username} (${userId}) status to: ${status}`
+          )
           // If status is 'offline', set to undefined (not online)
           if (status === 'offline') {
             return { ...f, status: undefined }
@@ -247,6 +288,11 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
         }
         return f
       })
+
+      console.log(
+        `[FriendsStore] Friends after status update:`,
+        updated.map((f) => ({ id: f.id, username: f.username, status: f.status }))
+      )
       return { friends: updated }
     })
   },

@@ -119,6 +119,7 @@ class WebSocketManager {
   private initializeDirectMessageListeners() {
     // Listen for incoming direct messages
     wsService.onDirectMessage((data) => {
+      console.log('[WebSocket] Direct message received:', data)
       useDirectMessagesStore.getState().addMessage(data)
       // Refresh conversations to update last message and unread count
       useDirectMessagesStore.getState().fetchConversations()

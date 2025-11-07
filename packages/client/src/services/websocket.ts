@@ -137,6 +137,11 @@ class WebSocketService {
     })
 
     this.socket.on('friend-presence', (presence: FriendPresence) => {
+      console.log('[WebSocket Service] Received friend-presence event:', presence)
+      console.log(
+        '[WebSocket Service] Number of presence listeners:',
+        this.friendPresenceListeners.length
+      )
       this.friendPresenceListeners.forEach((listener) => listener(presence))
     })
 
@@ -153,6 +158,8 @@ class WebSocketService {
     })
 
     this.socket.on('direct-message', (message: DirectMessageWS) => {
+      console.log('[WebSocket Service] Received direct-message event:', message)
+      console.log('[WebSocket Service] Number of DM listeners:', this.directMessageListeners.length)
       this.directMessageListeners.forEach((listener) => listener(message))
     })
 

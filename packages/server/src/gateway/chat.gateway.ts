@@ -160,6 +160,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       // Notify friends that user went offline
+      this.logger.log(
+        `[Disconnect] Notifying friends that ${client.username} (${client.userId}) went offline`
+      );
       await this.notifyFriendsPresence(client.userId, 'offline');
     }
   }
@@ -532,12 +535,26 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         },
       };
 
+      this.logger.log(
+        `[DM] Sending direct-message to receiver ${data.receiverId} (socketId: ${receiverSocketId || 'offline'}) and sender ${client.userId} (socketId: ${senderSocketId || 'offline'})`
+      );
+
       if (receiverSocketId) {
         this.server.to(receiverSocketId).emit('direct-message', messageDto);
+        this.logger.log(
+          `[DM] Emitted direct-message to receiver socket ${receiverSocketId}`
+        );
+      } else {
+        this.logger.warn(
+          `[DM] Receiver ${data.receiverId} is offline, message not sent via WebSocket`
+        );
       }
 
       if (senderSocketId) {
         this.server.to(senderSocketId).emit('direct-message', messageDto);
+        this.logger.log(
+          `[DM] Emitted direct-message to sender socket ${senderSocketId}`
+        );
       }
 
       // If this was the first message, emit dm-thread-created to both users so their conversation lists refresh
@@ -657,6 +674,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // Map status for friends: invisible users appear offline to friends
       const friendStatus = status === 'invisible' ? 'offline' : status;
 
+      this.logger.log(
+        `[Presence] Notifying ${friends.length} friends about ${user.username}'s ${friendStatus} status`
+      );
+
       for (const friend of friends) {
         const friendSocketId = this.onlineUsers.get(friend.id);
         if (friendSocketId) {
@@ -665,6 +686,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             username: user.username,
             status: friendStatus,
           });
+          this.logger.log(
+            `[Presence] Sent ${friendStatus} status to friend ${friend.username} (${friend.id})`
+          );
+        } else {
+          this.logger.log(
+            `[Presence] Friend ${friend.username} (${friend.id}) is offline, skipping`
+          );
         }
       }
     } catch (error) {

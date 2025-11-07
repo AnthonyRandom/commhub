@@ -841,13 +841,28 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const friends = await this.usersService.getFriends(client.userId);
       const onlineFriends = friends.filter(f => this.onlineUsers.has(f.id));
 
+      // Compute voice channel members snapshot for all accessible channels
+      const voiceChannelSnapshots: Record<
+        number,
+        Array<{ userId: number; username: string }>
+      > = {};
+      memberships.forEach(membership => {
+        membership.channels.forEach(channel => {
+          const members = this.voiceChannelMembers.get(channel.id);
+          if (members && members.size > 0) {
+            voiceChannelSnapshots[channel.id] = Array.from(members);
+          }
+        });
+      });
+
       this.logger.log(
-        `[Ready] Sending initial-sync with ${onlineFriends.length} online friends to ${client.username}`
+        `[Ready] Sending initial-sync with ${onlineFriends.length} online friends and ${Object.keys(voiceChannelSnapshots).length} voice channels to ${client.username}`
       );
 
       // Send initial sync payload
       client.emit('initial-sync', {
         onlineFriends,
+        voiceChannels: voiceChannelSnapshots,
       });
     } catch (error) {
       this.logger.error('Error during ready handshake:', error.message);

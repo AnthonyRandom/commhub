@@ -79,19 +79,38 @@ class WebSocketManager {
     })
 
     // Initial sync on connection
-    socket.on('initial-sync', (data: { onlineFriends: any[] }) => {
-      console.log('[WebSocket] Initial sync received:', data)
-      useFriendsStore.getState().setOnlineFriends(data.onlineFriends)
+    socket.on(
+      'initial-sync',
+      (data: {
+        onlineFriends: any[]
+        voiceChannels?: Record<number, Array<{ userId: number; username: string }>>
+      }) => {
+        console.log('[WebSocket] Initial sync received:', data)
+        useFriendsStore.getState().setOnlineFriends(data.onlineFriends)
 
-      // Also populate status store with online friends
-      const statusStore = useStatusStore.getState()
-      data.onlineFriends.forEach((friend) => {
-        const status = friend.status || 'online'
-        if (['online', 'idle', 'dnd', 'invisible'].includes(status)) {
-          statusStore.setUserStatus(friend.id, status as UserStatus)
+        // Also populate status store with online friends
+        const statusStore = useStatusStore.getState()
+        data.onlineFriends.forEach((friend) => {
+          const status = friend.status || 'online'
+          if (['online', 'idle', 'dnd', 'invisible'].includes(status)) {
+            statusStore.setUserStatus(friend.id, status as UserStatus)
+          }
+        })
+
+        // Populate voice channel members for all accessible channels
+        if (data.voiceChannels) {
+          const voiceMembersStore = useVoiceMembersStore.getState()
+          Object.entries(data.voiceChannels).forEach(([channelId, members]) => {
+            voiceMembersStore.setMembers(parseInt(channelId), members)
+          })
+          console.log(
+            '[WebSocket] Loaded voice channel snapshots for',
+            Object.keys(data.voiceChannels).length,
+            'channels'
+          )
         }
-      })
-    })
+      }
+    )
 
     // Friend presence updates (online/offline/idle/dnd status changes)
     socket.on('friend-presence', (data: { userId: number; username: string; status: string }) => {

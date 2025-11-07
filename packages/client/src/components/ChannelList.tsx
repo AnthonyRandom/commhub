@@ -70,48 +70,26 @@ const ChannelList: React.FC<ChannelListProps> = ({
     fetchChannels()
   }, [fetchChannels])
 
-  // Poll for voice channel member updates when in a server
+  // Listen for voice channel member updates (real-time via WebSocket)
   useEffect(() => {
-    if (!server) return
-
-    const pollInterval = setInterval(async () => {
-      try {
-        // Emit event to request voice channel member updates
-        wsService.getSocket()?.emit('get-voice-channel-members', { serverId: server.id })
-      } catch (error) {
-        console.error('Error polling for voice channel members:', error)
-      }
-    }, 15000) // Poll every 15 seconds (even less frequent)
-
-    return () => clearInterval(pollInterval)
-  }, [server])
-
-  // Listen for voice channel member updates
-  useEffect(() => {
-    const handleVoiceChannelMembersUpdate = (event: CustomEvent) => {
-      const { channelId, members } = event.detail
+    const handleVoiceChannelMembersUpdate = (data: { channelId: number; members: any[] }) => {
       setVoiceChannelMembers((prev) => {
         const newMap = new Map(prev)
-        if (members.length > 0) {
-          newMap.set(channelId, members)
+        if (data.members.length > 0) {
+          newMap.set(data.channelId, data.members)
         } else {
           // Remove empty channels from the display
-          newMap.delete(channelId)
+          newMap.delete(data.channelId)
         }
         return newMap
       })
     }
 
-    window.addEventListener(
-      'voice-channel-members-update',
-      handleVoiceChannelMembersUpdate as EventListener
-    )
+    // Listen for voice-channel-members WebSocket events
+    wsService.getSocket()?.on('voice-channel-members', handleVoiceChannelMembersUpdate)
 
     return () => {
-      window.removeEventListener(
-        'voice-channel-members-update',
-        handleVoiceChannelMembersUpdate as EventListener
-      )
+      wsService.getSocket()?.off('voice-channel-members', handleVoiceChannelMembersUpdate)
     }
   }, [])
 

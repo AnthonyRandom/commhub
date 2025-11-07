@@ -13,12 +13,14 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   className = '',
 }) => {
   const getUserStatus = useStatusStore((state) => state.getUserStatus)
-  const status = getUserStatus(userId) as 'online' | 'idle' | 'dnd' | 'invisible' | 'offline'
 
-  // Don't show indicator for invisible users or offline users
-  if (status === 'invisible' || !status || status === 'offline') {
-    return null
-  }
+  // Get user status, default to 'offline' if not found
+  const status = (getUserStatus(userId) || 'offline') as
+    | 'online'
+    | 'idle'
+    | 'dnd'
+    | 'invisible'
+    | 'offline'
 
   const sizeClasses = {
     sm: 'w-2 h-2',
@@ -34,6 +36,10 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
         return 'bg-yellow-500 border-yellow-600'
       case 'dnd':
         return 'bg-red-500 border-red-600'
+      case 'offline':
+        return 'bg-grey-400 border-grey-500'
+      case 'invisible':
+        return 'bg-grey-600 border-grey-700'
       default:
         return 'bg-grey-500 border-grey-600'
     }
@@ -45,6 +51,8 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
         return '🌙'
       case 'dnd':
         return '⭕'
+      case 'invisible':
+        return '👻'
       default:
         return null
     }

@@ -12,7 +12,7 @@ interface StatusState {
   setUserStatus: (userId: number, status: UserStatus) => void
   updateStatus: (status: UserStatus) => Promise<void>
   updateLastActivity: () => void
-  getUserStatus: (userId: number) => UserStatus
+  getUserStatus: (userId: number) => UserStatus | undefined
   initializeStatusTracking: () => void
   cleanup: () => void
 }
@@ -48,11 +48,10 @@ export const useStatusStore = create<StatusState>((set, get) => ({
     set({ lastActivity: Date.now() })
   },
 
-  getUserStatus: (userId: number): UserStatus => {
+  getUserStatus: (userId: number): UserStatus | undefined => {
     // For invisible users, return 'online' if they're actually online but invisible
     // This is handled server-side - invisible users appear offline to others
-    const status = get().userStatuses.get(userId)
-    return status || ('offline' as UserStatus)
+    return get().userStatuses.get(userId)
   },
 
   initializeStatusTracking: () => {

@@ -1198,17 +1198,24 @@ class WebRTCService {
       // Apply attenuation (reduction from master volume)
       const attenuationFactor = (100 - voiceSettings.output.attenuation) / 100
 
-      // Combine master volume, user volume, and attenuation
-      const masterVolumeFactor = voiceSettings.output.masterVolume / 100
-      const userVolumeFactor = volume / 100
-      const finalVolume = masterVolumeFactor * userVolumeFactor * attenuationFactor
+      // Apply a more pronounced volume curve for better user experience
+      // Use a curve that makes volume changes more noticeable, especially at lower levels
+      const normalizedVolume = volume / 100 // 0-2 range from slider 0-200
+      const curvedVolume =
+        normalizedVolume < 1
+          ? Math.pow(normalizedVolume, 1.5) // More pronounced at lower volumes
+          : 1 + Math.pow(normalizedVolume - 1, 1.2) // Less aggressive at higher volumes
 
-      // Clamp volume between 0 and 2 (0% to 200%)
-      const clampedVolume = Math.max(0, Math.min(2, finalVolume))
+      // Combine master volume, curved user volume, and attenuation
+      const masterVolumeFactor = voiceSettings.output.masterVolume / 100
+      const finalVolume = masterVolumeFactor * curvedVolume * attenuationFactor
+
+      // Clamp volume between 0 and 3 (0% to 300% for more headroom)
+      const clampedVolume = Math.max(0, Math.min(3, finalVolume))
 
       peerConnection.audioElement.volume = clampedVolume
       console.log(
-        `[WebRTC] Set volume for ${peerConnection.username} to ${(clampedVolume * 100).toFixed(0)}% (master: ${voiceSettings.output.masterVolume}%, user: ${volume}%, attenuation: ${voiceSettings.output.attenuation}%)`
+        `[WebRTC] Set volume for ${peerConnection.username} to ${(clampedVolume * 100).toFixed(0)}% (slider: ${volume}%, master: ${voiceSettings.output.masterVolume}%, attenuation: ${voiceSettings.output.attenuation}%)`
       )
     }
   }

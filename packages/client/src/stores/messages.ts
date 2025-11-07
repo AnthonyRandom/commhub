@@ -6,14 +6,19 @@ import { useAuthStore } from './auth'
 interface MessagesState {
   messages: { [channelId: number]: Message[] }
   isLoading: boolean
+  isLoadingOlder: { [channelId: number]: boolean }
+  hasMoreMessages: { [channelId: number]: boolean }
   error: string | null
 
   // Actions
   fetchMessages: (channelId: number) => Promise<void>
+  loadOlderMessages: (channelId: number) => Promise<void>
   sendMessage: (channelId: number, content: string, replyToId?: number) => Promise<void>
   editMessage: (messageId: number, content: string) => Promise<void>
   deleteMessage: (channelId: number, messageId: number) => Promise<void>
   addMessage: (message: WSMessage) => void
+  updateMessage: (message: WSMessage) => void
+  removeMessage: (channelId: number, messageId: number) => void
   clearError: () => void
   initializeWebSocketListeners: () => void
 }
@@ -21,6 +26,8 @@ interface MessagesState {
 export const useMessagesStore = create<MessagesState>((set, get) => ({
   messages: {},
   isLoading: false,
+  isLoadingOlder: {},
+  hasMoreMessages: {},
   error: null,
 
   fetchMessages: async (channelId: number) => {
@@ -32,6 +39,10 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
           ...state.messages,
           [channelId]: messages,
         },
+        hasMoreMessages: {
+          ...state.hasMoreMessages,
+          [channelId]: messages.length >= 50, // If we got 50 or more messages, there might be more
+        },
         isLoading: false,
       }))
     } catch (error: any) {
@@ -40,6 +51,63 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
         isLoading: false,
         error: errorMessage,
       })
+    }
+  },
+
+  loadOlderMessages: async (channelId: number) => {
+    const state = get()
+    if (state.isLoadingOlder[channelId] || !state.hasMoreMessages[channelId]) {
+      return
+    }
+
+    const currentMessages = state.messages[channelId] || []
+    if (currentMessages.length === 0) return
+
+    // Get the oldest message ID to load messages before it
+    const oldestMessageId = currentMessages[0].id
+
+    set((state) => ({
+      isLoadingOlder: {
+        ...state.isLoadingOlder,
+        [channelId]: true,
+      },
+      error: null,
+    }))
+
+    try {
+      const olderMessages = await apiService.getChannelMessages(channelId, oldestMessageId, 50)
+      set((state) => {
+        const existingMessages = state.messages[channelId] || []
+        const existingMessageIds = new Set(existingMessages.map((m) => m.id))
+
+        // Filter out any messages that already exist to prevent duplicates
+        const newOlderMessages = olderMessages.filter((msg) => !existingMessageIds.has(msg.id))
+        const hasMore = olderMessages.length >= 50 // If we got the full amount requested, there might be more
+
+        return {
+          messages: {
+            ...state.messages,
+            [channelId]: [...newOlderMessages, ...existingMessages], // Prepend only new older messages
+          },
+          hasMoreMessages: {
+            ...state.hasMoreMessages,
+            [channelId]: hasMore,
+          },
+          isLoadingOlder: {
+            ...state.isLoadingOlder,
+            [channelId]: false,
+          },
+        }
+      })
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'Failed to load older messages'
+      set((state) => ({
+        isLoadingOlder: {
+          ...state.isLoadingOlder,
+          [channelId]: false,
+        },
+        error: errorMessage,
+      }))
     }
   },
 
@@ -204,10 +272,57 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
     })
   },
 
+  updateMessage: (message: WSMessage) => {
+    set((state) => {
+      const channelMessages = state.messages[message.channelId] || []
+      const updatedMessages = channelMessages.map((m) =>
+        m.id === message.id
+          ? {
+              ...m,
+              content: message.content,
+              isEdited: message.isEdited,
+              editedAt: message.editedAt,
+            }
+          : m
+      )
+
+      return {
+        messages: {
+          ...state.messages,
+          [message.channelId]: updatedMessages,
+        },
+      }
+    })
+  },
+
+  removeMessage: (channelId: number, messageId: number) => {
+    set((state) => {
+      const channelMessages = state.messages[channelId] || []
+      const updatedMessages = channelMessages.filter((m) => m.id !== messageId)
+
+      return {
+        messages: {
+          ...state.messages,
+          [channelId]: updatedMessages,
+        },
+      }
+    })
+  },
+
   initializeWebSocketListeners: () => {
     // Set up WebSocket listeners for real-time messages
     wsService.onMessage((message) => {
       get().addMessage(message)
+    })
+
+    // Listen for message edits
+    wsService.getSocket()?.on('message-edited', (data) => {
+      get().updateMessage(data)
+    })
+
+    // Listen for message deletions
+    wsService.getSocket()?.on('message-deleted', (data) => {
+      get().removeMessage(data.channelId, data.messageId)
     })
 
     wsService.onError((error) => {

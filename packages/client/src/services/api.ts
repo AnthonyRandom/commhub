@@ -227,9 +227,13 @@ class ApiService {
     return response.data
   }
 
-  async getChannelMessages(channelId: number): Promise<Message[]> {
+  async getChannelMessages(channelId: number, before?: number, limit = 50): Promise<Message[]> {
+    const params = new URLSearchParams()
+    if (before) params.append('before', before.toString())
+    if (limit !== 50) params.append('limit', limit.toString())
+
     const response: AxiosResponse<Message[]> = await this.axiosInstance.get(
-      `/channels/${channelId}/messages`
+      `/channels/${channelId}/messages?${params.toString()}`
     )
     return response.data
   }

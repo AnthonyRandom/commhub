@@ -22,6 +22,8 @@ interface DirectMessagesState {
   deleteConversation: (userId: number) => Promise<void>
   setActiveConversation: (userId: number | null) => void
   addMessage: (message: DirectMessage) => void
+  updateDirectMessage: (message: DirectMessage) => void
+  removeDirectMessage: (userId: number, messageId: number) => void
   clearError: () => void
 }
 
@@ -246,6 +248,39 @@ export const useDirectMessagesStore = create<DirectMessagesState>((set, get) => 
       }
 
       return newState
+    })
+  },
+
+  updateDirectMessage: (message: DirectMessage) => {
+    const currentUser = useAuthStore.getState().user
+    if (!currentUser) return
+
+    const otherUserId = message.senderId === currentUser.id ? message.receiverId : message.senderId
+
+    set((state) => {
+      const conversationMessages = state.messages[otherUserId] || []
+      const updatedMessages = conversationMessages.map((m) => (m.id === message.id ? message : m))
+
+      return {
+        messages: {
+          ...state.messages,
+          [otherUserId]: updatedMessages,
+        },
+      }
+    })
+  },
+
+  removeDirectMessage: (userId: number, messageId: number) => {
+    set((state) => {
+      const conversationMessages = state.messages[userId] || []
+      const updatedMessages = conversationMessages.filter((m) => m.id !== messageId)
+
+      return {
+        messages: {
+          ...state.messages,
+          [userId]: updatedMessages,
+        },
+      }
     })
   },
 

@@ -15,13 +15,13 @@ import {
   Smile,
   Reply as ReplyIcon,
   X,
+  ChevronDown,
 } from 'lucide-react'
 import { useMessagesStore } from '../stores/messages'
 import { wsManager } from '../services/websocket-manager'
 import { useAuthStore } from '../stores/auth'
 import { useVoiceStore } from '../stores/voice'
 import { voiceManager } from '../services/voice-manager'
-import { useServersStore } from '../stores/servers'
 import { useSettingsStore } from '../stores/settings'
 import { useFriendsStore } from '../stores/friends'
 import MembersModal from './MembersModal'
@@ -264,18 +264,23 @@ const VoiceChannelParticipants: React.FC = () => {
                             type="range"
                             min="0"
                             max="200"
-                            value={voiceUser.localVolume * 100}
-                            onChange={(e) =>
+                            step="5"
+                            value={Math.min(
+                              200,
+                              Math.max(0, Math.round(voiceUser.localVolume * 100))
+                            )}
+                            onChange={(e) => {
+                              const newValue = parseInt(e.target.value)
                               handleUserVolumeChange(
                                 participant.userId,
-                                parseInt(e.target.value) / 100
+                                Math.min(2.0, Math.max(0, newValue / 100)) // Clamp to 0-2 range
                               )
-                            }
+                            }}
                             className="flex-1 h-1 bg-grey-700 appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white"
                             onClick={(e) => e.stopPropagation()}
                           />
                           <span className="text-sm text-white font-mono w-12 text-right">
-                            {Math.round(voiceUser.localVolume * 100)}%
+                            {Math.min(200, Math.max(0, Math.round(voiceUser.localVolume * 100)))}%
                           </span>
                         </div>
                       </div>
@@ -300,18 +305,22 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   const [showGifPicker, setShowGifPicker] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
+  const [isScrolledUp, setIsScrolledUp] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const editInputRef = useRef<HTMLTextAreaElement>(null)
 
   const allMessages = useMessagesStore((state) => state.messages)
   const messages = selectedChannel ? allMessages[selectedChannel.id] || [] : []
+  const isLoadingOlder = useMessagesStore((state) => state.isLoadingOlder)
+  const hasMoreMessages = useMessagesStore((state) => state.hasMoreMessages)
   const sendMessage = useMessagesStore((state) => state.sendMessage)
   const fetchMessages = useMessagesStore((state) => state.fetchMessages)
+  const loadOlderMessages = useMessagesStore((state) => state.loadOlderMessages)
   const editMessage = useMessagesStore((state) => state.editMessage)
   const deleteMessage = useMessagesStore((state) => state.deleteMessage)
   const { user } = useAuthStore()
-  const { fetchServers } = useServersStore()
   const { getTimeFormat } = useSettingsStore()
   const { blockedUsers } = useFriendsStore()
 
@@ -341,15 +350,43 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
     voiceManager.initialize()
   }, [])
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages arrive (but not when loading older messages or user is scrolled up)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    if (messages.length > 0 && !isLoadingOlder[selectedChannel?.id || 0] && !isScrolledUp) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages, isLoadingOlder, selectedChannel?.id, isScrolledUp])
 
-  // Focus input when channel changes
+  // Handle scroll to load older messages and track scroll position
+  const handleScroll = () => {
+    const container = messagesContainerRef.current
+    if (!container || !selectedChannel) return
+
+    const { scrollTop, scrollHeight, clientHeight } = container
+    const isNearTop = scrollTop < 100 // Load when within 100px of top
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+    const isScrolledUpSignificantly = distanceFromBottom > 200 // More than 200px from bottom
+
+    // Update scroll state
+    setIsScrolledUp(isScrolledUpSignificantly)
+
+    // Load older messages if near top
+    if (isNearTop && hasMoreMessages[selectedChannel.id] && !isLoadingOlder[selectedChannel.id]) {
+      loadOlderMessages(selectedChannel.id)
+    }
+  }
+
+  // Jump to bottom of messages
+  const jumpToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    setIsScrolledUp(false)
+  }
+
+  // Focus input when channel changes and reset scroll state
   useEffect(() => {
     if (selectedChannel) {
       inputRef.current?.focus()
+      setIsScrolledUp(false) // Reset scroll state when switching channels
     }
   }, [selectedChannel])
 
@@ -491,20 +528,8 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
     }
   }, [editingMessageId])
 
-  // Poll for server member updates when members modal is open
-  useEffect(() => {
-    if (!showMembersModal || !server) return
-
-    const pollInterval = setInterval(async () => {
-      try {
-        await fetchServers()
-      } catch (error) {
-        console.error('Error polling for server member updates:', error)
-      }
-    }, 10000) // Poll every 10 seconds (less frequent than DM polling)
-
-    return () => clearInterval(pollInterval)
-  }, [showMembersModal, server, fetchServers])
+  // Server member updates are handled via WebSocket in real-time
+  // No polling needed - WebSocket events automatically update server members
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp)
@@ -628,7 +653,11 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto p-4 space-y-4 relative"
+        onScroll={handleScroll}
+      >
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
@@ -642,300 +671,324 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
             </div>
           </div>
         ) : (
-          messages.map((message, index) => {
-            const isOwnMessage = message.user?.id === user?.id
-            const previousMessage = index > 0 ? messages[index - 1] : null
-            const showUserInfo = shouldSeparateMessages(message, previousMessage, index)
-            const canModify = canEditOrDelete(message)
-            const canDelete = isOwnMessage || isServerOwner
-            const isEditing = editingMessageId === message.id
-            const urls = extractUrls(message.content)
-            const messageIsGif =
-              urls.length === 1 && isGifUrl(urls[0]) && message.content === urls[0]
-            const cleanedContent = removeUrlsFromText(message.content)
+          <div>
+            {/* Loading indicator for older messages */}
+            {selectedChannel && isLoadingOlder[selectedChannel.id] && (
+              <div className="flex justify-center py-4">
+                <div className="text-grey-400 text-sm">Loading older messages...</div>
+              </div>
+            )}
 
-            return (
-              <div key={message.id} className="message-enter group relative">
-                {showUserInfo ? (
-                  <div className="flex gap-3">
-                    <div className="w-10 h-10 bg-white flex items-center justify-center flex-shrink-0">
-                      <span className="text-black font-bold text-sm">
-                        {message.user?.username?.charAt(0).toUpperCase() || '?'}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-baseline gap-2 mb-1">
-                        <span
-                          className={`font-bold text-sm ${isOwnMessage ? 'text-white' : 'text-grey-200'}`}
-                        >
-                          {message.user?.username || 'Unknown'}
+            {messages.map((message, index) => {
+              const isOwnMessage = message.user?.id === user?.id
+              const previousMessage = index > 0 ? messages[index - 1] : null
+              const showUserInfo = shouldSeparateMessages(message, previousMessage, index)
+              const canModify = canEditOrDelete(message)
+              const canDelete = isOwnMessage || isServerOwner
+              const isEditing = editingMessageId === message.id
+              const urls = extractUrls(message.content)
+              const messageIsGif =
+                urls.length === 1 && isGifUrl(urls[0]) && message.content === urls[0]
+              const cleanedContent = removeUrlsFromText(message.content)
+
+              return (
+                <div
+                  key={`message-${message.id}-${index}`}
+                  className="message-enter group relative"
+                >
+                  {showUserInfo ? (
+                    <div className="flex gap-3">
+                      <div className="w-10 h-10 bg-white flex items-center justify-center flex-shrink-0">
+                        <span className="text-black font-bold text-sm">
+                          {message.user?.username?.charAt(0).toUpperCase() || '?'}
                         </span>
-                        <span className="text-grey-500 text-xs">
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2 mb-1">
+                          <span
+                            className={`font-bold text-sm ${isOwnMessage ? 'text-white' : 'text-grey-200'}`}
+                          >
+                            {message.user?.username || 'Unknown'}
+                          </span>
+                          <span className="text-grey-500 text-xs">
+                            {formatTimestamp(message.createdAt)}
+                          </span>
+                          {message.isEdited && (
+                            <span className="text-grey-600 text-xs px-2 py-0.5 bg-grey-850 border border-grey-700">
+                              edited
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Reply indicator */}
+                        {message.replyTo && (
+                          <div className="mb-2 pl-3 border-l-2 border-grey-700 bg-grey-850 bg-opacity-50 p-2 text-sm">
+                            <div className="flex items-center gap-1 mb-1">
+                              <ReplyIcon className="w-3 h-3 text-grey-500" />
+                              <span className="text-grey-400 font-bold text-xs">
+                                {isUserBlocked(message.replyTo.user.id)
+                                  ? 'Blocked User'
+                                  : message.replyTo.user.username}
+                              </span>
+                            </div>
+                            <p className="text-grey-400 text-xs truncate">
+                              {isUserBlocked(message.replyTo.user.id)
+                                ? '[This user is blocked]'
+                                : removeUrlsFromText(message.replyTo.content)}
+                            </p>
+                          </div>
+                        )}
+
+                        {isEditing ? (
+                          <div className="flex flex-col gap-2">
+                            <textarea
+                              ref={editInputRef}
+                              value={editContent}
+                              onChange={(e) => setEditContent(e.target.value)}
+                              onKeyDown={(e) => handleEditKeyDown(e, message.id)}
+                              className="w-full bg-grey-800 border-2 border-grey-700 px-3 py-2 text-white resize-none focus:border-white"
+                              rows={2}
+                              maxLength={2000}
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleEditMessage(message.id)}
+                                className="px-3 py-1 bg-white text-black text-sm font-bold hover:bg-grey-200 transition-colors"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={cancelEditing}
+                                className="px-3 py-1 bg-grey-800 text-white text-sm border-2 border-grey-700 hover:border-white transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Display GIF if message is just a GIF URL */}
+                            {messageIsGif ? (
+                              <div className="max-w-md">
+                                <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden">
+                                  <img
+                                    src={urls[0]}
+                                    alt="GIF"
+                                    className="w-full h-auto max-h-96 object-contain"
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                {cleanedContent && (
+                                  <p className="text-grey-100 break-words whitespace-pre-wrap">
+                                    {isUserBlocked(message.userId)
+                                      ? '[This user is blocked]'
+                                      : cleanedContent}
+                                  </p>
+                                )}
+                                {/* Display media embeds for URLs in the message */}
+                                {urls.map((url, urlIndex) => (
+                                  <MediaEmbed key={`${message.id}-${urlIndex}`} url={url} />
+                                ))}
+                              </>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      {!isEditing && (
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() =>
+                              setContextMenuMessageId(
+                                contextMenuMessageId === message.id ? null : message.id
+                              )
+                            }
+                            className="p-1 hover:bg-grey-800 text-grey-400 hover:text-white transition-colors"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                          {contextMenuMessageId === message.id && (
+                            <div className="absolute right-0 top-8 bg-grey-900 border-2 border-grey-700 z-10 min-w-[150px] animate-fade-in">
+                              <button
+                                onClick={() => handleReplyTo(message)}
+                                className="w-full px-4 py-2 text-left text-white hover:bg-grey-800 flex items-center gap-2 transition-colors"
+                              >
+                                <ReplyIcon className="w-4 h-4" />
+                                Reply
+                              </button>
+                              {canModify && (
+                                <button
+                                  onClick={() => startEditingMessage(message)}
+                                  className="w-full px-4 py-2 text-left text-white hover:bg-grey-800 flex items-center gap-2 transition-colors"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                  Edit
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => handleDeleteMessage(message.id)}
+                                  className="w-full px-4 py-2 text-left text-red-400 hover:bg-grey-800 flex items-center gap-2 transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                  Delete
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex gap-3 hover:bg-grey-850 hover:bg-opacity-30 -mx-2 px-2 py-0.5">
+                      <div className="w-10 flex-shrink-0 flex items-center justify-center">
+                        <span className="text-grey-600 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
                           {formatTimestamp(message.createdAt)}
                         </span>
-                        {message.isEdited && (
-                          <span className="text-grey-600 text-xs px-2 py-0.5 bg-grey-850 border border-grey-700">
-                            edited
-                          </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        {/* Reply indicator for condensed messages */}
+                        {message.replyTo && (
+                          <div className="mb-2 pl-3 border-l-2 border-grey-700 bg-grey-850 bg-opacity-50 p-2 text-sm">
+                            <div className="flex items-center gap-1 mb-1">
+                              <ReplyIcon className="w-3 h-3 text-grey-500" />
+                              <span className="text-grey-400 font-bold text-xs">
+                                {isUserBlocked(message.replyTo.user.id)
+                                  ? 'Blocked User'
+                                  : message.replyTo.user.username}
+                              </span>
+                            </div>
+                            <p className="text-grey-400 text-xs truncate">
+                              {isUserBlocked(message.replyTo.user.id)
+                                ? '[This user is blocked]'
+                                : removeUrlsFromText(message.replyTo.content)}
+                            </p>
+                          </div>
+                        )}
+
+                        {isEditing ? (
+                          <div className="flex flex-col gap-2">
+                            <textarea
+                              ref={editInputRef}
+                              value={editContent}
+                              onChange={(e) => setEditContent(e.target.value)}
+                              onKeyDown={(e) => handleEditKeyDown(e, message.id)}
+                              className="w-full bg-grey-800 border-2 border-grey-700 px-3 py-2 text-white resize-none focus:border-white"
+                              rows={2}
+                              maxLength={2000}
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleEditMessage(message.id)}
+                                className="px-3 py-1 bg-white text-black text-sm font-bold hover:bg-grey-200 transition-colors"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={cancelEditing}
+                                className="px-3 py-1 bg-grey-800 text-white text-sm border-2 border-grey-700 hover:border-white transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            {messageIsGif ? (
+                              <div className="max-w-md">
+                                <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden">
+                                  <img
+                                    src={urls[0]}
+                                    alt="GIF"
+                                    className="w-full h-auto max-h-96 object-contain"
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                {cleanedContent && (
+                                  <p className="text-grey-100 break-words whitespace-pre-wrap inline">
+                                    {isUserBlocked(message.userId)
+                                      ? '[This user is blocked]'
+                                      : cleanedContent}
+                                  </p>
+                                )}
+                                {message.isEdited && (
+                                  <span className="text-grey-600 text-xs ml-2 px-2 py-0.5 bg-grey-850 border border-grey-700 align-middle">
+                                    edited
+                                  </span>
+                                )}
+                                {urls.map((url, urlIndex) => (
+                                  <MediaEmbed key={`${message.id}-${urlIndex}`} url={url} />
+                                ))}
+                              </>
+                            )}
+                          </>
                         )}
                       </div>
-
-                      {/* Reply indicator */}
-                      {message.replyTo && (
-                        <div className="mb-2 pl-3 border-l-2 border-grey-700 bg-grey-850/50 p-2 text-sm">
-                          <div className="flex items-center gap-1 mb-1">
-                            <ReplyIcon className="w-3 h-3 text-grey-500" />
-                            <span className="text-grey-400 font-bold text-xs">
-                              {isUserBlocked(message.replyTo.user.id)
-                                ? 'Blocked User'
-                                : message.replyTo.user.username}
-                            </span>
-                          </div>
-                          <p className="text-grey-400 text-xs truncate">
-                            {isUserBlocked(message.replyTo.user.id)
-                              ? '[This user is blocked]'
-                              : removeUrlsFromText(message.replyTo.content)}
-                          </p>
-                        </div>
-                      )}
-
-                      {isEditing ? (
-                        <div className="flex flex-col gap-2">
-                          <textarea
-                            ref={editInputRef}
-                            value={editContent}
-                            onChange={(e) => setEditContent(e.target.value)}
-                            onKeyDown={(e) => handleEditKeyDown(e, message.id)}
-                            className="w-full bg-grey-800 border-2 border-grey-700 px-3 py-2 text-white resize-none focus:border-white"
-                            rows={2}
-                            maxLength={2000}
-                          />
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleEditMessage(message.id)}
-                              className="px-3 py-1 bg-white text-black text-sm font-bold hover:bg-grey-200 transition-colors"
-                            >
-                              Save
-                            </button>
-                            <button
-                              onClick={cancelEditing}
-                              className="px-3 py-1 bg-grey-800 text-white text-sm border-2 border-grey-700 hover:border-white transition-colors"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          {/* Display GIF if message is just a GIF URL */}
-                          {messageIsGif ? (
-                            <div className="max-w-md">
-                              <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden">
-                                <img
-                                  src={urls[0]}
-                                  alt="GIF"
-                                  className="w-full h-auto max-h-96 object-contain"
-                                />
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              {cleanedContent && (
-                                <p className="text-grey-100 break-words whitespace-pre-wrap">
-                                  {isUserBlocked(message.userId)
-                                    ? '[This user is blocked]'
-                                    : cleanedContent}
-                                </p>
-                              )}
-                              {/* Display media embeds for URLs in the message */}
-                              {urls.map((url, urlIndex) => (
-                                <MediaEmbed key={`${message.id}-${urlIndex}`} url={url} />
-                              ))}
-                            </>
-                          )}
-                        </>
-                      )}
-                    </div>
-                    {!isEditing && (
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() =>
-                            setContextMenuMessageId(
-                              contextMenuMessageId === message.id ? null : message.id
-                            )
-                          }
-                          className="p-1 hover:bg-grey-800 text-grey-400 hover:text-white transition-colors"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                        {contextMenuMessageId === message.id && (
-                          <div className="absolute right-0 top-8 bg-grey-900 border-2 border-grey-700 z-10 min-w-[150px] animate-fade-in">
-                            <button
-                              onClick={() => handleReplyTo(message)}
-                              className="w-full px-4 py-2 text-left text-white hover:bg-grey-800 flex items-center gap-2 transition-colors"
-                            >
-                              <ReplyIcon className="w-4 h-4" />
-                              Reply
-                            </button>
-                            {canModify && (
+                      {!isEditing && (
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity relative">
+                          <button
+                            onClick={() =>
+                              setContextMenuMessageId(
+                                contextMenuMessageId === message.id ? null : message.id
+                              )
+                            }
+                            className="p-1 hover:bg-grey-800 text-grey-400 hover:text-white transition-colors"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                          {contextMenuMessageId === message.id && (
+                            <div className="absolute right-0 top-8 bg-grey-900 border-2 border-grey-700 z-10 min-w-[150px] animate-fade-in">
                               <button
-                                onClick={() => startEditingMessage(message)}
+                                onClick={() => handleReplyTo(message)}
                                 className="w-full px-4 py-2 text-left text-white hover:bg-grey-800 flex items-center gap-2 transition-colors"
                               >
-                                <Edit2 className="w-4 h-4" />
-                                Edit
+                                <ReplyIcon className="w-4 h-4" />
+                                Reply
                               </button>
-                            )}
-                            {canDelete && (
-                              <button
-                                onClick={() => handleDeleteMessage(message.id)}
-                                className="w-full px-4 py-2 text-left text-red-400 hover:bg-grey-800 flex items-center gap-2 transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                                Delete
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex gap-3 hover:bg-grey-850/30 -mx-2 px-2 py-0.5">
-                    <div className="w-10 flex-shrink-0 flex items-center justify-center">
-                      <span className="text-grey-600 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
-                        {formatTimestamp(message.createdAt)}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      {/* Reply indicator for condensed messages */}
-                      {message.replyTo && (
-                        <div className="mb-2 pl-3 border-l-2 border-grey-700 bg-grey-850/50 p-2 text-sm">
-                          <div className="flex items-center gap-1 mb-1">
-                            <ReplyIcon className="w-3 h-3 text-grey-500" />
-                            <span className="text-grey-400 font-bold text-xs">
-                              {isUserBlocked(message.replyTo.user.id)
-                                ? 'Blocked User'
-                                : message.replyTo.user.username}
-                            </span>
-                          </div>
-                          <p className="text-grey-400 text-xs truncate">
-                            {isUserBlocked(message.replyTo.user.id)
-                              ? '[This user is blocked]'
-                              : removeUrlsFromText(message.replyTo.content)}
-                          </p>
-                        </div>
-                      )}
-
-                      {isEditing ? (
-                        <div className="flex flex-col gap-2">
-                          <textarea
-                            ref={editInputRef}
-                            value={editContent}
-                            onChange={(e) => setEditContent(e.target.value)}
-                            onKeyDown={(e) => handleEditKeyDown(e, message.id)}
-                            className="w-full bg-grey-800 border-2 border-grey-700 px-3 py-2 text-white resize-none focus:border-white"
-                            rows={2}
-                            maxLength={2000}
-                          />
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleEditMessage(message.id)}
-                              className="px-3 py-1 bg-white text-black text-sm font-bold hover:bg-grey-200 transition-colors"
-                            >
-                              Save
-                            </button>
-                            <button
-                              onClick={cancelEditing}
-                              className="px-3 py-1 bg-grey-800 text-white text-sm border-2 border-grey-700 hover:border-white transition-colors"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          {messageIsGif ? (
-                            <div className="max-w-md">
-                              <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden">
-                                <img
-                                  src={urls[0]}
-                                  alt="GIF"
-                                  className="w-full h-auto max-h-96 object-contain"
-                                />
-                              </div>
+                              {canModify && (
+                                <button
+                                  onClick={() => startEditingMessage(message)}
+                                  className="w-full px-4 py-2 text-left text-white hover:bg-grey-800 flex items-center gap-2 transition-colors"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                  Edit
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => handleDeleteMessage(message.id)}
+                                  className="w-full px-4 py-2 text-left text-red-400 hover:bg-grey-800 flex items-center gap-2 transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                  Delete
+                                </button>
+                              )}
                             </div>
-                          ) : (
-                            <>
-                              {cleanedContent && (
-                                <p className="text-grey-100 break-words whitespace-pre-wrap inline">
-                                  {isUserBlocked(message.userId)
-                                    ? '[This user is blocked]'
-                                    : cleanedContent}
-                                </p>
-                              )}
-                              {message.isEdited && (
-                                <span className="text-grey-600 text-xs ml-2 px-2 py-0.5 bg-grey-850 border border-grey-700 align-middle">
-                                  edited
-                                </span>
-                              )}
-                              {urls.map((url, urlIndex) => (
-                                <MediaEmbed key={`${message.id}-${urlIndex}`} url={url} />
-                              ))}
-                            </>
                           )}
-                        </>
+                        </div>
                       )}
                     </div>
-                    {!isEditing && (
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity relative">
-                        <button
-                          onClick={() =>
-                            setContextMenuMessageId(
-                              contextMenuMessageId === message.id ? null : message.id
-                            )
-                          }
-                          className="p-1 hover:bg-grey-800 text-grey-400 hover:text-white transition-colors"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                        {contextMenuMessageId === message.id && (
-                          <div className="absolute right-0 top-8 bg-grey-900 border-2 border-grey-700 z-10 min-w-[150px] animate-fade-in">
-                            <button
-                              onClick={() => handleReplyTo(message)}
-                              className="w-full px-4 py-2 text-left text-white hover:bg-grey-800 flex items-center gap-2 transition-colors"
-                            >
-                              <ReplyIcon className="w-4 h-4" />
-                              Reply
-                            </button>
-                            {canModify && (
-                              <button
-                                onClick={() => startEditingMessage(message)}
-                                className="w-full px-4 py-2 text-left text-white hover:bg-grey-800 flex items-center gap-2 transition-colors"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                                Edit
-                              </button>
-                            )}
-                            {canDelete && (
-                              <button
-                                onClick={() => handleDeleteMessage(message.id)}
-                                className="w-full px-4 py-2 text-left text-red-400 hover:bg-grey-800 flex items-center gap-2 transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                                Delete
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })
+                  )}
+                </div>
+              )
+            })}
+          </div>
         )}
+
+        {/* Jump to bottom button */}
+        {isScrolledUp && (
+          <button
+            onClick={jumpToBottom}
+            className="absolute bottom-4 right-4 bg-grey-800 hover:bg-grey-700 text-grey-300 hover:text-white p-2 rounded border-2 border-grey-700 hover:border-grey-600 transition-all duration-200 ease-in-out animate-slide-up z-10"
+            title="Jump to bottom"
+          >
+            <ChevronDown className="w-4 h-4" />
+          </button>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 

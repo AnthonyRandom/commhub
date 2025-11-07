@@ -268,7 +268,8 @@ export class ChannelsService {
     channelId: number,
     userId: number,
     limit = 50,
-    offset = 0
+    offset = 0,
+    before?: number
   ) {
     // Enforce maximum limit to prevent DOS
     const maxLimit = 100;
@@ -297,7 +298,7 @@ export class ChannelsService {
       throw new ForbiddenException('You are not a member of this server');
     }
 
-    return this.prisma.message.findMany({
+    let queryOptions: any = {
       where: { channelId },
       include: {
         user: {
@@ -323,7 +324,24 @@ export class ChannelsService {
         createdAt: 'asc',
       },
       take: safeLimit,
-      skip: offset,
-    });
+    };
+
+    if (before) {
+      // Load messages before the specified message ID (for pagination)
+      queryOptions.where.id = {
+        lt: before,
+      };
+    } else {
+      // Load the most recent messages (default behavior)
+      const totalMessages = await this.prisma.message.count({
+        where: { channelId },
+      });
+
+      // Calculate offset from the end to get the most recent messages
+      const fromEndOffset = Math.max(0, totalMessages - safeLimit - offset);
+      queryOptions.skip = Math.max(0, fromEndOffset);
+    }
+
+    return this.prisma.message.findMany(queryOptions);
   }
 }

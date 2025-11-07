@@ -17,8 +17,8 @@ import { useChannelsStore } from '../stores/channels'
 import { useServersStore } from '../stores/servers'
 import { useAuthStore } from '../stores/auth'
 import { useVoiceStore } from '../stores/voice'
+import { useVoiceMembersStore } from '../stores/voiceMembers'
 import { apiService, type Conversation } from '../services/api'
-import { wsService } from '../services/websocket'
 import StatusIndicator from './StatusIndicator'
 import VoiceStatus from './VoiceStatus'
 import type { Channel, Server } from '../services/api'
@@ -52,6 +52,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
   const getServerInviteCode = useServersStore((state) => state.getServerInviteCode)
   const { user, logout } = useAuthStore()
   const { connectedChannelId, connectedUsers } = useVoiceStore()
+  const voiceChannelMembers = useVoiceMembersStore((state) => state.membersByChannel)
 
   const [showServerMenu, setShowServerMenu] = React.useState(false)
   const [inviteCode, setInviteCode] = React.useState<string | null>(null)
@@ -62,36 +63,10 @@ const ChannelList: React.FC<ChannelListProps> = ({
   const [deletingChannel, setDeletingChannel] = React.useState<Channel | null>(null)
   const [contextMenuDMId, setContextMenuDMId] = React.useState<number | null>(null)
   const [deletingDM, setDeletingDM] = React.useState<Conversation | null>(null)
-  const [voiceChannelMembers, setVoiceChannelMembers] = useState<
-    Map<number, Array<{ userId: number; username: string }>>
-  >(new Map())
 
   useEffect(() => {
     fetchChannels()
   }, [fetchChannels])
-
-  // Listen for voice channel member updates (real-time via WebSocket)
-  useEffect(() => {
-    const handleVoiceChannelMembersUpdate = (data: { channelId: number; members: any[] }) => {
-      setVoiceChannelMembers((prev) => {
-        const newMap = new Map(prev)
-        if (data.members.length > 0) {
-          newMap.set(data.channelId, data.members)
-        } else {
-          // Remove empty channels from the display
-          newMap.delete(data.channelId)
-        }
-        return newMap
-      })
-    }
-
-    // Listen for voice-channel-members WebSocket events
-    wsService.getSocket()?.on('voice-channel-members', handleVoiceChannelMembersUpdate)
-
-    return () => {
-      wsService.getSocket()?.off('voice-channel-members', handleVoiceChannelMembersUpdate)
-    }
-  }, [])
 
   const serverChannels = server ? getChannelsByServer(server.id) : []
   const textChannels = serverChannels.filter((ch) => ch.type === 'text')
@@ -387,7 +362,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
               <div className="space-y-1">
                 {voiceChannels.map((channel) => {
                   const isConnected = connectedChannelId === channel.id
-                  const channelMembers = voiceChannelMembers.get(channel.id) || []
+                  const channelMembers = voiceChannelMembers[channel.id] || []
                   const hasMember = channelMembers.length > 0
 
                   return (

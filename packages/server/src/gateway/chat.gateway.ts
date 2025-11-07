@@ -773,6 +773,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('ready')
   async handleReady(@ConnectedSocket() client: AuthenticatedSocket) {
     try {
+      this.logger.log(
+        `[Ready] Received ready event from ${client.username} (${client.userId})`
+      );
+
       // Join all server and channel rooms the user has access to
       const memberships = await this.prisma.server.findMany({
         where: {
@@ -789,6 +793,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         },
       });
 
+      let totalChannels = 0;
       memberships.forEach(membership => {
         const serverRoom = `server-${membership.id}`;
         client.join(serverRoom);
@@ -796,12 +801,21 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         // Join all text/voice channels for background updates
         membership.channels.forEach(channel => {
           client.join(`channel-${channel.id}`);
+          totalChannels++;
         });
       });
+
+      this.logger.log(
+        `[Ready] Joined ${client.username} to ${memberships.length} servers and ${totalChannels} channels`
+      );
 
       // Compute online friends snapshot
       const friends = await this.usersService.getFriends(client.userId);
       const onlineFriends = friends.filter(f => this.onlineUsers.has(f.id));
+
+      this.logger.log(
+        `[Ready] Sending initial-sync with ${onlineFriends.length} online friends to ${client.username}`
+      );
 
       // Send initial sync payload
       client.emit('initial-sync', {

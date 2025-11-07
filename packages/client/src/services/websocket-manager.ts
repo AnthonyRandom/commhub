@@ -3,6 +3,10 @@ import { apiService } from './api'
 import { useMessagesStore } from '../stores/messages'
 import { useServersStore } from '../stores/servers'
 import { useDirectMessagesStore } from '../stores/directMessages'
+import { useFriendsStore } from '../stores/friends'
+import { useChannelsStore } from '../stores/channels'
+import { useAuthStore } from '../stores/auth'
+import { useVoiceMembersStore } from '../stores/voiceMembers'
 
 class WebSocketManager {
   private isInitialized = false
@@ -56,44 +60,38 @@ class WebSocketManager {
     // Channel events
     socket.on('channel-created', (data: any) => {
       console.log('[WebSocket] Channel created:', data)
-      const { useChannelsStore } = require('../stores/channels')
       useChannelsStore.getState().addChannel(data.channel)
     })
     socket.on('channel-updated', (data: any) => {
       console.log('[WebSocket] Channel updated:', data)
-      const { useChannelsStore } = require('../stores/channels')
       useChannelsStore.getState().updateChannel(data.channel)
     })
     socket.on('channel-deleted', (data: any) => {
       console.log('[WebSocket] Channel deleted:', data)
-      const { useChannelsStore } = require('../stores/channels')
       useChannelsStore.getState().removeChannel(data.channelId)
     })
 
     // Voice sidebar snapshots
     socket.on('voice-channel-members', (data: { channelId: number; members: any[] }) => {
-      const { useVoiceMembersStore } = require('../stores/voiceMembers')
+      console.log('[WebSocket] Voice channel members update:', data)
       useVoiceMembersStore.getState().setMembers(data.channelId, data.members)
     })
 
     // Initial sync on connection
     socket.on('initial-sync', (data: { onlineFriends: any[] }) => {
       console.log('[WebSocket] Initial sync received:', data)
-      const { useFriendsStore } = require('../stores/friends')
       useFriendsStore.getState().setOnlineFriends(data.onlineFriends)
     })
 
     // Friend presence updates (online/offline/idle/dnd status changes)
     socket.on('friend-presence', (data: { userId: number; username: string; status: string }) => {
       console.log('[WebSocket] Friend presence update:', data)
-      const { useFriendsStore } = require('../stores/friends')
       useFriendsStore.getState().updateFriendStatus(data.userId, data.status)
     })
 
     // DM thread created (first message between two users)
     socket.on('dm-thread-created', (data: any) => {
       console.log('[WebSocket] DM thread created:', data)
-      const { useDirectMessagesStore } = require('../stores/directMessages')
       // Refresh conversations to show the new thread
       useDirectMessagesStore.getState().fetchConversations()
     })
@@ -101,13 +99,10 @@ class WebSocketManager {
     // Friend request events
     socket.on('friend-request-received', (data: any) => {
       console.log('[WebSocket] Friend request received:', data)
-      const { useFriendsStore } = require('../stores/friends')
       useFriendsStore.getState().fetchReceivedRequests()
     })
     socket.on('friend-request-responded', (_data: any) => {
       console.log('[WebSocket] Friend request responded:', _data)
-      const { useFriendsStore } = require('../stores/friends')
-      const { useAuthStore } = require('../stores/auth')
       const user = useAuthStore.getState().user
       if (user) {
         useFriendsStore.getState().fetchSentRequests()
@@ -148,12 +143,14 @@ class WebSocketManager {
           console.log('[WebSocket] Connected, emitting ready and reattaching listeners')
           this.attachSocketListeners(socket)
           // Emit ready on every connection/reconnection to join all rooms
+          console.log('[WebSocket] Emitting ready event to server')
           socket.emit('ready')
         })
 
         // If already connected, emit ready immediately
         if (socket.connected) {
-          console.log('[WebSocket] Already connected, emitting ready')
+          console.log('[WebSocket] Already connected, emitting ready immediately')
+          this.attachSocketListeners(socket)
           socket.emit('ready')
         }
       }

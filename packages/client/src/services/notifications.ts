@@ -60,15 +60,17 @@ class NotificationService {
           tag: 'commhub-dm', // Group similar notifications
         })
 
-        // Auto-close after 5 seconds
+        // Auto-close after 5 seconds (if close method exists)
         setTimeout(() => {
-          notification.close()
+          if (typeof notification.close === 'function') {
+            notification.close()
+          }
         }, 5000)
       } else if ('Notification' in window && Notification.permission !== 'denied') {
         // Request permission if not already granted/denied
         const permission = await Notification.requestPermission()
         if (permission === 'granted') {
-          this.showDMNotification(senderName, message, settings)
+          this.showDMNotification(senderName, message, settings, userStatus)
         }
       }
 

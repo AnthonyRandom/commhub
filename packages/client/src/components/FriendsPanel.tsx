@@ -96,14 +96,14 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({
       if (messagesContainerRef.current) {
         const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current
         const distanceFromBottom = scrollHeight - scrollTop - clientHeight
-        const nearBottom = distanceFromBottom < 50 // Match threshold with scrollToBottom
+        const nearBottom = distanceFromBottom < 200 // Match threshold with scrollToBottom
 
         // If user scrolls away from bottom, mark as manually scrolled
         if (!nearBottom && !hasUserScrolledUp) {
           setHasUserScrolledUp(true)
         }
 
-        // If user scrolls back to bottom, reset the manual scroll flag
+        // If user scrolls back to near bottom, reset the manual scroll flag
         if (nearBottom && hasUserScrolledUp) {
           setHasUserScrolledUp(false)
         }
@@ -111,16 +111,23 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({
     }, 100) // 100ms debounce
   }
 
-  // Smart auto-scroll: only scroll on initial load or when user is near bottom
+  // Smart auto-scroll: scroll to bottom unless user has scrolled up significantly
   const scrollToBottom = () => {
-    // Always check current scroll position to be absolutely sure
     if (messagesContainerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current
       const distanceFromBottom = scrollHeight - scrollTop - clientHeight
-      const isCurrentlyNearBottom = distanceFromBottom < 50 // More strict threshold
 
-      if (isInitialLoad || isCurrentlyNearBottom) {
+      // Auto-scroll if:
+      // 1. Initial load, OR
+      // 2. User is within 200px of bottom (allows slight scroll-up without disabling auto-scroll)
+      const shouldAutoScroll = isInitialLoad || distanceFromBottom < 200
+
+      if (shouldAutoScroll) {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        // Reset the manual scroll flag when we auto-scroll
+        if (hasUserScrolledUp) {
+          setHasUserScrolledUp(false)
+        }
       }
     }
   }
@@ -131,7 +138,7 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({
     if (isInitialLoad && conversationMessages.length > 0) {
       setIsInitialLoad(false)
     }
-  }, [conversationMessages, isInitialLoad, hasUserScrolledUp])
+  }, [conversationMessages])
 
   // Set up scroll listener
   useEffect(() => {

@@ -116,23 +116,38 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           `[Voice] User ${client.username} disconnected while in voice channel ${voiceChannelId}`
         );
 
-        // Don't immediately clean up tracking - wait a bit in case this is a reconnection
-        // The client will either reconnect and rejoin, or we'll clean up on timeout
-        setTimeout(async () => {
-          // Check if user has reconnected (has a new socket)
-          const hasReconnected = this.onlineUsers.has(client.userId);
-          if (!hasReconnected) {
-            // User hasn't reconnected, clean up their voice channel state
-            this.cleanupUserVoiceChannelState(
-              client.userId,
-              voiceChannelId,
-              client.username
-            );
-          }
-        }, 5000); // Wait 5 seconds for potential reconnection
+        // Clear voice channel tracking immediately on disconnect
+        // This prevents stale state from persisting across reconnections
+        this.userVoiceChannels.delete(client.userId);
 
-        // For now, just mark as disconnected but keep tracking
-        // We'll clean up properly when they actually leave or timeout
+        // Remove from voice channel members tracking
+        const members = this.voiceChannelMembers.get(voiceChannelId);
+        if (members) {
+          const userToRemove = Array.from(members).find(
+            m => m.userId === client.userId
+          );
+          if (userToRemove) {
+            members.delete(userToRemove);
+          }
+          if (members.size === 0) {
+            this.voiceChannelMembers.delete(voiceChannelId);
+          }
+        }
+
+        // Notify others in the voice channel that this user left
+        const roomName = `voice-${voiceChannelId}`;
+        this.server.to(roomName).emit('voice-user-left', {
+          channelId: voiceChannelId,
+          userId: client.userId,
+          username: client.username,
+        });
+
+        // Broadcast updated member list
+        await this.broadcastVoiceChannelMembers(voiceChannelId);
+
+        this.logger.log(
+          `[Voice] Notified voice channel ${voiceChannelId} that ${client.username} disconnected`
+        );
       }
 
       // Remove user from online tracking (they'll be re-added on reconnect)
@@ -147,54 +162,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // Notify friends that user went offline
       await this.notifyFriendsPresence(client.userId, 'offline');
     }
-  }
-
-  /**
-   * Clean up a user's voice channel state completely
-   */
-  private async cleanupUserVoiceChannelState(
-    userId: number,
-    voiceChannelId: number,
-    username: string
-  ) {
-    // Double-check user is still not connected
-    if (this.onlineUsers.has(userId)) {
-      return; // User reconnected, don't clean up
-    }
-
-    this.logger.log(
-      `[Voice] Cleaning up voice channel state for disconnected user ${username} (${userId})`
-    );
-
-    // Clean up tracking
-    this.userVoiceChannels.delete(userId);
-
-    // Remove from voice channel members tracking
-    const members = this.voiceChannelMembers.get(voiceChannelId);
-    if (members) {
-      const userToRemove = Array.from(members).find(m => m.userId === userId);
-      if (userToRemove) {
-        members.delete(userToRemove);
-      }
-      if (members.size === 0) {
-        this.voiceChannelMembers.delete(voiceChannelId);
-      }
-    }
-
-    // Notify other users in the voice channel that this user left
-    const roomName = `voice-${voiceChannelId}`;
-    this.server.to(roomName).emit('voice-user-left', {
-      channelId: voiceChannelId,
-      userId: userId,
-      username: username,
-    });
-
-    // Broadcast updated member list
-    await this.broadcastVoiceChannelMembers(voiceChannelId);
-
-    this.logger.log(
-      `[Voice] Notified voice channel ${voiceChannelId} that ${username} left due to disconnect`
-    );
   }
 
   @SubscribeMessage('join-server')
@@ -1216,47 +1183,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return;
       }
 
-      // If server doesn't have tracking, verify user has access to the channel
-      // This handles cases where server state got out of sync due to reconnection
-      try {
-        const channel = await this.channelsService.findOne(
-          data.channelId,
-          client.userId
-        );
-        if (channel && channel.type === 'voice') {
-          // User has access to this voice channel, allow the speaking event
-          // Update our tracking to be consistent
-          this.userVoiceChannels.set(client.userId, data.channelId);
-
-          // Ensure user is in voice channel members tracking
-          if (!this.voiceChannelMembers.has(data.channelId)) {
-            this.voiceChannelMembers.set(data.channelId, new Set());
-          }
-          const members = this.voiceChannelMembers.get(data.channelId);
-          if (!Array.from(members).some(m => m.userId === client.userId)) {
-            members.add({ userId: client.userId, username: client.username });
-          }
-
-          const roomName = `voice-${data.channelId}`;
-          client.to(roomName).emit('voice-user-speaking', {
-            channelId: data.channelId,
-            userId: client.userId,
-            username: client.username,
-            isSpeaking: data.isSpeaking,
-          });
-
-          this.logger.log(
-            `[Voice] Recovered voice channel tracking for user ${client.username} in channel ${data.channelId}`
-          );
-          return;
-        }
-      } catch (error) {
-        // Channel access check failed
-      }
-
-      // If we get here, user doesn't have access or channel doesn't exist
+      // User is not properly tracked in any voice channel, deny the speaking event
+      // Users must explicitly join voice channels to participate
       this.logger.warn(
-        `[Voice] User ${client.userId} attempted to speak in channel ${data.channelId} but access denied or channel invalid`
+        `[Voice] User ${client.username} (${client.userId}) attempted to speak in channel ${data.channelId} but is not properly joined to any voice channel`
       );
     } catch (error) {
       this.logger.error('Error handling voice speaking status:', error.message);
@@ -1279,6 +1209,28 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         data.targetUserId <= 0
       ) {
         client.emit('error', { message: 'Invalid reconnection request data' });
+        return;
+      }
+
+      // Prevent self-reconnection requests
+      if (data.targetUserId === client.userId) {
+        this.logger.warn(
+          `[Voice] Ignoring self-reconnection request from ${client.username} (${client.userId})`
+        );
+        return;
+      }
+
+      // Verify both users are still in the same voice channel
+      const clientChannel = this.userVoiceChannels.get(client.userId);
+      const targetChannel = this.userVoiceChannels.get(data.targetUserId);
+
+      if (
+        clientChannel !== data.channelId ||
+        targetChannel !== data.channelId
+      ) {
+        this.logger.warn(
+          `[Voice] Ignoring reconnection request from ${client.username} to user ${data.targetUserId} - not in same channel`
+        );
         return;
       }
 

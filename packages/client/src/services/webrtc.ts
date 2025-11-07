@@ -26,9 +26,11 @@ class EnhancedSpeakingDetector {
   private holdTimeout: number | null = null
   private pttPressed = false
   private keyListeners: ((event: KeyboardEvent) => void)[] = []
+  private emitCallback: (isSpeaking: boolean) => void
 
-  constructor(config: SpeakingDetectionConfig) {
+  constructor(config: SpeakingDetectionConfig, emitCallback: (isSpeaking: boolean) => void) {
     this.speakingConfig = { ...config }
+    this.emitCallback = emitCallback
   }
 
   /**
@@ -255,19 +257,14 @@ class EnhancedSpeakingDetector {
    * Emit speaking change event
    */
   private emitSpeakingChange(isSpeaking: boolean): void {
+    // Always update local store
     const user = useAuthStore.getState().user
     if (user) {
       useVoiceStore.getState().updateUserSpeaking(user.id, isSpeaking)
     }
 
-    // Emit to server if we have a channel
-    const currentChannelId = useVoiceStore.getState().connectedChannelId
-    if (currentChannelId) {
-      wsService.getSocket()?.emit('voice-speaking', {
-        channelId: currentChannelId,
-        isSpeaking: isSpeaking,
-      })
-    }
+    // Call the WebRTC service callback for server communication
+    this.emitCallback(isSpeaking)
   }
 
   /**
@@ -331,6 +328,7 @@ class WebRTCService {
   private noiseSuppressor: NoiseSuppressionProcessor | null = null
   private currentChannelId: number | null = null
   private connectionStates: Map<number, ConnectionState> = new Map()
+  private voiceChannelJoined: boolean = false
 
   // Configuration for WebRTC
   private rtcConfig = {
@@ -432,7 +430,10 @@ class WebRTCService {
         pttKey: voiceSettings.detection.pttKey,
       }
 
-      this.speakingDetector = new EnhancedSpeakingDetector(speakingConfig)
+      this.speakingDetector = new EnhancedSpeakingDetector(
+        speakingConfig,
+        this.handleSpeakingChange.bind(this)
+      )
       this.speakingDetector.initialize(stream)
 
       console.log('[WebRTC] Enhanced speaking detection initialized with config:', speakingConfig)
@@ -1060,6 +1061,33 @@ class WebRTCService {
   }
 
   /**
+   * Mark voice channel as joined (allows speaking events)
+   */
+  setVoiceChannelJoined(joined: boolean): void {
+    this.voiceChannelJoined = joined
+  }
+
+  /**
+   * Check if voice channel is joined
+   */
+  isVoiceChannelJoined(): boolean {
+    return this.voiceChannelJoined
+  }
+
+  /**
+   * Handle speaking change events from the detector
+   */
+  handleSpeakingChange(isSpeaking: boolean): void {
+    // Only emit to server if we're properly joined to a voice channel
+    if (this.voiceChannelJoined && this.currentChannelId) {
+      wsService.getSocket()?.emit('voice-speaking', {
+        channelId: this.currentChannelId,
+        isSpeaking: isSpeaking,
+      })
+    }
+  }
+
+  /**
    * Clean up all connections and streams
    */
   cleanup() {
@@ -1124,6 +1152,7 @@ class WebRTCService {
     }
 
     this.currentChannelId = null
+    this.voiceChannelJoined = false
 
     // Reset voice store
     useVoiceStore.getState().reset()

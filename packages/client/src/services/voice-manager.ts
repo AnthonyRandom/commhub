@@ -159,6 +159,9 @@ class VoiceManager {
     console.log(`[VoiceManager] 📋 Users already in voice channel ${data.channelId}:`, data.users)
     console.log(`[VoiceManager] Creating ${data.users.length} peer connection(s) as initiator`)
 
+    // Mark that we've successfully joined the voice channel (allows speaking events)
+    webrtcService.setVoiceChannelJoined(true)
+
     // Create peer connections to all existing users (we are the initiator)
     data.users.forEach((user) => {
       console.log(`[VoiceManager] 🤝 Initiating connection to ${user.username} (${user.userId})`)

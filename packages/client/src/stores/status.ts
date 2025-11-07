@@ -10,6 +10,7 @@ interface StatusState {
 
   // Actions
   setUserStatus: (userId: number, status: UserStatus) => void
+  removeUserStatus: (userId: number) => void
   updateStatus: (status: UserStatus) => Promise<void>
   updateLastActivity: () => void
   getUserStatus: (userId: number) => UserStatus | undefined
@@ -25,6 +26,14 @@ export const useStatusStore = create<StatusState>((set, get) => ({
     set((state) => {
       const newStatuses = new Map(state.userStatuses)
       newStatuses.set(userId, status)
+      return { userStatuses: newStatuses }
+    })
+  },
+
+  removeUserStatus: (userId: number) => {
+    set((state) => {
+      const newStatuses = new Map(state.userStatuses)
+      newStatuses.delete(userId)
       return { userStatuses: newStatuses }
     })
   },

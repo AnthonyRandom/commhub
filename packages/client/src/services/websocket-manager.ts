@@ -7,6 +7,7 @@ import { useFriendsStore } from '../stores/friends'
 import { useChannelsStore } from '../stores/channels'
 import { useAuthStore } from '../stores/auth'
 import { useVoiceMembersStore } from '../stores/voiceMembers'
+import { useStatusStore, type UserStatus } from '../stores/status'
 
 class WebSocketManager {
   private isInitialized = false
@@ -81,12 +82,34 @@ class WebSocketManager {
     socket.on('initial-sync', (data: { onlineFriends: any[] }) => {
       console.log('[WebSocket] Initial sync received:', data)
       useFriendsStore.getState().setOnlineFriends(data.onlineFriends)
+
+      // Also populate status store with online friends
+      const statusStore = useStatusStore.getState()
+      data.onlineFriends.forEach((friend) => {
+        const status = friend.status || 'online'
+        if (['online', 'idle', 'dnd', 'invisible'].includes(status)) {
+          statusStore.setUserStatus(friend.id, status as UserStatus)
+        }
+      })
     })
 
     // Friend presence updates (online/offline/idle/dnd status changes)
     socket.on('friend-presence', (data: { userId: number; username: string; status: string }) => {
       console.log('[WebSocket] Friend presence update:', data)
+
+      // Update friends store (for friends list)
       useFriendsStore.getState().updateFriendStatus(data.userId, data.status)
+
+      // Also update status store (for StatusIndicator component)
+      const statusStore = useStatusStore.getState()
+      if (data.status === 'offline') {
+        // Remove from status store when offline
+        console.log('[WebSocket] Removing user', data.userId, 'from status store (offline)')
+        statusStore.removeUserStatus(data.userId)
+      } else if (['online', 'idle', 'dnd', 'invisible'].includes(data.status)) {
+        console.log('[WebSocket] Setting user', data.userId, 'status to', data.status)
+        statusStore.setUserStatus(data.userId, data.status as UserStatus)
+      }
     })
 
     // DM thread created (first message between two users)

@@ -1,12 +1,14 @@
 import { create } from 'zustand'
 import { apiService } from '../services/api'
 import { wsManager } from '../services/websocket-manager'
+import { useVoiceStore } from './voice'
 
 export type UserStatus = 'online' | 'idle' | 'dnd' | 'invisible'
 
 interface StatusState {
   userStatuses: Map<number, UserStatus>
   lastActivity: number
+  wasAutoIdled: boolean
 
   // Actions
   setUserStatus: (userId: number, status: UserStatus) => void
@@ -21,6 +23,7 @@ interface StatusState {
 export const useStatusStore = create<StatusState>((set, get) => ({
   userStatuses: new Map(),
   lastActivity: Date.now(),
+  wasAutoIdled: false,
 
   setUserStatus: (userId: number, status: UserStatus) => {
     set((state) => {
@@ -54,7 +57,19 @@ export const useStatusStore = create<StatusState>((set, get) => ({
   },
 
   updateLastActivity: () => {
+    const user = apiService.getUser()
+    if (!user) return
+
     set({ lastActivity: Date.now() })
+
+    // If user was auto-idled and now has activity, restore to online
+    const { wasAutoIdled } = get()
+    const currentStatus = get().getUserStatus(user.id)
+
+    if (wasAutoIdled && currentStatus === 'idle') {
+      set({ wasAutoIdled: false })
+      get().updateStatus('online')
+    }
   },
 
   getUserStatus: (userId: number): UserStatus | undefined => {
@@ -87,18 +102,26 @@ export const useStatusStore = create<StatusState>((set, get) => ({
       get().setUserStatus(data.userId, data.status as UserStatus)
     })
 
-    // Auto-set idle status after 5-10 minutes of inactivity
+    // Auto-set idle status after 15 minutes of inactivity
     const checkIdleStatus = () => {
       const { lastActivity } = get()
       const now = Date.now()
       const idleTime = now - lastActivity
 
-      // 5 minutes = 300000ms, 10 minutes = 600000ms
-      if (idleTime > 300000 && idleTime < 600000) {
-        // Check if user is not already idle or dnd
+      // 15 minutes = 900000ms
+      if (idleTime > 900000) {
         const currentStatus = get().getUserStatus(user.id)
+
+        // Only auto-idle if user is online and not in a voice channel
         if (currentStatus === 'online') {
-          get().updateStatus('idle')
+          const voiceState = useVoiceStore.getState()
+          const isInVoiceChannel = voiceState.connectedChannelId !== null
+
+          // Don't go idle if in voice channel
+          if (!isInVoiceChannel) {
+            set({ wasAutoIdled: true })
+            get().updateStatus('idle')
+          }
         }
       }
     }
@@ -106,12 +129,20 @@ export const useStatusStore = create<StatusState>((set, get) => ({
     // Check for idle status every minute
     const idleCheckInterval = setInterval(checkIdleStatus, 60000)
 
+    // Track window focus/blur for activity
+    const handleWindowFocus = () => {
+      get().updateLastActivity()
+    }
+
+    window.addEventListener('focus', handleWindowFocus)
+
     // Store cleanup function
     ;(get() as any).storedCleanup = () => {
       window.removeEventListener('mousedown', handleActivity)
       window.removeEventListener('keydown', handleActivity)
       window.removeEventListener('scroll', handleActivity)
       window.removeEventListener('touchstart', handleActivity)
+      window.removeEventListener('focus', handleWindowFocus)
       clearInterval(idleCheckInterval)
     }
   },

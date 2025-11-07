@@ -296,7 +296,7 @@ const VoiceChannelParticipants: React.FC = () => {
 }
 
 const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
-  const [messageInput, setMessageInput] = useState('')
+  const [channelInputs, setChannelInputs] = useState<Map<number, string>>(new Map())
   const [showMembersModal, setShowMembersModal] = useState(false)
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
   const [editContent, setEditContent] = useState('')
@@ -309,6 +309,25 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const editInputRef = useRef<HTMLTextAreaElement>(null)
+  const isInitialChannelLoad = useRef(true)
+
+  // Get the current channel's input value
+  const messageInput = selectedChannel ? channelInputs.get(selectedChannel.id) || '' : ''
+
+  // Update the current channel's input value
+  const setMessageInput = (value: string) => {
+    if (selectedChannel) {
+      setChannelInputs((prev) => {
+        const newMap = new Map(prev)
+        if (value === '') {
+          newMap.delete(selectedChannel.id)
+        } else {
+          newMap.set(selectedChannel.id, value)
+        }
+        return newMap
+      })
+    }
+  }
 
   const allMessages = useMessagesStore((state) => state.messages)
   const messages = selectedChannel ? allMessages[selectedChannel.id] || [] : []
@@ -338,8 +357,22 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   useEffect(() => {
     if (selectedChannel && selectedChannel.type === 'text') {
       fetchMessages(selectedChannel.id)
+      // Mark as initial load when switching channels
+      isInitialChannelLoad.current = true
     }
   }, [selectedChannel, fetchMessages])
+
+  // Auto-scroll to bottom when messages are first loaded for a channel
+  useEffect(() => {
+    if (selectedChannel && messages.length > 0 && isInitialChannelLoad.current) {
+      // Use a short timeout to ensure DOM has rendered
+      const timer = setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
+        isInitialChannelLoad.current = false
+      }, 50)
+      return () => clearTimeout(timer)
+    }
+  }, [selectedChannel?.id, messages.length])
 
   // Initialize voice manager
   useEffect(() => {
@@ -390,11 +423,21 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
     e.preventDefault()
     if (!selectedChannel || !messageInput.trim()) return
 
+    const channelId = selectedChannel.id
     try {
-      await sendMessage(selectedChannel.id, messageInput.trim(), replyingTo?.id)
-      setMessageInput('')
+      await sendMessage(channelId, messageInput.trim(), replyingTo?.id)
+      // Clear this channel's input
+      setChannelInputs((prev) => {
+        const newMap = new Map(prev)
+        newMap.delete(channelId)
+        return newMap
+      })
       setReplyingTo(null)
-      inputRef.current?.focus()
+      // Reset textarea height
+      if (inputRef.current) {
+        inputRef.current.style.height = '48px'
+        inputRef.current.focus()
+      }
     } catch (error) {
       console.error('Failed to send message:', error)
     }
@@ -403,8 +446,9 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   const handleGifSelect = async (gifUrl: string) => {
     if (!selectedChannel) return
 
+    const channelId = selectedChannel.id
     try {
-      await sendMessage(selectedChannel.id, gifUrl, replyingTo?.id)
+      await sendMessage(channelId, gifUrl, replyingTo?.id)
       setReplyingTo(null)
       setShowGifPicker(false)
     } catch (error) {
@@ -413,7 +457,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   }
 
   const handleEmojiSelect = (emoji: string) => {
-    setMessageInput((prev) => prev + emoji)
+    setMessageInput(messageInput + emoji)
     inputRef.current?.focus()
   }
 
@@ -432,6 +476,17 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
       e.preventDefault()
       handleSendMessage(e)
     }
+  }
+
+  // Auto-resize textarea based on content
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setMessageInput(e.target.value)
+
+    // Reset height to auto to get the correct scrollHeight
+    e.target.style.height = 'auto'
+    // Set height to scrollHeight to fit content
+    const newHeight = Math.min(e.target.scrollHeight, 200) // Max 200px
+    e.target.style.height = `${newHeight}px`
   }
 
   const handleJoinVoice = async () => {
@@ -524,6 +579,24 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
     }
   }, [editingMessageId])
 
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (contextMenuMessageId !== null) {
+        const target = event.target as HTMLElement
+        // Check if click is outside the context menu
+        if (!target.closest('.context-menu') && !target.closest('.context-menu-trigger')) {
+          setContextMenuMessageId(null)
+        }
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [contextMenuMessageId])
+
   // Server member updates are handled via WebSocket in real-time
   // No polling needed - WebSocket events automatically update server members
 
@@ -541,6 +614,12 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
       month: 'short',
       day: 'numeric',
     })} ${formatTime(date)}`
+  }
+
+  const formatTimeOnly = (timestamp: string) => {
+    const date = new Date(timestamp)
+    const formatTime = getTimeFormat()
+    return formatTime(date)
   }
 
   const extractUrls = (text: string): string[] => {
@@ -766,11 +845,11 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
                             {/* Display GIF if message is just a GIF URL */}
                             {messageIsGif ? (
                               <div className="max-w-md">
-                                <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden">
+                                <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden inline-block">
                                   <img
                                     src={urls[0]}
                                     alt="GIF"
-                                    className="w-full h-auto max-h-96 object-contain"
+                                    className="block h-auto max-h-96 max-w-full"
                                   />
                                 </div>
                               </div>
@@ -800,12 +879,12 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
                                 contextMenuMessageId === message.id ? null : message.id
                               )
                             }
-                            className="p-1 hover:bg-grey-800 text-grey-400 hover:text-white transition-colors"
+                            className="context-menu-trigger p-1 hover:bg-grey-800 text-grey-400 hover:text-white transition-colors"
                           >
                             <MoreVertical className="w-4 h-4" />
                           </button>
                           {contextMenuMessageId === message.id && (
-                            <div className="absolute right-0 top-8 bg-grey-900 border-2 border-grey-700 z-10 min-w-[150px] animate-fade-in">
+                            <div className="context-menu absolute right-0 top-8 bg-grey-900 border-2 border-grey-700 z-10 min-w-[150px] animate-fade-in">
                               <button
                                 onClick={() => handleReplyTo(message)}
                                 className="w-full px-4 py-2 text-left text-white hover:bg-grey-800 flex items-center gap-2 transition-colors"
@@ -840,7 +919,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
                     <div className="flex gap-3 hover:bg-grey-850 hover:bg-opacity-30 -mx-2 px-2 py-0.5">
                       <div className="w-10 flex-shrink-0 flex items-center justify-center">
                         <span className="text-grey-600 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
-                          {formatTimestamp(message.createdAt)}
+                          {formatTimeOnly(message.createdAt)}
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
@@ -893,11 +972,11 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
                           <>
                             {messageIsGif ? (
                               <div className="max-w-md">
-                                <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden">
+                                <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden inline-block">
                                   <img
                                     src={urls[0]}
                                     alt="GIF"
-                                    className="w-full h-auto max-h-96 object-contain"
+                                    className="block h-auto max-h-96 max-w-full"
                                   />
                                 </div>
                               </div>
@@ -931,12 +1010,12 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
                                 contextMenuMessageId === message.id ? null : message.id
                               )
                             }
-                            className="p-1 hover:bg-grey-800 text-grey-400 hover:text-white transition-colors"
+                            className="context-menu-trigger p-1 hover:bg-grey-800 text-grey-400 hover:text-white transition-colors"
                           >
                             <MoreVertical className="w-4 h-4" />
                           </button>
                           {contextMenuMessageId === message.id && (
-                            <div className="absolute right-0 top-8 bg-grey-900 border-2 border-grey-700 z-10 min-w-[150px] animate-fade-in">
+                            <div className="context-menu absolute right-0 top-8 bg-grey-900 border-2 border-grey-700 z-10 min-w-[150px] animate-fade-in">
                               <button
                                 onClick={() => handleReplyTo(message)}
                                 className="w-full px-4 py-2 text-left text-white hover:bg-grey-800 flex items-center gap-2 transition-colors"
@@ -1019,16 +1098,18 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
             <textarea
               ref={inputRef}
               value={messageInput}
-              onChange={(e) => setMessageInput(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               placeholder={`Message #${selectedChannel.name}`}
-              className="w-full bg-grey-850 border-2 border-grey-700 px-4 py-3 pr-32 text-white resize-none focus:border-white"
+              className="w-full bg-grey-850 border-2 border-grey-700 px-4 py-3 pr-32 text-white resize-none focus:border-white placeholder:text-grey-500"
               rows={1}
               maxLength={2000}
+              autoComplete="off"
               style={{
                 minHeight: '48px',
                 maxHeight: '200px',
-                height: 'auto',
+                height: '48px',
+                overflow: 'hidden',
               }}
             />
 

@@ -153,11 +153,11 @@ const MediaEmbed: React.FC<MediaEmbedProps> = ({ url }) => {
   if (embedData.type === 'image') {
     return (
       <div className="mt-2 max-w-md animate-slide-up">
-        <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden">
+        <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden inline-block">
           <img
             src={embedData.url}
             alt="Embedded image"
-            className="w-full h-auto max-h-96 object-contain"
+            className="block h-auto max-h-96 max-w-full"
             onError={(e) => {
               const target = e.target as HTMLImageElement
               target.style.display = 'none'

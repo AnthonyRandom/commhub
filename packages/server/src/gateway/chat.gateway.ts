@@ -110,7 +110,26 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handleDisconnect(client: AuthenticatedSocket) {
     if (client.userId) {
       // Check if user was in a voice channel and notify others
-      const voiceChannelId = this.userVoiceChannels.get(client.userId);
+      // First check the userVoiceChannels map
+      let voiceChannelId = this.userVoiceChannels.get(client.userId);
+
+      // If not found in userVoiceChannels, scan through voiceChannelMembers
+      // This handles cases where state became inconsistent
+      if (!voiceChannelId) {
+        for (const [channelId, members] of this.voiceChannelMembers.entries()) {
+          const userInChannel = Array.from(members).find(
+            m => m.userId === client.userId
+          );
+          if (userInChannel) {
+            voiceChannelId = channelId;
+            this.logger.warn(
+              `[Voice] Found ${client.username} in voiceChannelMembers for channel ${channelId} but not in userVoiceChannels - cleaning up inconsistent state`
+            );
+            break;
+          }
+        }
+      }
+
       if (voiceChannelId) {
         this.logger.log(
           `[Voice] User ${client.username} disconnected while in voice channel ${voiceChannelId}`
@@ -128,6 +147,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           );
           if (userToRemove) {
             members.delete(userToRemove);
+            this.logger.log(
+              `[Voice] Removed ${client.username} from voiceChannelMembers for channel ${voiceChannelId}`
+            );
           }
           if (members.size === 0) {
             this.voiceChannelMembers.delete(voiceChannelId);
@@ -987,6 +1009,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
               userId: authSocket.userId,
               username: authSocket.username,
             });
+
+            // CRITICAL: Also track in userVoiceChannels to maintain consistency
+            // This ensures the user will be properly cleaned up on disconnect
+            this.userVoiceChannels.set(authSocket.userId, data.channelId);
+            this.logger.log(
+              `[Voice] Added ${authSocket.username} to userVoiceChannels for consistent state tracking`
+            );
           }
         }
       }

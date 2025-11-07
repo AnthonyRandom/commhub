@@ -61,7 +61,7 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({
   } = useDirectMessagesStore()
 
   const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'blocked'>('all')
-  const [messageInput, setMessageInput] = useState('')
+  const [conversationInputs, setConversationInputs] = useState<Map<number, string>>(new Map())
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
   const [editContent, setEditContent] = useState('')
   const [contextMenuMessageId, setContextMenuMessageId] = useState<number | null>(null)
@@ -77,6 +77,24 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const selectedFriend = friends.find((f) => f.id === selectedDMUserId)
+
+  // Get the current conversation's input value
+  const messageInput = selectedDMUserId ? conversationInputs.get(selectedDMUserId) || '' : ''
+
+  // Update the current conversation's input value
+  const setMessageInput = (value: string) => {
+    if (selectedDMUserId) {
+      setConversationInputs((prev) => {
+        const newMap = new Map(prev)
+        if (value === '') {
+          newMap.delete(selectedDMUserId)
+        } else {
+          newMap.set(selectedDMUserId, value)
+        }
+        return newMap
+      })
+    }
+  }
 
   // Update conversation messages when messages or selectedDMUserId changes
   useEffect(() => {
@@ -165,6 +183,24 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({
     setHasUserScrolledUp(false)
     setIsInitialLoad(true)
   }, [selectedDMUserId])
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (contextMenuMessageId !== null) {
+        const target = event.target as HTMLElement
+        // Check if click is outside the context menu
+        if (!target.closest('.context-menu') && !target.closest('.context-menu-trigger')) {
+          setContextMenuMessageId(null)
+        }
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [contextMenuMessageId])
 
   // Direct message updates are handled via WebSocket in real-time
   // No polling needed - WebSocket events automatically update conversations
@@ -284,12 +320,35 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({
     e.preventDefault()
     if (!selectedDMUserId || !messageInput.trim()) return
 
+    const conversationId = selectedDMUserId
+    const inputElement = e.currentTarget.querySelector('textarea')
+
     try {
-      await sendDirectMessage(selectedDMUserId, messageInput.trim())
-      setMessageInput('')
+      await sendDirectMessage(conversationId, messageInput.trim())
+      // Clear this conversation's input
+      setConversationInputs((prev) => {
+        const newMap = new Map(prev)
+        newMap.delete(conversationId)
+        return newMap
+      })
+      // Reset textarea height
+      if (inputElement) {
+        inputElement.style.height = '48px'
+      }
     } catch (error) {
       console.error('Failed to send message:', error)
     }
+  }
+
+  // Auto-resize textarea based on content for DMs
+  const handleDMInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setMessageInput(e.target.value)
+
+    // Reset height to auto to get the correct scrollHeight
+    e.target.style.height = 'auto'
+    // Set height to scrollHeight to fit content
+    const newHeight = Math.min(e.target.scrollHeight, 200) // Max 200px
+    e.target.style.height = `${newHeight}px`
   }
 
   const handleEditMessage = async (messageId: number) => {
@@ -378,17 +437,23 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({
     const groups: { [key: string]: DirectMessage[] } = {}
 
     msgs.forEach((message) => {
-      const date = new Date(message.createdAt).toDateString()
-      if (!groups[date]) {
-        groups[date] = []
+      // Ensure we're working with a proper Date object
+      const messageDate = new Date(message.createdAt)
+      // Use the date string in local time for grouping
+      const dateKey = messageDate.toDateString()
+      if (!groups[dateKey]) {
+        groups[dateKey] = []
       }
-      groups[date].push(message)
+      groups[dateKey].push(message)
     })
 
-    return Object.entries(groups).map(([, messages]) => ({
-      date: formatDate(messages[0].createdAt),
-      messages,
-    }))
+    // Sort groups by date and return with formatted date headers
+    return Object.entries(groups)
+      .sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime())
+      .map(([, messages]) => ({
+        date: formatDate(messages[0].createdAt),
+        messages,
+      }))
   }
 
   const handleCancelRequest = async (requestId: number) => {
@@ -607,13 +672,13 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({
                                             showContextMenu ? null : message.id
                                           )
                                         }
-                                        className="p-1 bg-grey-800 text-grey-300 hover:text-white opacity-0 group-hover/message:opacity-100 transition-opacity"
+                                        className="context-menu-trigger p-1 bg-grey-800 text-grey-300 hover:text-white opacity-0 group-hover/message:opacity-100 transition-opacity"
                                       >
                                         <MoreVertical className="w-4 h-4" />
                                       </button>
 
                                       {showContextMenu && (
-                                        <div className="absolute right-0 mt-1 bg-grey-850 border-2 border-grey-800 shadow-lg z-10 min-w-[120px]">
+                                        <div className="context-menu absolute right-0 mt-1 bg-grey-850 border-2 border-grey-800 shadow-lg z-10 min-w-[120px]">
                                           <button
                                             onClick={() => {
                                               setEditingMessageId(message.id)
@@ -657,7 +722,7 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({
           <form onSubmit={handleSendMessage} className="relative">
             <textarea
               value={messageInput}
-              onChange={(e) => setMessageInput(e.target.value)}
+              onChange={handleDMInputChange}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
@@ -665,9 +730,10 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({
                 }
               }}
               placeholder={`Message ${selectedFriend.username}`}
-              className="w-full bg-grey-850 border-2 border-grey-800 px-4 py-3 pr-12 text-white placeholder-grey-600 resize-none focus:border-white transition-colors"
+              className="w-full bg-grey-850 border-2 border-grey-800 px-4 py-3 pr-12 text-white placeholder:text-grey-500 resize-none focus:border-white transition-colors"
               rows={1}
-              style={{ minHeight: '48px', maxHeight: '200px' }}
+              autoComplete="off"
+              style={{ minHeight: '48px', maxHeight: '200px', height: '48px', overflow: 'hidden' }}
             />
             <button
               type="submit"

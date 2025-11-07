@@ -12,6 +12,7 @@ import {
   PhoneCall,
   MessageSquare,
   Users,
+  X,
 } from 'lucide-react'
 import { useChannelsStore } from '../stores/channels'
 import { useServersStore } from '../stores/servers'
@@ -149,19 +150,20 @@ const ChannelList: React.FC<ChannelListProps> = ({
     }
   }
 
-  const handleDeleteDM = (conversation: Conversation) => {
+  const handleCloseDM = (conversation: Conversation) => {
     setDeletingDM(conversation)
     setContextMenuDMId(null)
   }
 
-  const confirmDeleteDM = async () => {
+  const confirmCloseDM = async () => {
     if (!deletingDM || !onDeleteDM) return
 
     try {
+      // Just close the conversation - it can be reopened by messaging the friend
       onDeleteDM(deletingDM.user.id)
       setDeletingDM(null)
     } catch (error) {
-      console.error('Failed to delete DM conversation:', error)
+      console.error('Failed to close DM conversation:', error)
     }
   }
 
@@ -586,11 +588,11 @@ const ChannelList: React.FC<ChannelListProps> = ({
                         />
                         <div className="absolute right-0 top-full mt-1 bg-grey-900 border-2 border-grey-700 z-50 min-w-[140px] animate-fade-in shadow-lg">
                           <button
-                            onClick={() => handleDeleteDM(conversation)}
-                            className="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-grey-800 flex items-center gap-3 transition-colors"
+                            onClick={() => handleCloseDM(conversation)}
+                            className="w-full px-4 py-3 text-left text-sm text-grey-300 hover:text-white hover:bg-grey-800 flex items-center gap-3 transition-colors"
                           >
-                            <Trash2 className="w-4 h-4" />
-                            Delete Chat
+                            <X className="w-4 h-4" />
+                            Close Chat
                           </button>
                         </div>
                       </>
@@ -677,21 +679,21 @@ const ChannelList: React.FC<ChannelListProps> = ({
           </div>
         )}
 
-        {/* Delete DM Modal */}
+        {/* Close DM Modal */}
         {deletingDM && (
           <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 animate-fade-in">
             <div className="bg-grey-900 border-2 border-white w-96 animate-slide-up">
               <div className="border-b-2 border-grey-800 p-4">
-                <h3 className="font-bold text-white text-lg">Delete Conversation</h3>
+                <h3 className="font-bold text-white text-lg">Close Conversation</h3>
               </div>
               <div className="p-4">
                 <p className="text-grey-300 text-sm mb-4">
-                  Are you sure you want to delete your conversation with{' '}
+                  Close your conversation with{' '}
                   <strong className="text-white">{deletingDM.user.username}</strong>?
                 </p>
-                <p className="text-red-400 text-sm">
-                  This action cannot be undone. You will no longer see this conversation in your
-                  Direct Messages.
+                <p className="text-grey-400 text-sm">
+                  This will remove the conversation from your Direct Messages list. You can reopen
+                  it anytime by clicking the message button on their profile in your friends list.
                 </p>
               </div>
               <div className="border-t-2 border-grey-800 p-4 flex justify-end gap-2">
@@ -702,10 +704,10 @@ const ChannelList: React.FC<ChannelListProps> = ({
                   Cancel
                 </button>
                 <button
-                  onClick={confirmDeleteDM}
-                  className="px-4 py-2 bg-red-900 text-white border-2 border-red-700 hover:border-red-500 transition-colors font-bold"
+                  onClick={confirmCloseDM}
+                  className="px-4 py-2 bg-white text-black border-2 border-white hover:bg-grey-100 transition-colors font-bold"
                 >
-                  Delete Conversation
+                  Close Conversation
                 </button>
               </div>
             </div>

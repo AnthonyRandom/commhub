@@ -384,6 +384,12 @@ class WebRTCService {
         }))
       )
 
+      // Add a black/silent video track to avoid renegotiation later
+      // This allows us to use replaceTrack() when enabling the camera
+      const blackVideoTrack = this.createBlackVideoTrack()
+      stream.addTrack(blackVideoTrack)
+      console.log('[WebRTC] Added black video track to avoid renegotiation')
+
       this.localStream = stream
 
       // Apply noise suppression
@@ -1030,6 +1036,14 @@ class WebRTCService {
   }
 
   /**
+   * Get a peer connection by user ID
+   */
+  getPeer(userId: number): SimplePeer.Instance | undefined {
+    const peerConnection = this.peers.get(userId)
+    return peerConnection?.peer
+  }
+
+  /**
    * Remove a peer connection
    */
   removePeer(userId: number) {
@@ -1398,55 +1412,49 @@ class WebRTCService {
       useVoiceStore.getState().setLocalVideoEnabled(true)
       useVoiceStore.getState().setLocalVideoStream(videoStream)
 
-      // Add video track to the local stream so it becomes part of the same stream
-      // that the peer connections are using
+      // Replace the black video track with the real camera track
+      // This avoids renegotiation since video was already negotiated
       const videoTrack = videoStream.getVideoTracks()[0]
       if (videoTrack && this.localStream) {
-        // Add the video track to the existing audio stream
-        this.localStream.addTrack(videoTrack)
-        console.log('[WebRTC] Added video track to localStream')
+        // Find and replace the black placeholder track in localStream
+        const placeholderTrack = this.localStream
+          .getVideoTracks()
+          .find((t) => (t as any).isPlaceholder)
+        if (placeholderTrack) {
+          this.localStream.removeTrack(placeholderTrack)
+          placeholderTrack.stop()
+        }
 
-        // Now add the track to all peer connections using the localStream
+        this.localStream.addTrack(videoTrack)
+        console.log('[WebRTC] Replaced placeholder video track with camera track in localStream')
+
+        // Replace the track in all peer connections (no renegotiation needed!)
         for (const [userId, peerConnection] of this.peers.entries()) {
           try {
             const simplePeer = peerConnection.peer
             const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
 
-            if (rtcPeerConnection && rtcPeerConnection.signalingState === 'stable') {
-              // Add the video track and associate it with localStream (the stream the peer knows about)
-              const sender = rtcPeerConnection.addTrack(videoTrack, this.localStream)
-              console.log(`[WebRTC] Added video track to peer ${userId}`, sender)
+            if (rtcPeerConnection) {
+              // Find the video sender
+              const senders = rtcPeerConnection.getSenders()
+              const videoSender = senders.find((sender) => sender.track?.kind === 'video')
 
-              console.log(`[WebRTC] Triggering renegotiation for peer ${userId}`)
-
-              // Create new offer and trigger SimplePeer's signal emission
-              rtcPeerConnection
-                .createOffer()
-                .then((offer) => {
-                  console.log(`[WebRTC] Created renegotiation offer for peer ${userId}`)
-                  return rtcPeerConnection.setLocalDescription(offer)
-                })
-                .then(() => {
-                  console.log(
-                    `[WebRTC] Set local description for renegotiation with peer ${userId}`
-                  )
-
-                  // Manually trigger SimplePeer's signal event with the new offer
-                  const localDescription = rtcPeerConnection.localDescription
-                  if (localDescription) {
-                    simplePeer.emit('signal', {
-                      type: localDescription.type,
-                      sdp: localDescription.sdp,
-                    })
-                    console.log(`[WebRTC] Emitted renegotiation signal for peer ${userId}`)
-                  }
-                })
-                .catch((error) => {
-                  console.error(`[WebRTC] Renegotiation failed for peer ${userId}:`, error)
-                })
+              if (videoSender) {
+                // Replace the black track with the real camera track
+                videoSender
+                  .replaceTrack(videoTrack)
+                  .then(() => {
+                    console.log(
+                      `[WebRTC] ✅ Replaced video track for peer ${userId} (no renegotiation needed)`
+                    )
+                  })
+                  .catch((error) => {
+                    console.error(`[WebRTC] Failed to replace track for peer ${userId}:`, error)
+                  })
+              }
             }
           } catch (error) {
-            console.error(`[WebRTC] Failed to add video track to peer ${userId}:`, error)
+            console.error(`[WebRTC] Failed to replace video track for peer ${userId}:`, error)
           }
         }
       }
@@ -1490,61 +1498,51 @@ class WebRTCService {
         return
       }
 
-      // First, remove video track from localStream
+      // Replace camera track with black track in localStream
       if (this.localStream) {
         const videoTracks = this.localStream.getVideoTracks()
         videoTracks.forEach((track) => {
           this.localStream!.removeTrack(track)
           track.stop()
-          console.log('[WebRTC] Removed and stopped video track from localStream:', track.label)
+          console.log('[WebRTC] Removed and stopped camera track from localStream:', track.label)
         })
+
+        // Add a new black placeholder track
+        const blackTrack = this.createBlackVideoTrack()
+        this.localStream.addTrack(blackTrack)
+        console.log('[WebRTC] Added black placeholder track to localStream')
       }
 
-      // Remove video track from all peer connections
+      // Replace camera track with black track in all peer connections
       this.peers.forEach((peerConnection, userId) => {
         try {
           const simplePeer = peerConnection.peer
           const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
 
-          if (rtcPeerConnection && rtcPeerConnection.signalingState === 'stable') {
-            // Find and remove video senders
+          if (rtcPeerConnection) {
+            // Find the video sender
             const senders = rtcPeerConnection.getSenders()
-            senders.forEach((sender) => {
-              if (sender.track && sender.track.kind === 'video') {
-                rtcPeerConnection.removeTrack(sender)
-                console.log(`[WebRTC] Removed video track from peer ${userId}`)
-              }
-            })
+            const videoSender = senders.find((sender) => sender.track?.kind === 'video')
 
-            // Trigger renegotiation after removing track
-            console.log(
-              `[WebRTC] Triggering renegotiation after removing video from peer ${userId}`
-            )
-            rtcPeerConnection
-              .createOffer()
-              .then((offer) => {
-                console.log(`[WebRTC] Created renegotiation offer for peer ${userId}`)
-                return rtcPeerConnection.setLocalDescription(offer)
-              })
-              .then(() => {
-                console.log(`[WebRTC] Set local description for renegotiation with peer ${userId}`)
+            if (videoSender && this.localStream) {
+              // Get the new black placeholder track
+              const blackTrack = this.localStream.getVideoTracks()[0]
 
-                // Manually trigger SimplePeer's signal event with the new offer
-                const localDescription = rtcPeerConnection.localDescription
-                if (localDescription) {
-                  simplePeer.emit('signal', {
-                    type: localDescription.type,
-                    sdp: localDescription.sdp,
+              if (blackTrack) {
+                // Replace camera with black track (no renegotiation needed!)
+                videoSender
+                  .replaceTrack(blackTrack)
+                  .then(() => {
+                    console.log(`[WebRTC] ✅ Replaced camera with black track for peer ${userId}`)
                   })
-                  console.log(`[WebRTC] Emitted renegotiation signal for peer ${userId}`)
-                }
-              })
-              .catch((error) => {
-                console.error(`[WebRTC] Renegotiation failed for peer ${userId}:`, error)
-              })
+                  .catch((error) => {
+                    console.error(`[WebRTC] Failed to replace track for peer ${userId}:`, error)
+                  })
+              }
+            }
           }
         } catch (error) {
-          console.error(`[WebRTC] Failed to remove video track from peer ${userId}:`, error)
+          console.error(`[WebRTC] Failed to replace video track for peer ${userId}:`, error)
         }
       })
 
@@ -1567,6 +1565,30 @@ class WebRTCService {
       console.error('[WebRTC] Error disabling camera:', error)
       throw error
     }
+  }
+
+  /**
+   * Create a black video track to avoid renegotiation
+   * This allows us to use replaceTrack() later instead of addTrack()
+   */
+  private createBlackVideoTrack(): MediaStreamTrack {
+    const canvas = document.createElement('canvas')
+    canvas.width = 640
+    canvas.height = 480
+
+    const ctx = canvas.getContext('2d')
+    if (ctx) {
+      ctx.fillStyle = 'black'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+    }
+
+    const stream = canvas.captureStream(1) // 1 FPS for the black frame
+    const track = stream.getVideoTracks()[0]
+
+    // Mark this as our placeholder track
+    ;(track as any).isPlaceholder = true
+
+    return track
   }
 
   /**

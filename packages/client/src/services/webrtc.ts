@@ -615,17 +615,22 @@ class WebRTCService {
 
       this.updateConnectionQuality(userId, 'excellent')
 
-      // Check if stream has video tracks
-      const hasVideo = stream.getVideoTracks().length > 0
+      // Check if stream has real video tracks (not placeholders)
+      const videoTracks = stream.getVideoTracks()
+      const realVideoTracks = videoTracks.filter((track) => !(track as any).isPlaceholder)
+      const hasVideo = realVideoTracks.length > 0
       console.log(`[WebRTC] Stream from ${username} has video: ${hasVideo}`)
 
       // Update user stream in store
       useVoiceStore.getState().updateUserStream(userId, stream)
 
-      // Update video state if there are video tracks
+      // Update video state if there are real video tracks (not placeholders)
       if (hasVideo) {
         useVoiceStore.getState().updateUserVideo(userId, true)
         useVoiceStore.getState().updateUserVideoStream(userId, stream)
+      } else {
+        // No real video, ensure user shows avatar
+        useVoiceStore.getState().updateUserVideo(userId, false)
       }
 
       onStream(stream)
@@ -640,7 +645,8 @@ class WebRTCService {
       // Listen for track changes (when peer enables/disables camera dynamically)
       stream.addEventListener('addtrack', (event) => {
         console.log(`[WebRTC] Track added to ${username}'s stream:`, event.track.kind)
-        if (event.track.kind === 'video') {
+        if (event.track.kind === 'video' && !(event.track as any).isPlaceholder) {
+          // Only update if it's a real video track, not a placeholder
           useVoiceStore.getState().updateUserVideo(userId, true)
           useVoiceStore.getState().updateUserVideoStream(userId, stream)
         }
@@ -648,9 +654,11 @@ class WebRTCService {
 
       stream.addEventListener('removetrack', (event) => {
         console.log(`[WebRTC] Track removed from ${username}'s stream:`, event.track.kind)
-        if (event.track.kind === 'video') {
-          // Check if there are any remaining video tracks
-          const hasVideo = stream.getVideoTracks().length > 0
+        if (event.track.kind === 'video' && !(event.track as any).isPlaceholder) {
+          // Check if there are any remaining real video tracks (not placeholders)
+          const videoTracks = stream.getVideoTracks()
+          const realVideoTracks = videoTracks.filter((track) => !(track as any).isPlaceholder)
+          const hasVideo = realVideoTracks.length > 0
           if (!hasVideo) {
             useVoiceStore.getState().updateUserVideo(userId, false)
           }

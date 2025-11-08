@@ -578,6 +578,10 @@ class WebRTCService {
       stream: this.localStream!,
       config: this.rtcConfig,
       trickle: true,
+      offerOptions: {
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true, // Allow video to be added dynamically
+      },
     })
 
     let connectionTimeout: number | null = null
@@ -1397,20 +1401,31 @@ class WebRTCService {
       // Add video track to all existing peer connections
       const videoTrack = videoStream.getVideoTracks()[0]
       if (videoTrack) {
-        this.peers.forEach((peerConnection, userId) => {
+        for (const [userId, peerConnection] of this.peers.entries()) {
           try {
             // Access the underlying RTCPeerConnection
             const rtcPeerConnection = (peerConnection.peer as any)._pc as RTCPeerConnection
 
             if (rtcPeerConnection) {
-              // Add the video track
+              // Add the video track - this should trigger renegotiation
               const sender = rtcPeerConnection.addTrack(videoTrack, videoStream)
               console.log(`[WebRTC] Added video track to peer ${userId}`, sender)
+
+              // For SimplePeer v9, we may need to manually trigger renegotiation
+              // Check if negotiation is needed
+              if (rtcPeerConnection.signalingState === 'stable') {
+                // Manually trigger onnegotiationneeded to force renegotiation
+                const onnegotiationneeded = (rtcPeerConnection as any).onnegotiationneeded
+                if (typeof onnegotiationneeded === 'function') {
+                  console.log(`[WebRTC] Manually triggering renegotiation for peer ${userId}`)
+                  onnegotiationneeded.call(rtcPeerConnection, new Event('negotiationneeded'))
+                }
+              }
             }
           } catch (error) {
             console.error(`[WebRTC] Failed to add video track to peer ${userId}:`, error)
           }
-        })
+        }
       }
 
       console.log('[WebRTC] Camera enabled successfully')
@@ -1458,7 +1473,7 @@ class WebRTCService {
           const rtcPeerConnection = (peerConnection.peer as any)._pc as RTCPeerConnection
 
           if (rtcPeerConnection) {
-            // Find and remove video senders
+            // Find and remove video senders - this triggers renegotiation automatically
             const senders = rtcPeerConnection.getSenders()
             senders.forEach((sender) => {
               if (sender.track && sender.track.kind === 'video') {

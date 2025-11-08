@@ -104,6 +104,19 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         );
       }
 
+      // Check if user already has an active connection
+      const existingSocketId = this.onlineUsers.get(client.userId);
+      if (existingSocketId && existingSocketId !== client.id) {
+        this.logger.warn(
+          `User ${client.username} (${client.userId}) already has an active connection (${existingSocketId}). Disconnecting old socket.`
+        );
+        const existingSocket =
+          this.server.sockets.sockets.get(existingSocketId);
+        if (existingSocket) {
+          existingSocket.disconnect(true);
+        }
+      }
+
       // Track user as online
       this.onlineUsers.set(client.userId, client.id);
 
@@ -1017,18 +1030,30 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
               this.voiceChannelMembers.set(data.channelId, new Set());
             }
             const members = this.voiceChannelMembers.get(data.channelId);
-            members.add({
-              userId: authSocket.userId,
-              username: authSocket.username,
-              hasCamera: false,
-            });
 
-            // CRITICAL: Also track in userVoiceChannels to maintain consistency
-            // This ensures the user will be properly cleaned up on disconnect
-            this.userVoiceChannels.set(authSocket.userId, data.channelId);
-            this.logger.log(
-              `[Voice] Added ${authSocket.username} to userVoiceChannels for consistent state tracking`
+            // Double-check that this user isn't already in the Set to prevent duplicates
+            const alreadyInSet = Array.from(members).find(
+              m => m.userId === authSocket.userId
             );
+
+            if (!alreadyInSet) {
+              members.add({
+                userId: authSocket.userId,
+                username: authSocket.username,
+                hasCamera: false,
+              });
+
+              // CRITICAL: Also track in userVoiceChannels to maintain consistency
+              // This ensures the user will be properly cleaned up on disconnect
+              this.userVoiceChannels.set(authSocket.userId, data.channelId);
+              this.logger.log(
+                `[Voice] Added ${authSocket.username} to userVoiceChannels for consistent state tracking`
+              );
+            } else {
+              this.logger.log(
+                `[Voice] User ${authSocket.username} (${authSocket.userId}) already in members Set, skipping duplicate add during reconciliation`
+              );
+            }
           }
         }
       }
@@ -1038,11 +1063,26 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         this.voiceChannelMembers.set(data.channelId, new Set());
       }
       const members = this.voiceChannelMembers.get(data.channelId);
-      members.add({
-        userId: client.userId,
-        username: client.username,
-        hasCamera: false,
-      });
+
+      // Check if user is already in the members Set to prevent duplicates
+      const existingMember = Array.from(members).find(
+        m => m.userId === client.userId
+      );
+
+      if (existingMember) {
+        this.logger.log(
+          `[Voice] User ${client.username} (${client.userId}) already in members Set, skipping duplicate add`
+        );
+      } else {
+        members.add({
+          userId: client.userId,
+          username: client.username,
+          hasCamera: false,
+        });
+        this.logger.log(
+          `[Voice] Added ${client.username} (${client.userId}) to voice channel ${data.channelId} members`
+        );
+      }
 
       this.logger.log(
         `[Voice] Sending voice-channel-users to ${client.username} with ${usersInChannel.length} users`

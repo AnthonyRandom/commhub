@@ -112,10 +112,12 @@ export class ChatGateway
         this.logger.warn(
           `User ${client.username} (${client.userId}) already has an active connection (${existingSocketId}). Disconnecting old socket.`
         );
-        const existingSocket =
-          this.server.sockets.sockets.get(existingSocketId);
-        if (existingSocket) {
-          existingSocket.disconnect(true);
+        if (this.server && this.server.sockets) {
+          const existingSocket =
+            this.server.sockets.sockets.get(existingSocketId);
+          if (existingSocket) {
+            existingSocket.disconnect(true);
+          }
         }
       }
 
@@ -1679,6 +1681,14 @@ export class ChatGateway
    * This runs every 5 minutes to verify that tracked users are still connected
    */
   private async performPeriodicCleanup() {
+    // Safety check: ensure server is initialized
+    if (!this.server || !this.server.sockets) {
+      this.logger.warn(
+        '[Cleanup] WebSocket server not initialized yet, skipping cleanup'
+      );
+      return;
+    }
+
     this.logger.log('[Cleanup] Starting periodic cleanup of stale connections');
 
     let cleanedUsersCount = 0;

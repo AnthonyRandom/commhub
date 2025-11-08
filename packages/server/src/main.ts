@@ -8,60 +8,100 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 async function bootstrap() {
-  // Validate environment configuration before starting
-  validateEnvironmentConfig();
-  const app = await NestFactory.create(AppModule, new ExpressAdapter(), {
-    httpsOptions: getHttpsOptions(),
-  });
+  try {
+    // Validate environment configuration before starting
+    validateEnvironmentConfig();
+    const app = await NestFactory.create(AppModule, new ExpressAdapter(), {
+      httpsOptions: getHttpsOptions(),
+    });
 
-  // Security headers with Helmet
-  app.use(
-    helmet({
-      contentSecurityPolicy: {
-        directives: {
-          defaultSrc: ["'self'"],
-          styleSrc: ["'self'", "'unsafe-inline'"],
-          scriptSrc: ["'self'"],
-          imgSrc: ["'self'", 'data:', 'https:'],
+    // Security headers with Helmet
+    app.use(
+      helmet({
+        contentSecurityPolicy: {
+          directives: {
+            defaultSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            scriptSrc: ["'self'"],
+            imgSrc: ["'self'", 'data:', 'https:'],
+          },
         },
-      },
-      hsts: {
-        maxAge: 31536000,
-        includeSubDomains: true,
-        preload: true,
-      },
-      noSniff: true,
-      xssFilter: true,
-      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
-    })
-  );
+        hsts: {
+          maxAge: 31536000,
+          includeSubDomains: true,
+          preload: true,
+        },
+        noSniff: true,
+        xssFilter: true,
+        referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+      })
+    );
 
-  // Enable CORS with restricted origins for security
-  app.enableCors({
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || [
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'http://localhost:1420', // Add Vite dev server port
-    ], // Default for development
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true,
-    maxAge: 86400, // 24 hours
-  });
+    // Enable CORS with restricted origins for security
+    app.enableCors({
+      origin: process.env.ALLOWED_ORIGINS?.split(',') || [
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'http://localhost:1420', // Add Vite dev server port
+      ], // Default for development
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+      credentials: true,
+      maxAge: 86400, // 24 hours
+    });
 
-  // Note: ThrottlerGuard is automatically applied globally through ThrottlerModule configuration
+    // Note: ThrottlerGuard is automatically applied globally through ThrottlerModule configuration
 
-  // Enable global validation with transformation and sanitization
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true, // Strip properties that do not have decorators
-      forbidNonWhitelisted: true, // Throw error if non-whitelisted properties are provided
-      transform: true, // Transform payload to DTO instances
-      disableErrorMessages: process.env.NODE_ENV === 'production', // Hide error messages in production
-    })
-  );
+    // Enable global validation with transformation and sanitization
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true, // Strip properties that do not have decorators
+        forbidNonWhitelisted: true, // Throw error if non-whitelisted properties are provided
+        transform: true, // Transform payload to DTO instances
+        disableErrorMessages: process.env.NODE_ENV === 'production', // Hide error messages in production
+      })
+    );
 
-  await app.listen(process.env.PORT || 3000);
+    // Enable graceful shutdown hooks
+    app.enableShutdownHooks();
+
+    const port = process.env.PORT || 3000;
+    await app.listen(port);
+
+    console.log(`🚀 Application is running on port ${port}`);
+
+    // Graceful shutdown handling
+    const gracefulShutdown = async (signal: string) => {
+      console.log(`\n${signal} received. Starting graceful shutdown...`);
+      try {
+        await app.close();
+        console.log('✅ Application closed successfully');
+        process.exit(0);
+      } catch (error) {
+        console.error('❌ Error during shutdown:', error);
+        process.exit(1);
+      }
+    };
+
+    // Handle shutdown signals
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+    // Handle uncaught errors
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+      // Don't exit immediately, log and monitor
+    });
+
+    process.on('uncaughtException', error => {
+      console.error('❌ Uncaught Exception:', error);
+      // For uncaught exceptions, we should exit as the app state may be inconsistent
+      gracefulShutdown('UNCAUGHT_EXCEPTION');
+    });
+  } catch (error) {
+    console.error('❌ Failed to start application:', error);
+    process.exit(1);
+  }
 }
 
 function getHttpsOptions() {

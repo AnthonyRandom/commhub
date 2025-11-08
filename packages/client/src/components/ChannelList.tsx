@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Users,
   X,
+  Video,
 } from 'lucide-react'
 import { useChannelsStore } from '../stores/channels'
 import { useServersStore } from '../stores/servers'
@@ -473,9 +474,12 @@ const ChannelList: React.FC<ChannelListProps> = ({
                                       {member.username.charAt(0).toUpperCase()}
                                     </span>
                                   </div>
-                                  <span className="text-white text-xs truncate">
+                                  <span className="text-white text-xs truncate flex-1">
                                     {member.username}
                                   </span>
+                                  {member.hasCamera && (
+                                    <Video className="w-3 h-3 text-white flex-shrink-0" />
+                                  )}
                                 </div>
                               ))}
                             </div>

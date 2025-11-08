@@ -10,6 +10,7 @@ import { GatewayModule } from './gateway/gateway.module';
 import { FriendRequestsModule } from './friend-requests/friend-requests.module';
 import { DirectMessagesModule } from './direct-messages/direct-messages.module';
 import { TenorModule } from './tenor/tenor.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { TenorModule } from './tenor/tenor.module';
     FriendRequestsModule,
     DirectMessagesModule,
     TenorModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

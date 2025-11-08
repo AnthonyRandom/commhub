@@ -61,6 +61,10 @@ class VoiceManager {
 
     // Listen for reconnection requests
     socket.on('voice-reconnect-request', this.handleVoiceReconnectRequest.bind(this))
+
+    // Listen for camera state changes
+    socket.on('voice-camera-enabled', this.handleVoiceCameraEnabled.bind(this))
+    socket.on('voice-camera-disabled', this.handleVoiceCameraDisabled.bind(this))
   }
 
   /**
@@ -89,6 +93,7 @@ class VoiceManager {
           username: localUser.username,
           isSpeaking: false,
           isMuted: useVoiceStore.getState().isMuted,
+          hasVideo: false,
           connectionStatus: 'connected',
           connectionQuality: 'excellent',
           localMuted: false,
@@ -186,6 +191,7 @@ class VoiceManager {
       username: data.username,
       isSpeaking: false,
       isMuted: false,
+      hasVideo: false,
       connectionStatus: 'connecting',
       connectionQuality: 'connecting',
       localMuted: false,
@@ -286,6 +292,7 @@ class VoiceManager {
         username,
         isSpeaking: false,
         isMuted: false,
+        hasVideo: false,
         connectionStatus: 'connecting',
         connectionQuality: 'connecting',
         localMuted: false,
@@ -643,6 +650,105 @@ class VoiceManager {
     if (webrtcService.getCurrentChannelId() === data.channelId) {
       // Create a new peer connection as initiator
       this.createPeerConnection(data.targetUserId, '', true) // Username will be updated when we get user info
+    }
+  }
+
+  /**
+   * Handle camera enabled event from another user
+   */
+  private handleVoiceCameraEnabled(data: { channelId: number; userId: number; username: string }) {
+    console.log(`[VoiceManager] 📹 ${data.username} enabled camera in channel ${data.channelId}`)
+
+    // Update voice store
+    useVoiceStore.getState().updateUserVideo(data.userId, true)
+  }
+
+  /**
+   * Handle camera disabled event from another user
+   */
+  private handleVoiceCameraDisabled(data: { channelId: number; userId: number; username: string }) {
+    console.log(`[VoiceManager] 📹 ${data.username} disabled camera in channel ${data.channelId}`)
+
+    // Update voice store
+    useVoiceStore.getState().updateUserVideo(data.userId, false)
+  }
+
+  /**
+   * Enable camera in current voice channel
+   */
+  async enableCamera(): Promise<void> {
+    try {
+      const channelId = webrtcService.getCurrentChannelId()
+      if (!channelId) {
+        throw new Error('You must be in a voice channel to enable camera')
+      }
+
+      console.log('[VoiceManager] Enabling camera...')
+
+      // Enable camera through WebRTC service
+      await webrtcService.enableCamera()
+
+      // Notify server
+      wsService.getSocket()?.emit('enable-camera', { channelId })
+
+      console.log('[VoiceManager] ✅ Camera enabled successfully')
+    } catch (error) {
+      console.error('[VoiceManager] Failed to enable camera:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Disable camera in current voice channel
+   */
+  async disableCamera(): Promise<void> {
+    try {
+      const channelId = webrtcService.getCurrentChannelId()
+      if (!channelId) {
+        console.warn('[VoiceManager] Not in a voice channel')
+        return
+      }
+
+      console.log('[VoiceManager] Disabling camera...')
+
+      // Disable camera through WebRTC service
+      await webrtcService.disableCamera()
+
+      // Notify server
+      wsService.getSocket()?.emit('disable-camera', { channelId })
+
+      console.log('[VoiceManager] ✅ Camera disabled successfully')
+    } catch (error) {
+      console.error('[VoiceManager] Failed to disable camera:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Check if camera is currently enabled
+   */
+  isCameraEnabled(): boolean {
+    return webrtcService.isCameraEnabled()
+  }
+
+  /**
+   * Get available video devices
+   */
+  async getAvailableVideoDevices(): Promise<MediaDeviceInfo[]> {
+    return webrtcService.getAvailableVideoDevices()
+  }
+
+  /**
+   * Switch to a different camera device
+   */
+  async switchVideoDevice(deviceId: string): Promise<void> {
+    try {
+      console.log(`[VoiceManager] Switching to camera device: ${deviceId}`)
+      await webrtcService.switchVideoDevice(deviceId)
+      console.log('[VoiceManager] ✅ Switched camera device successfully')
+    } catch (error) {
+      console.error('[VoiceManager] Failed to switch camera device:', error)
+      throw error
     }
   }
 

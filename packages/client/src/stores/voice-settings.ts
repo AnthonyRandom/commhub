@@ -35,11 +35,20 @@ export interface VoiceSettings {
     bitrate: number // audio quality setting
     stereo: boolean
   }
+
+  // Video settings
+  video: {
+    deviceId?: string
+    resolution: '360p' | '480p' | '720p'
+    frameRate: 15 | 30
+    enabled: boolean
+  }
 }
 
 export interface AvailableDevices {
   input: AudioDevice[]
   output: AudioDevice[]
+  video: AudioDevice[]
 }
 
 interface VoiceSettingsState {
@@ -53,6 +62,7 @@ interface VoiceSettingsState {
   updateDetectionSettings: (updates: Partial<VoiceSettings['detection']>) => void
   updateOutputSettings: (updates: Partial<VoiceSettings['output']>) => void
   updateQualitySettings: (updates: Partial<VoiceSettings['quality']>) => void
+  updateVideoSettings: (updates: Partial<VoiceSettings['video']>) => void
 
   loadDevices: () => Promise<void>
   saveSettings: () => void
@@ -87,6 +97,12 @@ const defaultSettings: VoiceSettings = {
     bitrate: 64000, // 64kbps default
     stereo: false, // mono for voice is usually better
   },
+  video: {
+    deviceId: undefined,
+    resolution: '720p',
+    frameRate: 30,
+    enabled: false,
+  },
 }
 
 export const useVoiceSettingsStore = create<VoiceSettingsState>((set, get) => ({
@@ -94,6 +110,7 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>((set, get) => ({
   availableDevices: {
     input: [],
     output: [],
+    video: [],
   },
   isLoadingDevices: false,
 
@@ -144,6 +161,16 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>((set, get) => ({
     get().saveSettings()
   },
 
+  updateVideoSettings: (updates) => {
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        video: { ...state.settings.video, ...updates },
+      },
+    }))
+    get().saveSettings()
+  },
+
   loadDevices: async () => {
     try {
       // Prevent multiple simultaneous calls
@@ -163,10 +190,24 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>((set, get) => ({
       const inputDevices = audioDeviceManager.getDevicesByType('audioinput')
       const outputDevices = audioDeviceManager.getDevicesByType('audiooutput')
 
+      // Get video devices directly (audio-device-manager only handles audio)
+      const allDevices = await navigator.mediaDevices.enumerateDevices()
+      const videoDevices = allDevices
+        .filter((device) => device.kind === 'videoinput')
+        .map((device) => ({
+          deviceId: device.deviceId,
+          label: device.label || `Camera ${device.deviceId.slice(0, 5)}`,
+          groupId: device.groupId,
+          kind: 'audioinput' as const, // Reuse type for consistency
+          isDefault: device.deviceId === 'default',
+          isPreferred: false,
+        }))
+
       set({
         availableDevices: {
           input: inputDevices,
           output: outputDevices,
+          video: videoDevices,
         },
         isLoadingDevices: false,
       })
@@ -174,6 +215,7 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>((set, get) => ({
       console.log('[VoiceSettings] Loaded devices:', {
         input: inputDevices.length,
         output: outputDevices.length,
+        video: videoDevices.length,
       })
     } catch (error) {
       console.error('[VoiceSettings] Failed to load devices:', error)
@@ -202,6 +244,7 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>((set, get) => ({
           detection: { ...defaultSettings.detection, ...parsedSettings.detection },
           output: { ...defaultSettings.output, ...parsedSettings.output },
           quality: { ...defaultSettings.quality, ...parsedSettings.quality },
+          video: { ...defaultSettings.video, ...parsedSettings.video },
         }
         set({ settings: mergedSettings })
         console.log('[VoiceSettings] Settings loaded')

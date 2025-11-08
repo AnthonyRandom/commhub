@@ -41,8 +41,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private userVoiceChannels: Map<number, number> = new Map(); // userId -> channelId (for disconnect cleanup)
   private voiceChannelMembers: Map<
     number,
-    Set<{ userId: number; username: string }>
+    Set<{ userId: number; username: string; hasCamera: boolean }>
   > = new Map(); // channelId -> Set of users
+
+  // Periodic cleanup interval
+  private cleanupInterval: NodeJS.Timeout;
 
   constructor(
     private jwtService: JwtService,
@@ -52,7 +55,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private prisma: PrismaService,
     @Inject(forwardRef(() => ChannelsService))
     private channelsService: ChannelsService
-  ) {}
+  ) {
+    // Set up periodic cleanup to prevent memory leaks
+    // Run every 5 minutes to clean up stale entries
+    this.cleanupInterval = setInterval(
+      () => {
+        this.performPeriodicCleanup();
+      },
+      5 * 60 * 1000
+    ); // 5 minutes
+  }
 
   async handleConnection(client: AuthenticatedSocket) {
     try {
@@ -1008,6 +1020,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             members.add({
               userId: authSocket.userId,
               username: authSocket.username,
+              hasCamera: false,
             });
 
             // CRITICAL: Also track in userVoiceChannels to maintain consistency
@@ -1025,7 +1038,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         this.voiceChannelMembers.set(data.channelId, new Set());
       }
       const members = this.voiceChannelMembers.get(data.channelId);
-      members.add({ userId: client.userId, username: client.username });
+      members.add({
+        userId: client.userId,
+        username: client.username,
+        hasCamera: false,
+      });
 
       this.logger.log(
         `[Voice] Sending voice-channel-users to ${client.username} with ${usersInChannel.length} users`
@@ -1410,6 +1427,133 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
+  @SubscribeMessage('enable-camera')
+  async handleEnableCamera(
+    @MessageBody() data: { channelId: number },
+    @ConnectedSocket() client: AuthenticatedSocket
+  ) {
+    try {
+      // Validate input
+      if (
+        !data.channelId ||
+        typeof data.channelId !== 'number' ||
+        data.channelId <= 0
+      ) {
+        client.emit('error', { message: 'Invalid channel ID' });
+        return;
+      }
+
+      // Verify user is in this voice channel
+      const userChannel = this.userVoiceChannels.get(client.userId);
+      if (userChannel !== data.channelId) {
+        this.logger.warn(
+          `[Camera] User ${client.username} (${client.userId}) tried to enable camera in channel ${data.channelId} but is not in that voice channel`
+        );
+        client.emit('error', {
+          message: 'You must be in the voice channel to enable camera',
+        });
+        return;
+      }
+
+      // Update member's camera state
+      const members = this.voiceChannelMembers.get(data.channelId);
+      if (members) {
+        const memberArray = Array.from(members);
+        const userMember = memberArray.find(m => m.userId === client.userId);
+
+        if (userMember) {
+          // Remove old member object and add updated one
+          members.delete(userMember);
+          members.add({
+            userId: client.userId,
+            username: client.username,
+            hasCamera: true,
+          });
+
+          this.logger.log(
+            `[Camera] ${client.username} (${client.userId}) enabled camera in channel ${data.channelId}`
+          );
+
+          // Broadcast to all users in the voice channel
+          const roomName = `voice-${data.channelId}`;
+          this.server.to(roomName).emit('voice-camera-enabled', {
+            channelId: data.channelId,
+            userId: client.userId,
+            username: client.username,
+          });
+
+          // Broadcast updated member list
+          await this.broadcastVoiceChannelMembers(data.channelId);
+        }
+      }
+    } catch (error) {
+      this.logger.error('Error enabling camera:', error.message);
+      client.emit('error', { message: 'Failed to enable camera' });
+    }
+  }
+
+  @SubscribeMessage('disable-camera')
+  async handleDisableCamera(
+    @MessageBody() data: { channelId: number },
+    @ConnectedSocket() client: AuthenticatedSocket
+  ) {
+    try {
+      // Validate input
+      if (
+        !data.channelId ||
+        typeof data.channelId !== 'number' ||
+        data.channelId <= 0
+      ) {
+        client.emit('error', { message: 'Invalid channel ID' });
+        return;
+      }
+
+      // Verify user is in this voice channel
+      const userChannel = this.userVoiceChannels.get(client.userId);
+      if (userChannel !== data.channelId) {
+        this.logger.warn(
+          `[Camera] User ${client.username} (${client.userId}) tried to disable camera in channel ${data.channelId} but is not in that voice channel`
+        );
+        return;
+      }
+
+      // Update member's camera state
+      const members = this.voiceChannelMembers.get(data.channelId);
+      if (members) {
+        const memberArray = Array.from(members);
+        const userMember = memberArray.find(m => m.userId === client.userId);
+
+        if (userMember) {
+          // Remove old member object and add updated one
+          members.delete(userMember);
+          members.add({
+            userId: client.userId,
+            username: client.username,
+            hasCamera: false,
+          });
+
+          this.logger.log(
+            `[Camera] ${client.username} (${client.userId}) disabled camera in channel ${data.channelId}`
+          );
+
+          // Broadcast to all users in the voice channel
+          const roomName = `voice-${data.channelId}`;
+          this.server.to(roomName).emit('voice-camera-disabled', {
+            channelId: data.channelId,
+            userId: client.userId,
+            username: client.username,
+          });
+
+          // Broadcast updated member list
+          await this.broadcastVoiceChannelMembers(data.channelId);
+        }
+      }
+    } catch (error) {
+      this.logger.error('Error disabling camera:', error.message);
+      client.emit('error', { message: 'Failed to disable camera' });
+    }
+  }
+
   private async broadcastVoiceChannelMembers(channelId: number) {
     try {
       const members = this.voiceChannelMembers.get(channelId);
@@ -1485,6 +1629,116 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         `[DM-HTTP] Emitting dm-thread-created to user ${userId} (socket: ${socketId})`
       );
       this.server.to(socketId).emit('dm-thread-created', {});
+    }
+  }
+
+  /**
+   * Periodic cleanup to prevent memory leaks from stale socket connections
+   * This runs every 5 minutes to verify that tracked users are still connected
+   */
+  private async performPeriodicCleanup() {
+    this.logger.log('[Cleanup] Starting periodic cleanup of stale connections');
+
+    let cleanedUsersCount = 0;
+    let cleanedVoiceChannelsCount = 0;
+
+    // Cleanup onlineUsers - verify socket connections still exist
+    for (const [userId, socketId] of this.onlineUsers.entries()) {
+      // Check if this socket is actually still connected
+      const socket = this.server.sockets.sockets.get(socketId);
+      if (!socket || !socket.connected) {
+        this.logger.warn(
+          `[Cleanup] Removing stale user entry for userId ${userId} (socket ${socketId} no longer connected)`
+        );
+        this.onlineUsers.delete(userId);
+        cleanedUsersCount++;
+      }
+    }
+
+    // Cleanup userVoiceChannels - verify users are still connected
+    for (const [userId, channelId] of this.userVoiceChannels.entries()) {
+      const socketId = this.onlineUsers.get(userId);
+      if (!socketId) {
+        this.logger.warn(
+          `[Cleanup] Removing stale voice channel entry for userId ${userId} (not in onlineUsers)`
+        );
+        this.userVoiceChannels.delete(userId);
+
+        // Also remove from voice channel members
+        const members = this.voiceChannelMembers.get(channelId);
+        if (members) {
+          const userToRemove = Array.from(members).find(
+            m => m.userId === userId
+          );
+          if (userToRemove) {
+            members.delete(userToRemove);
+            if (members.size === 0) {
+              this.voiceChannelMembers.delete(channelId);
+              cleanedVoiceChannelsCount++;
+            }
+          }
+        }
+      }
+    }
+
+    // Cleanup voiceChannelMembers - remove empty sets and verify members
+    for (const [channelId, members] of this.voiceChannelMembers.entries()) {
+      if (members.size === 0) {
+        this.voiceChannelMembers.delete(channelId);
+        cleanedVoiceChannelsCount++;
+        continue;
+      }
+
+      // Verify each member is still connected
+      const membersToRemove: typeof members extends Set<infer T> ? T[] : never =
+        [];
+      for (const member of members) {
+        const socketId = this.onlineUsers.get(member.userId);
+        if (!socketId) {
+          membersToRemove.push(member);
+        }
+      }
+
+      if (membersToRemove.length > 0) {
+        membersToRemove.forEach(member => {
+          members.delete(member);
+          this.logger.warn(
+            `[Cleanup] Removed stale voice member ${member.username} from channel ${channelId}`
+          );
+        });
+
+        if (members.size === 0) {
+          this.voiceChannelMembers.delete(channelId);
+          cleanedVoiceChannelsCount++;
+        }
+      }
+    }
+
+    if (cleanedUsersCount > 0 || cleanedVoiceChannelsCount > 0) {
+      this.logger.log(
+        `[Cleanup] Cleanup completed: ${cleanedUsersCount} stale users, ${cleanedVoiceChannelsCount} empty voice channels removed`
+      );
+    } else {
+      this.logger.log(
+        '[Cleanup] Periodic cleanup completed - no stale entries found'
+      );
+    }
+
+    // Log current state sizes for monitoring
+    this.logger.log(
+      `[Cleanup] Current state: ${this.onlineUsers.size} online users, ` +
+        `${this.userVoiceChannels.size} users in voice, ` +
+        `${this.voiceChannelMembers.size} active voice channels`
+    );
+  }
+
+  /**
+   * Cleanup on module destroy (when server shuts down)
+   */
+  onModuleDestroy() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.logger.log('[Cleanup] Stopped periodic cleanup interval');
     }
   }
 }

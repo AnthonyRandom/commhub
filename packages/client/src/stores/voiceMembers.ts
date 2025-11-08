@@ -3,6 +3,7 @@ import { create } from 'zustand'
 interface VoiceMember {
   userId: number
   username: string
+  hasCamera: boolean
 }
 
 interface VoiceMembersState {

@@ -6,6 +6,11 @@ import { AuthService } from '../auth.service';
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private authService: AuthService) {
+    // Validate JWT_SECRET is set before initializing strategy
+    if (!process.env.JWT_SECRET) {
+      throw new Error('JWT_SECRET is required for JWT strategy');
+    }
+
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,

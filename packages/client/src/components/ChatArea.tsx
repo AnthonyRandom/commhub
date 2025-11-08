@@ -46,12 +46,14 @@ const speakingAnimationStyle = `
   }
 `
 
-// Twitter Spaces-style voice participant grid
+// Twitter Spaces-style voice participant grid with video support
 const VoiceChannelParticipants: React.FC = () => {
-  const { connectedUsers, isMuted, isDeafened, isConnecting } = useVoiceStore()
+  const { connectedUsers, isMuted, isDeafened, isConnecting, localVideoEnabled, localVideoStream } =
+    useVoiceStore()
   const { user } = useAuthStore()
   const [selectedUser, setSelectedUser] = useState<number | null>(null)
   const [showVolumeSlider, setShowVolumeSlider] = useState<number | null>(null)
+  const localVideoRef = useRef<HTMLVideoElement>(null)
 
   // Inject speaking animation CSS
   React.useEffect(() => {
@@ -62,6 +64,13 @@ const VoiceChannelParticipants: React.FC = () => {
       document.head.removeChild(style)
     }
   }, [])
+
+  // Set local video stream
+  useEffect(() => {
+    if (localVideoRef.current && localVideoStream) {
+      localVideoRef.current.srcObject = localVideoStream
+    }
+  }, [localVideoStream])
 
   if (isConnecting) {
     return (
@@ -125,27 +134,41 @@ const VoiceChannelParticipants: React.FC = () => {
         {/* Current User - always first/centered */}
         <div
           key={currentUser.userId}
-          className={`flex flex-col items-center gap-3 animate-slide-up ${
-            currentUser.isSpeaking ? 'speaking-animation' : ''
-          }`}
+          className="flex flex-col items-center gap-3 animate-slide-up"
           style={{
             gridColumn: connectedUsersArray.length === 0 ? '1 / -1' : 'auto',
             justifySelf: connectedUsersArray.length === 0 ? 'center' : 'auto',
           }}
         >
-          {/* Avatar */}
+          {/* Avatar or Video */}
           <div className="relative">
-            <div
-              className={`w-32 h-32 flex items-center justify-center transition-all duration-300 border-4 border-grey-800 ${
-                currentUser.isSpeaking
-                  ? 'bg-white ring-4 ring-white ring-offset-2 ring-offset-grey-900 scale-105'
-                  : 'bg-white'
-              }`}
-            >
-              <span className="font-bold text-3xl text-black">
-                {currentUser.username.charAt(0).toUpperCase()}
-              </span>
-            </div>
+            {localVideoEnabled && localVideoStream ? (
+              <div
+                className={`transition-all duration-300 border-4 overflow-hidden ${
+                  currentUser.isSpeaking ? 'border-white' : 'border-grey-800'
+                }`}
+                style={{ width: '256px', aspectRatio: '16/9' }}
+              >
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover"
+                  style={{ transform: 'scaleX(-1)' }}
+                />
+              </div>
+            ) : (
+              <div
+                className={`w-32 h-32 flex items-center justify-center transition-all duration-300 border-4 ${
+                  currentUser.isSpeaking ? 'bg-white border-white' : 'bg-white border-grey-800'
+                }`}
+              >
+                <span className="font-bold text-3xl text-black">
+                  {currentUser.username.charAt(0).toUpperCase()}
+                </span>
+              </div>
+            )}
 
             {/* Status badges */}
             {(currentUser.isMuted || currentUser.isDeafened) && (
@@ -174,123 +197,180 @@ const VoiceChannelParticipants: React.FC = () => {
         {connectedUsersArray.map((participant, index) => {
           const voiceUser = connectedUsers.get(participant.userId)
           const isSelected = selectedUser === participant.userId
+          const hasVideo = voiceUser?.hasVideo || false
+          const videoStream = voiceUser?.videoStream || voiceUser?.stream
 
           return (
-            <div
+            <RemoteParticipantVideo
               key={participant.userId}
-              className={`flex flex-col items-center gap-3 relative cursor-pointer animate-slide-up ${
-                participant.isSpeaking ? 'speaking-animation' : ''
-              }`}
-              style={{
-                animationDelay: `${index * 50}ms`,
-              }}
-              onClick={() => handleUserClick(participant.userId, false)}
-            >
-              {/* Avatar */}
-              <div className="relative">
-                <div
-                  className={`w-32 h-32 flex items-center justify-center transition-all duration-300 border-4 border-grey-800 ${
-                    participant.isSpeaking
-                      ? 'bg-white ring-4 ring-white ring-offset-2 ring-offset-grey-900 scale-105'
-                      : 'bg-grey-800 hover:bg-grey-750'
-                  } ${isSelected ? 'ring-2 ring-grey-600' : ''}`}
-                >
-                  <span
-                    className={`font-bold text-3xl transition-colors ${
-                      participant.isSpeaking ? 'text-black' : 'text-grey-300'
-                    }`}
-                  >
-                    {participant.username.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-
-                {/* Status badges */}
-                {(participant.isMuted || voiceUser?.localMuted) && (
-                  <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex gap-1 animate-slide-up">
-                    {participant.isMuted && (
-                      <div className="bg-red-900 border-2 border-grey-900 p-1.5">
-                        <MicOff className="w-4 h-4 text-white" />
-                      </div>
-                    )}
-                    {voiceUser?.localMuted && (
-                      <div className="bg-grey-700 border-2 border-grey-900 p-1.5">
-                        <VolumeX className="w-4 h-4 text-white" />
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Username */}
-              <div className="text-center">
-                <p className="text-white font-bold text-sm">{participant.username}</p>
-              </div>
-
-              {/* Controls panel - shown when selected */}
-              {isSelected && voiceUser && (
-                <div className="absolute top-full mt-4 z-50 animate-slide-up">
-                  <div className="bg-grey-950 border-2 border-grey-700 p-4 min-w-[240px] shadow-xl">
-                    <div className="flex gap-2 mb-3">
-                      <button
-                        onClick={(e) => handleUserLocalMute(participant.userId, e)}
-                        className={`flex-1 p-3 border-2 transition-all duration-100 text-sm font-bold ${
-                          voiceUser.localMuted
-                            ? 'bg-red-900 border-red-700 text-white hover:bg-red-800'
-                            : 'bg-grey-850 border-grey-700 text-white hover:bg-grey-800 hover:border-white'
-                        }`}
-                      >
-                        <div className="flex items-center justify-center gap-2">
-                          {voiceUser.localMuted ? (
-                            <VolumeX className="w-4 h-4" />
-                          ) : (
-                            <Volume2 className="w-4 h-4" />
-                          )}
-                          <span>{voiceUser.localMuted ? 'Unmute' : 'Mute'}</span>
-                        </div>
-                      </button>
-                      <button
-                        onClick={(e) => toggleVolumeSlider(participant.userId, e)}
-                        className="p-3 border-2 bg-grey-850 border-grey-700 text-white hover:bg-grey-800 hover:border-white transition-all duration-100"
-                      >
-                        <Volume1 className="w-4 h-4" />
-                      </button>
-                    </div>
-                    {showVolumeSlider === participant.userId && (
-                      <div className="pt-3 border-t border-grey-800 animate-slide-down">
-                        <div className="flex items-center gap-3">
-                          <Volume1 className="w-4 h-4 text-grey-400" />
-                          <input
-                            type="range"
-                            min="0"
-                            max="200"
-                            step="5"
-                            value={Math.min(
-                              200,
-                              Math.max(0, Math.round(voiceUser.localVolume * 100))
-                            )}
-                            onChange={(e) => {
-                              const newValue = parseInt(e.target.value)
-                              handleUserVolumeChange(
-                                participant.userId,
-                                Math.min(2.0, Math.max(0, newValue / 100)) // Clamp to 0-2 range
-                              )
-                            }}
-                            className="flex-1 h-1 bg-grey-700 appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white"
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                          <span className="text-sm text-white font-mono w-12 text-right">
-                            {Math.min(200, Math.max(0, Math.round(voiceUser.localVolume * 100)))}%
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+              participant={participant}
+              voiceUser={voiceUser}
+              isSelected={isSelected}
+              hasVideo={hasVideo}
+              videoStream={videoStream}
+              index={index}
+              onUserClick={() => handleUserClick(participant.userId, false)}
+              onUserLocalMute={(e) => handleUserLocalMute(participant.userId, e)}
+              onToggleVolumeSlider={(e) => toggleVolumeSlider(participant.userId, e)}
+              showVolumeSlider={showVolumeSlider === participant.userId}
+              onUserVolumeChange={(vol) => handleUserVolumeChange(participant.userId, vol)}
+            />
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// Remote participant component with video support
+const RemoteParticipantVideo: React.FC<{
+  participant: any
+  voiceUser: any
+  isSelected: boolean
+  hasVideo: boolean
+  videoStream: MediaStream | undefined
+  index: number
+  onUserClick: () => void
+  onUserLocalMute: (e: React.MouseEvent) => void
+  onToggleVolumeSlider: (e: React.MouseEvent) => void
+  showVolumeSlider: boolean
+  onUserVolumeChange: (volume: number) => void
+}> = ({
+  participant,
+  voiceUser,
+  isSelected,
+  hasVideo,
+  videoStream,
+  index,
+  onUserClick,
+  onUserLocalMute,
+  onToggleVolumeSlider,
+  showVolumeSlider,
+  onUserVolumeChange,
+}) => {
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  // Set video stream on remote video element
+  useEffect(() => {
+    if (videoRef.current && videoStream && hasVideo) {
+      videoRef.current.srcObject = videoStream
+    }
+  }, [videoStream, hasVideo])
+
+  return (
+    <div
+      className="flex flex-col items-center gap-3 relative cursor-pointer animate-slide-up"
+      style={{
+        animationDelay: `${index * 50}ms`,
+      }}
+      onClick={onUserClick}
+    >
+      {/* Avatar or Video */}
+      <div className="relative">
+        {hasVideo && videoStream ? (
+          <div
+            className={`transition-all duration-300 border-4 overflow-hidden ${
+              participant.isSpeaking ? 'border-white' : 'border-grey-800'
+            } ${isSelected ? 'ring-2 ring-grey-600' : ''}`}
+            style={{ width: '256px', aspectRatio: '16/9' }}
+          >
+            <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+          </div>
+        ) : (
+          <div
+            className={`w-32 h-32 flex items-center justify-center transition-all duration-300 border-4 ${
+              participant.isSpeaking
+                ? 'bg-white border-white'
+                : 'bg-grey-800 border-grey-800 hover:bg-grey-750'
+            } ${isSelected ? 'ring-2 ring-grey-600' : ''}`}
+          >
+            <span
+              className={`font-bold text-3xl transition-colors ${
+                participant.isSpeaking ? 'text-black' : 'text-grey-300'
+              }`}
+            >
+              {participant.username.charAt(0).toUpperCase()}
+            </span>
+          </div>
+        )}
+
+        {/* Status badges */}
+        {(participant.isMuted || voiceUser?.localMuted) && (
+          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex gap-1 animate-slide-up">
+            {participant.isMuted && (
+              <div className="bg-red-900 border-2 border-grey-900 p-1.5">
+                <MicOff className="w-4 h-4 text-white" />
+              </div>
+            )}
+            {voiceUser?.localMuted && (
+              <div className="bg-grey-700 border-2 border-grey-900 p-1.5">
+                <VolumeX className="w-4 h-4 text-white" />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Username */}
+      <div className="text-center">
+        <p className="text-white font-bold text-sm">{participant.username}</p>
+      </div>
+
+      {/* Controls panel - shown when selected */}
+      {isSelected && voiceUser && (
+        <div className="absolute top-full mt-4 z-50 animate-slide-up">
+          <div className="bg-grey-950 border-2 border-grey-700 p-4 min-w-[240px] shadow-xl">
+            <div className="flex gap-2 mb-3">
+              <button
+                onClick={onUserLocalMute}
+                className={`flex-1 p-3 border-2 transition-all duration-100 text-sm font-bold ${
+                  voiceUser.localMuted
+                    ? 'bg-red-900 border-red-700 text-white hover:bg-red-800'
+                    : 'bg-grey-850 border-grey-700 text-white hover:bg-grey-800 hover:border-white'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-2">
+                  {voiceUser.localMuted ? (
+                    <VolumeX className="w-4 h-4" />
+                  ) : (
+                    <Volume2 className="w-4 h-4" />
+                  )}
+                  <span>{voiceUser.localMuted ? 'Unmute' : 'Mute'}</span>
+                </div>
+              </button>
+              <button
+                onClick={onToggleVolumeSlider}
+                className="p-3 border-2 bg-grey-850 border-grey-700 text-white hover:bg-grey-800 hover:border-white transition-all duration-100"
+              >
+                <Volume1 className="w-4 h-4" />
+              </button>
+            </div>
+            {showVolumeSlider && (
+              <div className="pt-3 border-t border-grey-800 animate-slide-down">
+                <div className="flex items-center gap-3">
+                  <Volume1 className="w-4 h-4 text-grey-400" />
+                  <input
+                    type="range"
+                    min="0"
+                    max="200"
+                    step="5"
+                    value={Math.min(200, Math.max(0, Math.round(voiceUser.localVolume * 100)))}
+                    onChange={(e) => {
+                      const newValue = parseInt(e.target.value)
+                      onUserVolumeChange(Math.min(2.0, Math.max(0, newValue / 100)))
+                    }}
+                    className="flex-1 h-1 bg-grey-700 appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <span className="text-sm text-white font-mono w-12 text-right">
+                    {Math.min(200, Math.max(0, Math.round(voiceUser.localVolume * 100)))}%
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

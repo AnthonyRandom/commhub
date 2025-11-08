@@ -1,8 +1,9 @@
 import axios from 'axios'
 import type { AxiosInstance, AxiosResponse } from 'axios'
+import config from '../config/environment'
 
-// API Base URL - adjust for production
-const API_BASE_URL = 'https://commhub-production.up.railway.app'
+// API Base URL from environment configuration
+const API_BASE_URL = config.API_URL
 
 // Types
 export interface User {

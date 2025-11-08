@@ -324,11 +324,13 @@ class WebRTCService {
   private peers: Map<number, PeerConnection> = new Map()
   private localStream: MediaStream | null = null
   private processedStream: MediaStream | null = null
+  private localVideoStream: MediaStream | null = null
   private speakingDetector: EnhancedSpeakingDetector | null = null
   private noiseSuppressor: NoiseSuppressionProcessor | null = null
   private currentChannelId: number | null = null
   private connectionStates: Map<number, ConnectionState> = new Map()
   private voiceChannelJoined: boolean = false
+  private videoEnabled: boolean = false
 
   // Configuration for WebRTC
   private rtcConfig = {
@@ -602,7 +604,20 @@ class WebRTCService {
       }
 
       this.updateConnectionQuality(userId, 'excellent')
+
+      // Check if stream has video tracks
+      const hasVideo = stream.getVideoTracks().length > 0
+      console.log(`[WebRTC] Stream from ${username} has video: ${hasVideo}`)
+
+      // Update user stream in store
       useVoiceStore.getState().updateUserStream(userId, stream)
+
+      // Update video state if there are video tracks
+      if (hasVideo) {
+        useVoiceStore.getState().updateUserVideo(userId, true)
+        useVoiceStore.getState().updateUserVideoStream(userId, stream)
+      }
+
       onStream(stream)
 
       // Play the audio and store reference
@@ -611,6 +626,26 @@ class WebRTCService {
       if (peerConnection) {
         peerConnection.audioElement = audioElement
       }
+
+      // Listen for track changes (when peer enables/disables camera dynamically)
+      stream.addEventListener('addtrack', (event) => {
+        console.log(`[WebRTC] Track added to ${username}'s stream:`, event.track.kind)
+        if (event.track.kind === 'video') {
+          useVoiceStore.getState().updateUserVideo(userId, true)
+          useVoiceStore.getState().updateUserVideoStream(userId, stream)
+        }
+      })
+
+      stream.addEventListener('removetrack', (event) => {
+        console.log(`[WebRTC] Track removed from ${username}'s stream:`, event.track.kind)
+        if (event.track.kind === 'video') {
+          // Check if there are any remaining video tracks
+          const hasVideo = stream.getVideoTracks().length > 0
+          if (!hasVideo) {
+            useVoiceStore.getState().updateUserVideo(userId, false)
+          }
+        }
+      })
     })
 
     // Handle connection established
@@ -718,6 +753,11 @@ class WebRTCService {
           const quality = this.calculateQualityFromStats(lossRate, jitter)
 
           this.updateConnectionQuality(userId, quality)
+
+          // Trigger adaptive video quality adjustment if video is enabled
+          if (this.videoEnabled) {
+            this.handleVideoQualityAdjustment(userId, lossRate, jitter)
+          }
         }
       } catch (error) {
         console.warn(`[WebRTC] Failed to get connection stats for user ${userId}:`, error)
@@ -1151,8 +1191,18 @@ class WebRTCService {
       this.localStream = null
     }
 
+    // Stop local video stream
+    if (this.localVideoStream) {
+      this.localVideoStream.getTracks().forEach((track) => {
+        console.log('[WebRTC] Stopping local video track:', track.kind)
+        track.stop()
+      })
+      this.localVideoStream = null
+    }
+
     this.currentChannelId = null
     this.voiceChannelJoined = false
+    this.videoEnabled = false
 
     // Reset voice store
     useVoiceStore.getState().reset()
@@ -1283,6 +1333,372 @@ class WebRTCService {
         this.setUserVolume(userId, userVolumePercentage)
       }
     })
+  }
+
+  /**
+   * Get video constraints based on settings
+   */
+  private getVideoConstraints(): MediaTrackConstraints {
+    const voiceSettings = useVoiceSettingsStore.getState().settings
+
+    // Resolution mapping
+    const resolutionMap = {
+      '360p': { width: 640, height: 360 },
+      '480p': { width: 854, height: 480 },
+      '720p': { width: 1280, height: 720 },
+    }
+
+    const resolution = resolutionMap[voiceSettings.video.resolution]
+
+    const constraints: MediaTrackConstraints = {
+      width: { ideal: resolution.width },
+      height: { ideal: resolution.height },
+      frameRate: { ideal: voiceSettings.video.frameRate },
+    }
+
+    // Use specific device if selected
+    if (voiceSettings.video.deviceId && voiceSettings.video.deviceId !== 'default') {
+      constraints.deviceId = { exact: voiceSettings.video.deviceId }
+    }
+
+    return constraints
+  }
+
+  /**
+   * Enable camera and add video track to all peer connections
+   */
+  async enableCamera(): Promise<void> {
+    try {
+      console.log('[WebRTC] Enabling camera...')
+
+      if (this.videoEnabled) {
+        console.log('[WebRTC] Camera already enabled')
+        return
+      }
+
+      // Get video constraints
+      const videoConstraints = this.getVideoConstraints()
+
+      // Request video stream
+      const videoStream = await navigator.mediaDevices.getUserMedia({
+        video: videoConstraints,
+        audio: false,
+      })
+
+      console.log('[WebRTC] ✅ Got video stream:', videoStream.getVideoTracks())
+
+      this.localVideoStream = videoStream
+      this.videoEnabled = true
+
+      // Update voice store
+      useVoiceStore.getState().setLocalVideoEnabled(true)
+      useVoiceStore.getState().setLocalVideoStream(videoStream)
+
+      // Add video track to all existing peer connections
+      const videoTrack = videoStream.getVideoTracks()[0]
+      if (videoTrack) {
+        this.peers.forEach((peerConnection, userId) => {
+          try {
+            // Access the underlying RTCPeerConnection
+            const rtcPeerConnection = (peerConnection.peer as any)._pc as RTCPeerConnection
+
+            if (rtcPeerConnection) {
+              // Add the video track
+              const sender = rtcPeerConnection.addTrack(videoTrack, videoStream)
+              console.log(`[WebRTC] Added video track to peer ${userId}`, sender)
+            }
+          } catch (error) {
+            console.error(`[WebRTC] Failed to add video track to peer ${userId}:`, error)
+          }
+        })
+      }
+
+      console.log('[WebRTC] Camera enabled successfully')
+    } catch (error) {
+      console.error('[WebRTC] Failed to enable camera:', error)
+      this.videoEnabled = false
+      useVoiceStore.getState().setLocalVideoEnabled(false)
+
+      // Provide specific error messages
+      if (error instanceof Error) {
+        if (error.name === 'NotAllowedError') {
+          throw new Error(
+            'Camera access denied. Please allow camera permissions in your browser settings.'
+          )
+        } else if (error.name === 'NotFoundError') {
+          throw new Error('No camera found. Please connect a camera device.')
+        } else if (error.name === 'NotReadableError') {
+          throw new Error('Camera is already in use by another application.')
+        } else if (error.name === 'OverconstrainedError') {
+          throw new Error(
+            'Selected camera does not support the requested settings. Try a different resolution.'
+          )
+        }
+      }
+
+      throw new Error('Failed to access camera. Please check your device and try again.')
+    }
+  }
+
+  /**
+   * Disable camera and remove video track from all peer connections
+   */
+  async disableCamera(): Promise<void> {
+    try {
+      console.log('[WebRTC] Disabling camera...')
+
+      if (!this.videoEnabled || !this.localVideoStream) {
+        console.log('[WebRTC] Camera already disabled')
+        return
+      }
+
+      // Remove video track from all peer connections
+      this.peers.forEach((peerConnection, userId) => {
+        try {
+          const rtcPeerConnection = (peerConnection.peer as any)._pc as RTCPeerConnection
+
+          if (rtcPeerConnection) {
+            // Find and remove video senders
+            const senders = rtcPeerConnection.getSenders()
+            senders.forEach((sender) => {
+              if (sender.track && sender.track.kind === 'video') {
+                rtcPeerConnection.removeTrack(sender)
+                console.log(`[WebRTC] Removed video track from peer ${userId}`)
+              }
+            })
+          }
+        } catch (error) {
+          console.error(`[WebRTC] Failed to remove video track from peer ${userId}:`, error)
+        }
+      })
+
+      // Stop video stream
+      this.localVideoStream.getTracks().forEach((track) => {
+        track.stop()
+        console.log('[WebRTC] Stopped video track:', track.label)
+      })
+
+      this.localVideoStream = null
+      this.videoEnabled = false
+
+      // Update voice store
+      useVoiceStore.getState().setLocalVideoEnabled(false)
+      useVoiceStore.getState().setLocalVideoStream(null)
+
+      console.log('[WebRTC] Camera disabled successfully')
+    } catch (error) {
+      console.error('[WebRTC] Error disabling camera:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get available video devices
+   */
+  async getAvailableVideoDevices(): Promise<MediaDeviceInfo[]> {
+    try {
+      // Request permission first to get device labels
+      const permissionStream = await navigator.mediaDevices.getUserMedia({ video: true })
+
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      const videoDevices = devices.filter((device) => device.kind === 'videoinput')
+
+      // Stop permission stream
+      permissionStream.getTracks().forEach((track) => track.stop())
+
+      return videoDevices
+    } catch (error) {
+      console.error('[WebRTC] Failed to get video devices:', error)
+      return []
+    }
+  }
+
+  /**
+   * Switch to a different camera device
+   */
+  async switchVideoDevice(deviceId: string): Promise<void> {
+    try {
+      console.log(`[WebRTC] Switching to camera device: ${deviceId}`)
+
+      const wasEnabled = this.videoEnabled
+
+      // If camera is currently enabled, disable it first
+      if (wasEnabled) {
+        await this.disableCamera()
+      }
+
+      // Update settings
+      useVoiceSettingsStore.getState().updateVideoSettings({ deviceId })
+
+      // If camera was enabled, re-enable it with new device
+      if (wasEnabled) {
+        await this.enableCamera()
+      }
+
+      console.log('[WebRTC] Switched camera device successfully')
+    } catch (error) {
+      console.error('[WebRTC] Failed to switch camera device:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Check if camera is enabled
+   */
+  isCameraEnabled(): boolean {
+    return this.videoEnabled
+  }
+
+  /**
+   * Get local video stream
+   */
+  getLocalVideoStream(): MediaStream | null {
+    return this.localVideoStream
+  }
+
+  /**
+   * Adaptive video quality management
+   * Steps down quality based on connection issues
+   */
+  private currentVideoQuality: { resolution: '360p' | '480p' | '720p'; frameRate: 15 | 30 } = {
+    resolution: '720p',
+    frameRate: 30,
+  }
+
+  private qualityAdjustmentTimeout: number | null = null
+
+  /**
+   * Adjust video quality based on connection stats
+   */
+  private async adjustVideoQuality(
+    _lossRate: number,
+    _jitter: number,
+    shouldIncrease: boolean = false
+  ): Promise<void> {
+    if (!this.videoEnabled || !this.localVideoStream) {
+      return
+    }
+
+    // Clear any pending adjustments
+    if (this.qualityAdjustmentTimeout) {
+      clearTimeout(this.qualityAdjustmentTimeout)
+      this.qualityAdjustmentTimeout = null
+    }
+
+    const currentRes = this.currentVideoQuality.resolution
+    const currentFps = this.currentVideoQuality.frameRate
+
+    let newResolution = currentRes
+    let newFrameRate = currentFps
+
+    if (shouldIncrease) {
+      // Step up quality when connection improves
+      if (currentRes === '360p' && currentFps === 15) {
+        newResolution = '360p'
+        newFrameRate = 30
+      } else if (currentRes === '360p' && currentFps === 30) {
+        newResolution = '480p'
+        newFrameRate = 30
+      } else if (currentRes === '480p') {
+        newResolution = '720p'
+        newFrameRate = 30
+      }
+    } else {
+      // Step down quality when connection degrades
+      if (currentRes === '720p') {
+        newResolution = '480p'
+        newFrameRate = 30
+      } else if (currentRes === '480p') {
+        newResolution = '360p'
+        newFrameRate = 30
+      } else if (currentRes === '360p' && currentFps === 30) {
+        newResolution = '360p'
+        newFrameRate = 15
+      }
+      // If already at lowest quality, can't reduce further
+    }
+
+    // Check if quality needs to change
+    if (newResolution !== currentRes || newFrameRate !== currentFps) {
+      console.log(
+        `[WebRTC] Adjusting video quality from ${currentRes}@${currentFps}fps to ${newResolution}@${newFrameRate}fps`
+      )
+
+      this.currentVideoQuality = {
+        resolution: newResolution,
+        frameRate: newFrameRate,
+      }
+
+      // Apply new constraints to the video track
+      try {
+        const videoTrack = this.localVideoStream.getVideoTracks()[0]
+        if (videoTrack) {
+          const resolutionMap = {
+            '360p': { width: 640, height: 360 },
+            '480p': { width: 854, height: 480 },
+            '720p': { width: 1280, height: 720 },
+          }
+
+          const resolution = resolutionMap[newResolution]
+
+          await videoTrack.applyConstraints({
+            width: { ideal: resolution.width },
+            height: { ideal: resolution.height },
+            frameRate: { ideal: newFrameRate },
+          })
+
+          console.log('[WebRTC] Video quality adjusted successfully')
+
+          // Show notification to user
+          if (!shouldIncrease) {
+            useVoiceStore
+              .getState()
+              .addQualityWarning(
+                `Video quality reduced to ${newResolution}@${newFrameRate}fps due to connection issues`
+              )
+          }
+        }
+      } catch (error) {
+        console.error('[WebRTC] Failed to adjust video quality:', error)
+      }
+    }
+  }
+
+  /**
+   * Monitor connection stats and trigger quality adjustments
+   * This is called periodically from the quality monitoring system
+   */
+  async handleVideoQualityAdjustment(
+    _userId: number,
+    lossRate: number,
+    jitter: number
+  ): Promise<void> {
+    // Define thresholds for quality adjustment
+    const CRITICAL_LOSS = 0.1
+    const HIGH_LOSS = 0.05
+    const GOOD_LOSS = 0.01
+
+    const CRITICAL_JITTER = 0.1
+    const HIGH_JITTER = 0.05
+    const GOOD_JITTER = 0.02
+
+    const isCritical = lossRate > CRITICAL_LOSS || jitter > CRITICAL_JITTER
+    const isHigh = lossRate > HIGH_LOSS || jitter > HIGH_JITTER
+    const isGood = lossRate < GOOD_LOSS && jitter < GOOD_JITTER
+
+    if (isCritical || isHigh) {
+      // Poor connection - reduce quality
+      await this.adjustVideoQuality(lossRate, jitter, false)
+    } else if (isGood) {
+      // Good connection - try to increase quality after a delay
+      // Wait 30 seconds before increasing to ensure stable connection
+      if (!this.qualityAdjustmentTimeout) {
+        this.qualityAdjustmentTimeout = window.setTimeout(async () => {
+          await this.adjustVideoQuality(lossRate, jitter, true)
+          this.qualityAdjustmentTimeout = null
+        }, 30000)
+      }
+    }
   }
 }
 

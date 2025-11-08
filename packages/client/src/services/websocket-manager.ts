@@ -22,9 +22,7 @@ class WebSocketManager {
     // Initialize WebSocket listeners
     useMessagesStore.getState().initializeWebSocketListeners()
     this.initializeServerListeners()
-    this.initializeChannelListeners()
     this.initializeDirectMessageListeners()
-    this.initializeFriendRequestListeners()
 
     // Set up auth-based connection management
     this.checkAndConnect()
@@ -101,7 +99,12 @@ class WebSocketManager {
         if (data.voiceChannels) {
           const voiceMembersStore = useVoiceMembersStore.getState()
           Object.entries(data.voiceChannels).forEach(([channelId, members]) => {
-            voiceMembersStore.setMembers(parseInt(channelId), members)
+            // Ensure all members have hasCamera property
+            const membersWithCamera = members.map((m: any) => ({
+              ...m,
+              hasCamera: m.hasCamera ?? false,
+            }))
+            voiceMembersStore.setMembers(parseInt(channelId), membersWithCamera)
           })
           console.log(
             '[WebSocket] Loaded voice channel snapshots for',
@@ -154,10 +157,6 @@ class WebSocketManager {
     })
   }
 
-  private initializeChannelListeners() {
-    /* Deprecated: Handled via attachSocketListeners() */
-  }
-
   private initializeDirectMessageListeners() {
     // Listen for incoming direct messages
     wsService.onDirectMessage((data) => {
@@ -166,10 +165,6 @@ class WebSocketManager {
       // Refresh conversations to update last message and unread count
       useDirectMessagesStore.getState().fetchConversations()
     })
-  }
-
-  private initializeFriendRequestListeners() {
-    /* Deprecated: Handled via attachSocketListeners() */
   }
 
   connect() {

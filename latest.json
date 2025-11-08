@@ -1,11 +1,11 @@
 {
-  "version": "1.1.8",
-  "notes": "Version 1.1.8 - Real-Time Update System Fix. Fixed critical WebSocket connection issues preventing real-time updates for friends list, DMs, server members, channel events, and voice channel status. Implemented proper 'ready' event emission on all connections/reconnections, added missing friend presence and DM thread listeners, fixed friend status update handling, and future-proofed for @mention notifications by enabling background channel updates. All features now work in real-time without requiring app refresh or page reload.",
-  "pub_date": "2025-11-08T00:00:00Z",
+  "version": "1.1.9",
+  "notes": "Version 1.1.9 - Webcam Streaming in Voice Calls. Added full video calling support with camera preview, device selection, and adaptive quality. Features include integrated camera controls in voice bar, real-time video grid display with speaking indicators, video device management in settings, automatic quality adjustment based on connection, and camera status indicators in sidebar. All video features maintain the app's design language with smooth animations and comprehensive error handling.",
+  "pub_date": "2025-11-08T12:00:00Z",
   "platforms": {
     "windows-x86_64": {
       "signature": "",
-      "url": "https://github.com/AnthonyRandom/commhub/releases/download/v1.1.8/commhub_1.1.8_x64_en-US.msi"
+      "url": "https://github.com/AnthonyRandom/commhub/releases/download/v1.1.9/commhub_1.1.9_x64_en-US.msi"
     }
   }
 }

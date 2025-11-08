@@ -2,11 +2,14 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import { AppModule } from './app.module.js';
+import { validateEnvironmentConfig } from './config/environment.validation';
 import helmet from 'helmet';
 import * as fs from 'fs';
 import * as path from 'path';
 
 async function bootstrap() {
+  // Validate environment configuration before starting
+  validateEnvironmentConfig();
   const app = await NestFactory.create(AppModule, new ExpressAdapter(), {
     httpsOptions: getHttpsOptions(),
   });

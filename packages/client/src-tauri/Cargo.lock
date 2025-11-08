@@ -491,7 +491,7 @@ dependencies = [
 
 [[package]]
 name = "commhub-client"
-version = "1.1.8"
+version = "1.1.9"
 dependencies = [
  "serde",
  "serde_json",
@@ -2323,18 +2323,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "os_info"
-version = "3.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0e1ac5fde8d43c34139135df8ea9ee9465394b2d8d20f032d38998f64afffc3"
-dependencies = [
- "log",
- "plist",
- "serde",
- "windows-sys 0.52.0",
-]
-
-[[package]]
 name = "pango"
 version = "0.15.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3440,15 +3428,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sys-locale"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8eab9a99a024a169fe8a903cf9d4a3b3601109bcc13bd9e3c6fff259138626c4"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "system-configuration"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3599,7 +3578,6 @@ dependencies = [
  "objc",
  "once_cell",
  "open",
- "os_info",
  "percent-encoding",
  "plist",
  "rand 0.8.5",
@@ -3613,7 +3591,6 @@ dependencies = [
  "serde_repr",
  "serialize-to-javascript",
  "state",
- "sys-locale",
  "tar",
  "tauri-macros",
  "tauri-runtime",

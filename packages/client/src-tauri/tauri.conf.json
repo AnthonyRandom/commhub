@@ -9,7 +9,7 @@
   },
   "package": {
     "productName": "CommHub",
-    "version": "1.1.8"
+    "version": "1.1.9"
   },
   "tauri": {
     "allowlist": {
@@ -29,26 +29,29 @@
       "http": {
         "all": false,
         "request": true,
-        "scope": ["https://*", "http://*"]
+        "scope": [
+          "https://commhub-production.up.railway.app/*",
+          "https://tenor.googleapis.com/*"
+        ]
       },
       "path": {
-        "all": true
+        "all": false
       },
       "fs": {
-        "all": true,
+        "all": false,
         "readFile": true,
         "writeFile": true,
-        "readDir": true,
-        "copyFile": true,
+        "readDir": false,
+        "copyFile": false,
         "createDir": true,
-        "removeDir": true,
+        "removeDir": false,
         "removeFile": true,
-        "renameFile": true,
+        "renameFile": false,
         "exists": true,
-        "scope": ["$APPDATA/*", "$DOCUMENT/*", "$DESKTOP/*"]
+        "scope": ["$APPCONFIG/commhub/*", "$APPDATA/commhub/*", "$APPLOCALDATA/commhub/*"]
       },
       "os": {
-        "all": true
+        "all": false
       },
       "notification": {
         "all": true

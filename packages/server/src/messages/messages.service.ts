@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateMessageDto } from './dto/create-message.dto';
+import { CONTENT, DATABASE } from '../config/constants';
 
 @Injectable()
 export class MessagesService {
@@ -91,10 +92,14 @@ export class MessagesService {
     });
   }
 
-  async findAll(channelId?: number, userId?: number, limit = 50, offset = 0) {
+  async findAll(
+    channelId?: number,
+    userId?: number,
+    limit: number = DATABASE.DEFAULT_LIMIT,
+    offset: number = DATABASE.DEFAULT_OFFSET
+  ) {
     // Enforce maximum limit to prevent DOS
-    const maxLimit = 100;
-    const safeLimit = Math.min(limit, maxLimit);
+    const safeLimit = Math.min(limit, DATABASE.MAX_LIMIT);
     const where: any = {};
 
     if (channelId) {
@@ -236,14 +241,13 @@ export class MessagesService {
       throw new ForbiddenException('You are not a member of this server');
     }
 
-    // Prevent editing messages older than 15 minutes
+    // Prevent editing messages older than the configured time window
     const timeSinceCreation =
       Date.now() - new Date(message.createdAt).getTime();
-    const fifteenMinutes = 15 * 60 * 1000;
 
-    if (timeSinceCreation > fifteenMinutes) {
+    if (timeSinceCreation > CONTENT.MESSAGE_EDIT_WINDOW) {
       throw new ForbiddenException(
-        'Cannot edit messages older than 15 minutes'
+        `Cannot edit messages older than ${CONTENT.MESSAGE_EDIT_WINDOW / 60000} minutes`
       );
     }
 
@@ -333,18 +337,36 @@ export class MessagesService {
   async getChannelMessages(
     channelId: number,
     userId: number,
-    limit = 50,
-    offset = 0,
+    limit: number = DATABASE.DEFAULT_LIMIT,
+    offset: number = DATABASE.DEFAULT_OFFSET,
     before?: number
   ) {
-    // Delegate to channels service for consistency
-    const { ChannelsService } = await import('../channels/channels.service');
-    // Note: This creates a circular dependency issue. For now, we'll duplicate the logic
-    // In a real app, you'd refactor this to avoid the circular dependency
+    // First verify the user has access to this channel
+    const channel = await this.prisma.channel.findUnique({
+      where: { id: channelId },
+      select: {
+        id: true,
+        server: {
+          select: {
+            members: {
+              select: { id: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!channel) {
+      throw new NotFoundException('Channel not found');
+    }
+
+    // Check if user is a member of the server
+    if (!channel.server.members.some(member => member.id === userId)) {
+      throw new ForbiddenException('You are not a member of this server');
+    }
 
     // Enforce maximum limit to prevent DOS
-    const maxLimit = 100;
-    const safeLimit = Math.min(limit, maxLimit);
+    const safeLimit = Math.min(limit, DATABASE.MAX_LIMIT);
 
     let queryOptions: any = {
       where: { channelId },

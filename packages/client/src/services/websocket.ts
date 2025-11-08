@@ -1,10 +1,11 @@
 import { io, Socket } from 'socket.io-client'
+import config from '../config/environment'
 
-// WebSocket URL - adjust for production
-const WS_BASE_URL = 'https://commhub-production.up.railway.app/chat'
+// WebSocket URL from environment configuration
+const WS_BASE_URL = config.WS_URL
 
-// Client version - should match package.json version
-const CLIENT_VERSION = '1.1.8'
+// Client version from environment configuration
+const CLIENT_VERSION = config.CLIENT_VERSION
 
 export interface WSMessage {
   id: number

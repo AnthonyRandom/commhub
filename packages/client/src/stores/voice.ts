@@ -14,9 +14,11 @@ export interface VoiceUser {
   username: string
   isSpeaking: boolean
   isMuted: boolean
+  hasVideo: boolean
   connectionStatus: ConnectionStatus
   connectionQuality: ConnectionQuality
   stream?: MediaStream
+  videoStream?: MediaStream
   localMuted: boolean
   localVolume: number
 }
@@ -35,6 +37,8 @@ interface VoiceState {
   isMuted: boolean
   isDeafened: boolean
   localStream: MediaStream | null
+  localVideoEnabled: boolean
+  localVideoStream: MediaStream | null
 
   // Voice channel participants
   connectedUsers: Map<number, VoiceUser>
@@ -46,11 +50,15 @@ interface VoiceState {
   setIsMuted: (isMuted: boolean) => void
   setIsDeafened: (isDeafened: boolean) => void
   setLocalStream: (stream: MediaStream | null) => void
+  setLocalVideoEnabled: (enabled: boolean) => void
+  setLocalVideoStream: (stream: MediaStream | null) => void
   addConnectedUser: (user: VoiceUser) => void
   removeConnectedUser: (userId: number) => void
   updateUserSpeaking: (userId: number, isSpeaking: boolean) => void
   updateUserMuted: (userId: number, isMuted: boolean) => void
+  updateUserVideo: (userId: number, hasVideo: boolean) => void
   updateUserStream: (userId: number, stream: MediaStream) => void
+  updateUserVideoStream: (userId: number, stream: MediaStream) => void
   updateUserConnectionStatus: (userId: number, status: ConnectionStatus) => void
   updateUserConnectionQuality: (userId: number, quality: ConnectionQuality) => void
   setUserLocalMuted: (userId: number, muted: boolean) => void
@@ -73,6 +81,8 @@ export const useVoiceStore = create<VoiceState>((set) => ({
   isMuted: false,
   isDeafened: false,
   localStream: null,
+  localVideoEnabled: false,
+  localVideoStream: null,
   connectedUsers: new Map(),
 
   // Actions
@@ -105,15 +115,20 @@ export const useVoiceStore = create<VoiceState>((set) => ({
 
   setLocalStream: (stream) => set({ localStream: stream }),
 
+  setLocalVideoEnabled: (enabled) => set({ localVideoEnabled: enabled }),
+
+  setLocalVideoStream: (stream) => set({ localVideoStream: stream }),
+
   addConnectedUser: (user) =>
     set((state) => {
       const newUsers = new Map(state.connectedUsers)
-      // Ensure connectionQuality is set
-      const userWithQuality = {
+      // Ensure connectionQuality and hasVideo are set
+      const userWithDefaults = {
         ...user,
         connectionQuality: user.connectionQuality || 'unknown',
+        hasVideo: user.hasVideo || false,
       }
-      newUsers.set(user.userId, userWithQuality)
+      newUsers.set(user.userId, userWithDefaults)
       return { connectedUsers: newUsers }
     }),
 
@@ -123,6 +138,9 @@ export const useVoiceStore = create<VoiceState>((set) => ({
       const user = newUsers.get(userId)
       if (user?.stream) {
         user.stream.getTracks().forEach((track) => track.stop())
+      }
+      if (user?.videoStream) {
+        user.videoStream.getTracks().forEach((track) => track.stop())
       }
       newUsers.delete(userId)
       return { connectedUsers: newUsers }
@@ -148,12 +166,32 @@ export const useVoiceStore = create<VoiceState>((set) => ({
       return { connectedUsers: newUsers }
     }),
 
+  updateUserVideo: (userId, hasVideo) =>
+    set((state) => {
+      const newUsers = new Map(state.connectedUsers)
+      const user = newUsers.get(userId)
+      if (user) {
+        newUsers.set(userId, { ...user, hasVideo })
+      }
+      return { connectedUsers: newUsers }
+    }),
+
   updateUserStream: (userId, stream) =>
     set((state) => {
       const newUsers = new Map(state.connectedUsers)
       const user = newUsers.get(userId)
       if (user) {
         newUsers.set(userId, { ...user, stream })
+      }
+      return { connectedUsers: newUsers }
+    }),
+
+  updateUserVideoStream: (userId, stream) =>
+    set((state) => {
+      const newUsers = new Map(state.connectedUsers)
+      const user = newUsers.get(userId)
+      if (user) {
+        newUsers.set(userId, { ...user, videoStream: stream })
       }
       return { connectedUsers: newUsers }
     }),
@@ -230,10 +268,18 @@ export const useVoiceStore = create<VoiceState>((set) => ({
         state.localStream.getTracks().forEach((track) => track.stop())
       }
 
+      // Stop local video stream
+      if (state.localVideoStream) {
+        state.localVideoStream.getTracks().forEach((track) => track.stop())
+      }
+
       // Stop all remote streams
       state.connectedUsers.forEach((user) => {
         if (user.stream) {
           user.stream.getTracks().forEach((track) => track.stop())
+        }
+        if (user.videoStream) {
+          user.videoStream.getTracks().forEach((track) => track.stop())
         }
       })
 
@@ -246,6 +292,8 @@ export const useVoiceStore = create<VoiceState>((set) => ({
         isMuted: false,
         isDeafened: false,
         localStream: null,
+        localVideoEnabled: false,
+        localVideoStream: null,
         connectedUsers: new Map(),
       }
     }),

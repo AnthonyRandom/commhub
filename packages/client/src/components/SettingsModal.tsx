@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { X, Bell, Volume2, Type, Clock, Mic, Zap, Shield, Gauge } from 'lucide-react'
+import { X, Bell, Volume2, Type, Clock, Mic, Zap, Shield, Gauge, Camera } from 'lucide-react'
 import { useVoiceSettingsStore } from '../stores/voice-settings'
 import { voiceManager } from '../services/voice-manager'
 import { webrtcService } from '../services/webrtc'
@@ -27,6 +27,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   // Audio devices state
   const [audioInputDevices, setAudioInputDevices] = useState<AudioDevice[]>([])
   const [audioOutputDevices, setAudioOutputDevices] = useState<AudioDevice[]>([])
+  const [videoDevices, setVideoDevices] = useState<AudioDevice[]>([])
   const [isTesting, setIsTesting] = useState(false)
   const [micLevel, setMicLevel] = useState(0)
   const [testStream, setTestStream] = useState<MediaStream | null>(null)
@@ -105,7 +106,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const loadAudioDevices = async () => {
     try {
       // Request permission first (and keep the stream to get proper labels)
-      const permissionStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const permissionStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: true,
+      })
 
       const devices = await navigator.mediaDevices.enumerateDevices()
 
@@ -125,19 +129,28 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           kind: device.kind,
         }))
 
+      const videos = devices
+        .filter((device) => device.kind === 'videoinput')
+        .map((device) => ({
+          deviceId: device.deviceId,
+          label: device.label || `Camera ${device.deviceId.slice(0, 5)}`,
+          kind: device.kind,
+        }))
+
       // Debug audio devices loading (development only)
       if (import.meta.env.DEV) {
-        console.log('[Settings] Loaded audio devices:', { inputs, outputs })
+        console.log('[Settings] Loaded devices:', { inputs, outputs, videos })
       }
 
       setAudioInputDevices(inputs)
       setAudioOutputDevices(outputs)
+      setVideoDevices(videos)
 
       // Stop the permission stream
       permissionStream.getTracks().forEach((track) => track.stop())
     } catch (error) {
-      console.error('Failed to load audio devices:', error)
-      alert('Failed to access audio devices. Please allow microphone permissions.')
+      console.error('Failed to load devices:', error)
+      alert('Failed to access devices. Please allow microphone and camera permissions.')
     }
   }
 
@@ -965,6 +978,115 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                   </div>
                 </div>
               </div>
+
+              {/* Video Settings */}
+              <div className="bg-grey-850 border-2 border-grey-700 p-6 space-y-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <Camera className="w-6 h-6 text-grey-400" />
+                  <div>
+                    <p className="text-white text-lg font-medium">Video Settings</p>
+                    <p className="text-grey-500 text-sm">Configure camera and video quality</p>
+                  </div>
+                </div>
+
+                {/* Camera Device Selection */}
+                <div>
+                  <label className="text-grey-300 text-sm font-medium mb-3 block">
+                    Camera Device
+                  </label>
+                  <select
+                    value={voiceSettings.video.deviceId || 'default'}
+                    onChange={(e) => {
+                      updateVoiceSetting({ video: { deviceId: e.target.value } })
+                    }}
+                    className="w-full bg-grey-800 border-2 border-grey-700 px-4 py-3 text-white focus:border-white text-sm"
+                  >
+                    {videoDevices.map((device) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label}
+                      </option>
+                    ))}
+                    {videoDevices.length === 0 && (
+                      <option value="default">No cameras found - check permissions</option>
+                    )}
+                  </select>
+                  <p className="text-grey-500 text-xs mt-2">
+                    Select which camera to use for video calls
+                  </p>
+                </div>
+
+                {/* Resolution Selection */}
+                <div>
+                  <label className="text-grey-300 text-sm font-medium mb-3 block">
+                    Video Resolution
+                  </label>
+                  <div className="grid grid-cols-3 gap-3">
+                    <button
+                      onClick={() => updateVoiceSetting({ video: { resolution: '360p' } })}
+                      className={`py-3 border-2 transition-colors uppercase text-xs font-bold tracking-wider ${
+                        voiceSettings.video.resolution === '360p'
+                          ? 'bg-white text-black border-white'
+                          : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
+                      }`}
+                    >
+                      360p
+                    </button>
+                    <button
+                      onClick={() => updateVoiceSetting({ video: { resolution: '480p' } })}
+                      className={`py-3 border-2 transition-colors uppercase text-xs font-bold tracking-wider ${
+                        voiceSettings.video.resolution === '480p'
+                          ? 'bg-white text-black border-white'
+                          : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
+                      }`}
+                    >
+                      480p
+                    </button>
+                    <button
+                      onClick={() => updateVoiceSetting({ video: { resolution: '720p' } })}
+                      className={`py-3 border-2 transition-colors uppercase text-xs font-bold tracking-wider ${
+                        voiceSettings.video.resolution === '720p'
+                          ? 'bg-white text-black border-white'
+                          : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
+                      }`}
+                    >
+                      720p HD
+                    </button>
+                  </div>
+                  <p className="text-grey-500 text-xs mt-2">
+                    Higher resolutions require better internet connection
+                  </p>
+                </div>
+
+                {/* Frame Rate Selection */}
+                <div>
+                  <label className="text-grey-300 text-sm font-medium mb-3 block">Frame Rate</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => updateVoiceSetting({ video: { frameRate: 15 } })}
+                      className={`py-3 border-2 transition-colors uppercase text-xs font-bold tracking-wider ${
+                        voiceSettings.video.frameRate === 15
+                          ? 'bg-white text-black border-white'
+                          : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
+                      }`}
+                    >
+                      15 FPS
+                    </button>
+                    <button
+                      onClick={() => updateVoiceSetting({ video: { frameRate: 30 } })}
+                      className={`py-3 border-2 transition-colors uppercase text-xs font-bold tracking-wider ${
+                        voiceSettings.video.frameRate === 30
+                          ? 'bg-white text-black border-white'
+                          : 'bg-transparent text-grey-400 border-grey-700 hover:border-grey-600'
+                      }`}
+                    >
+                      30 FPS
+                    </button>
+                  </div>
+                  <p className="text-grey-500 text-xs mt-2">
+                    Higher frame rates use more bandwidth
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
@@ -983,7 +1105,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 <div className="space-y-4 mb-8">
                   <div className="flex justify-between items-center py-3 border-b border-grey-700">
                     <span className="text-grey-400 text-base">Version</span>
-                    <span className="text-white text-base font-mono">1.1.8</span>
+                    <span className="text-white text-base font-mono">1.1.9</span>
                   </div>
                   <div className="flex justify-between items-center py-3 border-b border-grey-700">
                     <span className="text-grey-400 text-base">Product</span>

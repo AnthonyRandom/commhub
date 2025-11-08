@@ -144,3 +144,7 @@ packages/client/src-tauri/bundle/
 
 # SSL certificates (development)
 packages/server/ssl/
+
+# etc
+packages/client/.env.production
+packages/client/.env.local

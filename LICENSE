@@ -2,27 +2,55 @@
 
 Copyright (c) 2025 AnthonyRandom. All rights reserved.
 
-## Grant of Rights
+## Purpose
 
-Permission is granted to view and study this source code for transparency, security auditing, and educational purposes only.
+This license allows the source code to be viewed and studied for transparency, security auditing, and educational purposes, while maintaining control over the CommHub brand and official server instances.
+
+## Permissions
+
+You are permitted to:
+
+- Download and use the official CommHub client from GitHub Releases
+- View the source code
+- Study the implementation for educational purposes
+- Audit the code for security vulnerabilities (please report responsibly)
+- Reference the code in educational materials with attribution
 
 ## Restrictions
 
-You may NOT:
+You are NOT permitted to:
 
-- Use, copy, modify, or distribute this software
-- Host your own instance of CommHub
-- Create derivative works
-- Use for commercial purposes
-- Remove or alter copyright notices
+- Host your own server instance of CommHub (public or private)
+- Modify, copy, or distribute the source code
+- Create derivative works based on this software
+- Use this software for commercial purposes
+- Remove or alter copyright notices or this license
+- Use the CommHub name or branding for any purpose
 
 ## Official Distribution
 
-The only authorized distribution of CommHub is through:
+The official CommHub client is available for download from:
 
 - GitHub Releases: https://github.com/AnthonyRandom/commhub/releases
+
+The official CommHub server is hosted at:
+
 - Official Server: https://commhub-production.up.railway.app
+
+Hosting your own server instance or distributing modified versions of the software is unauthorized and prohibited.
+
+## Security Disclosure
+
+If you discover security vulnerabilities while auditing the code, please report them responsibly via the SECURITY.md policy rather than publicly disclosing them.
 
 ## Warranty Disclaimer
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## Contact
+
+For licensing inquiries or permissions beyond this license, please contact the repository owner.
+
+---
+
+Last Updated: January 2025

@@ -1,136 +1,90 @@
 # Security Policy
 
-## Our Commitment
-
-CommHub takes security seriously. This repository is source-available to allow security researchers and users to audit the code for potential vulnerabilities. We believe transparency builds trust.
-
 ## Supported Versions
 
-We provide security updates for the following versions:
+| Version | Supported |
+| ------- | --------- |
+| 1.1.x   | Yes       |
+| < 1.1.0 | No        |
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.1.x   | :white_check_mark: |
-| < 1.1.0 | :x:                |
-
-**Current Stable Version:** 1.1.9
+Current stable version: 1.1.9
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability, please follow these steps:
+**Do not publicly disclose security vulnerabilities.**
 
-### 1. **Do NOT** publicly disclose the vulnerability
-
-- Do not open a public GitHub issue
-- Do not post on social media or forums
-- Do not share details with others before we've had time to address it
-
-### 2. Report privately
-
-Create a private security advisory on GitHub:
+To report a vulnerability:
 
 1. Go to the [Security tab](https://github.com/AnthonyRandom/commhub/security)
 2. Click "Report a vulnerability"
-3. Provide detailed information about the vulnerability
+3. Provide detailed information
 
-**OR** contact the repository owner directly through GitHub.
+Alternatively, contact the repository owner directly through GitHub.
 
-### 3. Include in your report
+### Required Information
 
-- **Description:** Clear description of the vulnerability
-- **Impact:** What could an attacker achieve?
-- **Steps to reproduce:** Detailed steps to reproduce the issue
-- **Affected versions:** Which version(s) are affected?
-- **Proof of concept:** If applicable (no actual exploits, please)
-- **Suggested fix:** If you have ideas (optional but appreciated)
+- Description of the vulnerability
+- Impact and potential exploit scenario
+- Steps to reproduce
+- Affected versions
+- Proof of concept (if applicable)
+- Suggested fix (optional)
 
-## What to Expect
+### Response Timeline
 
-- **Acknowledgment:** We'll acknowledge your report within **48 hours**
-- **Updates:** We'll keep you informed of our progress
-- **Timeline:** We aim to patch critical vulnerabilities within **7 days**
-- **Credit:** With your permission, we'll credit you in the security advisory and release notes
+- Acknowledgment within 48 hours
+- Critical vulnerabilities patched within 7 days
+- Regular updates throughout the investigation
+- Public disclosure after 90 days (with your consent)
 
-## Security Best Practices
+## Security Features
 
-### For Users
+### Server
 
-- ✅ Always download CommHub from official GitHub releases
-- ✅ Keep your client updated to the latest version
-- ✅ Use strong, unique passwords for your account
-- ✅ Report suspicious behavior or messages
+- JWT authentication with secure token signing
+- Bcrypt password hashing (10 rounds)
+- Rate limiting on sensitive endpoints
+- Environment variable validation at startup
+- Helmet security headers
+- CORS configuration
+- Input validation
+- Prisma ORM (SQL injection protection)
 
-## Known Security Features
+### Client
 
-CommHub implements the following security measures:
+- Restricted filesystem access
+- Restricted HTTP scope
+- Shell access disabled
+- WebRTC encryption
+- Automatic update checks from official source
 
-### Server (NestJS/PostgreSQL)
-
-- ✅ JWT-based authentication with secure token signing
-- ✅ Password hashing with bcrypt (10 salt rounds)
-- ✅ Rate limiting on sensitive endpoints (ThrottlerModule)
-- ✅ Environment variable validation at startup
-- ✅ Helmet security headers
-- ✅ CORS configuration for allowed origins
-- ✅ Input validation with class-validator
-- ✅ SQL injection protection via Prisma ORM
-
-### Client (Tauri/React)
-
-- ✅ Restricted filesystem access (scoped to app directories)
-- ✅ Restricted HTTP scope (only approved domains)
-- ✅ No shell access (disabled in allowlist)
-- ✅ WebRTC encryption for voice/video calls
-- ✅ Automatic update checks from official source
-
-## Security Audit History
-
-| Date       | Auditor         | Findings | Status   |
-| ---------- | --------------- | -------- | -------- |
-| 2025-11-08 | Internal Review | 10 items | Resolved |
-
-Recent security improvements (November 2025):
+## Recent Security Improvements (November 2025)
 
 - Fixed JWT secret default value vulnerability
 - Implemented environment variable validation
 - Restricted Tauri permissions to minimum required
-- Removed circular dependencies that could cause issues
-- Added health check endpoints for monitoring
+- Removed circular dependencies
+- Added health check endpoints
 - Implemented periodic cleanup for memory leak prevention
 
 ## Scope
 
-### In Scope for Security Reports
+### In Scope
 
-- ✅ Authentication/authorization bypass
-- ✅ SQL injection, XSS, CSRF
-- ✅ Remote code execution
-- ✅ Data leaks or exposure
-- ✅ Denial of service vulnerabilities
-- ✅ Cryptographic weaknesses
-- ✅ Client-side security issues (Tauri/React)
-- ✅ WebRTC/WebSocket security issues
+- Authentication/authorization bypass
+- SQL injection, XSS, CSRF
+- Remote code execution
+- Data leaks
+- Denial of service
+- Cryptographic weaknesses
+- Client-side security issues
+- WebRTC/WebSocket security issues
 
 ### Out of Scope
 
-- ❌ Social engineering attacks
-- ❌ Physical access to servers
-- ❌ DDoS attacks (infrastructure level)
-- ❌ Issues in third-party dependencies (report to them directly)
-- ❌ Issues requiring physical access to user devices
-- ❌ Browser-specific bugs (report to browser vendors)
-
-## Responsible Disclosure
-
-We follow responsible disclosure practices:
-
-1. **Private reporting** → You report privately
-2. **Investigation** → We investigate and develop a fix
-3. **Patch release** → We release a security patch
-4. **Public disclosure** → We publish a security advisory (with your consent, crediting you)
-
-We ask for **90 days** before public disclosure to give users time to update.
-
-## Questions?
-
-If you have questions about security that don't involve reporting a vulnerability, feel free to open a public GitHub discussion.
+- Social engineering
+- Physical access to servers
+- DDoS attacks (infrastructure level)
+- Third-party dependency issues
+- Physical access to user devices
+- Browser-specific bugs

@@ -1409,24 +1409,41 @@ class WebRTCService {
         // Now add the track to all peer connections using the localStream
         for (const [userId, peerConnection] of this.peers.entries()) {
           try {
-            // Access the underlying RTCPeerConnection
-            const rtcPeerConnection = (peerConnection.peer as any)._pc as RTCPeerConnection
+            const simplePeer = peerConnection.peer
+            const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
 
-            if (rtcPeerConnection) {
+            if (rtcPeerConnection && rtcPeerConnection.signalingState === 'stable') {
               // Add the video track and associate it with localStream (the stream the peer knows about)
               const sender = rtcPeerConnection.addTrack(videoTrack, this.localStream)
               console.log(`[WebRTC] Added video track to peer ${userId}`, sender)
 
-              // For SimplePeer v9, we may need to manually trigger renegotiation
-              // Check if negotiation is needed
-              if (rtcPeerConnection.signalingState === 'stable') {
-                // Manually trigger onnegotiationneeded to force renegotiation
-                const onnegotiationneeded = (rtcPeerConnection as any).onnegotiationneeded
-                if (typeof onnegotiationneeded === 'function') {
-                  console.log(`[WebRTC] Manually triggering renegotiation for peer ${userId}`)
-                  onnegotiationneeded.call(rtcPeerConnection, new Event('negotiationneeded'))
-                }
-              }
+              console.log(`[WebRTC] Triggering renegotiation for peer ${userId}`)
+
+              // Create new offer and trigger SimplePeer's signal emission
+              rtcPeerConnection
+                .createOffer()
+                .then((offer) => {
+                  console.log(`[WebRTC] Created renegotiation offer for peer ${userId}`)
+                  return rtcPeerConnection.setLocalDescription(offer)
+                })
+                .then(() => {
+                  console.log(
+                    `[WebRTC] Set local description for renegotiation with peer ${userId}`
+                  )
+
+                  // Manually trigger SimplePeer's signal event with the new offer
+                  const localDescription = rtcPeerConnection.localDescription
+                  if (localDescription) {
+                    simplePeer.emit('signal', {
+                      type: localDescription.type,
+                      sdp: localDescription.sdp,
+                    })
+                    console.log(`[WebRTC] Emitted renegotiation signal for peer ${userId}`)
+                  }
+                })
+                .catch((error) => {
+                  console.error(`[WebRTC] Renegotiation failed for peer ${userId}:`, error)
+                })
             }
           } catch (error) {
             console.error(`[WebRTC] Failed to add video track to peer ${userId}:`, error)
@@ -1486,10 +1503,11 @@ class WebRTCService {
       // Remove video track from all peer connections
       this.peers.forEach((peerConnection, userId) => {
         try {
-          const rtcPeerConnection = (peerConnection.peer as any)._pc as RTCPeerConnection
+          const simplePeer = peerConnection.peer
+          const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
 
-          if (rtcPeerConnection) {
-            // Find and remove video senders - this triggers renegotiation automatically
+          if (rtcPeerConnection && rtcPeerConnection.signalingState === 'stable') {
+            // Find and remove video senders
             const senders = rtcPeerConnection.getSenders()
             senders.forEach((sender) => {
               if (sender.track && sender.track.kind === 'video') {
@@ -1497,6 +1515,33 @@ class WebRTCService {
                 console.log(`[WebRTC] Removed video track from peer ${userId}`)
               }
             })
+
+            // Trigger renegotiation after removing track
+            console.log(
+              `[WebRTC] Triggering renegotiation after removing video from peer ${userId}`
+            )
+            rtcPeerConnection
+              .createOffer()
+              .then((offer) => {
+                console.log(`[WebRTC] Created renegotiation offer for peer ${userId}`)
+                return rtcPeerConnection.setLocalDescription(offer)
+              })
+              .then(() => {
+                console.log(`[WebRTC] Set local description for renegotiation with peer ${userId}`)
+
+                // Manually trigger SimplePeer's signal event with the new offer
+                const localDescription = rtcPeerConnection.localDescription
+                if (localDescription) {
+                  simplePeer.emit('signal', {
+                    type: localDescription.type,
+                    sdp: localDescription.sdp,
+                  })
+                  console.log(`[WebRTC] Emitted renegotiation signal for peer ${userId}`)
+                }
+              })
+              .catch((error) => {
+                console.error(`[WebRTC] Renegotiation failed for peer ${userId}:`, error)
+              })
           }
         } catch (error) {
           console.error(`[WebRTC] Failed to remove video track from peer ${userId}:`, error)

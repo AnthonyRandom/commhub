@@ -1398,17 +1398,23 @@ class WebRTCService {
       useVoiceStore.getState().setLocalVideoEnabled(true)
       useVoiceStore.getState().setLocalVideoStream(videoStream)
 
-      // Add video track to all existing peer connections
+      // Add video track to the local stream so it becomes part of the same stream
+      // that the peer connections are using
       const videoTrack = videoStream.getVideoTracks()[0]
-      if (videoTrack) {
+      if (videoTrack && this.localStream) {
+        // Add the video track to the existing audio stream
+        this.localStream.addTrack(videoTrack)
+        console.log('[WebRTC] Added video track to localStream')
+
+        // Now add the track to all peer connections using the localStream
         for (const [userId, peerConnection] of this.peers.entries()) {
           try {
             // Access the underlying RTCPeerConnection
             const rtcPeerConnection = (peerConnection.peer as any)._pc as RTCPeerConnection
 
             if (rtcPeerConnection) {
-              // Add the video track - this should trigger renegotiation
-              const sender = rtcPeerConnection.addTrack(videoTrack, videoStream)
+              // Add the video track and associate it with localStream (the stream the peer knows about)
+              const sender = rtcPeerConnection.addTrack(videoTrack, this.localStream)
               console.log(`[WebRTC] Added video track to peer ${userId}`, sender)
 
               // For SimplePeer v9, we may need to manually trigger renegotiation
@@ -1467,6 +1473,16 @@ class WebRTCService {
         return
       }
 
+      // First, remove video track from localStream
+      if (this.localStream) {
+        const videoTracks = this.localStream.getVideoTracks()
+        videoTracks.forEach((track) => {
+          this.localStream!.removeTrack(track)
+          track.stop()
+          console.log('[WebRTC] Removed and stopped video track from localStream:', track.label)
+        })
+      }
+
       // Remove video track from all peer connections
       this.peers.forEach((peerConnection, userId) => {
         try {
@@ -1487,11 +1503,12 @@ class WebRTCService {
         }
       })
 
-      // Stop video stream
-      this.localVideoStream.getTracks().forEach((track) => {
-        track.stop()
-        console.log('[WebRTC] Stopped video track:', track.label)
-      })
+      // Stop and clean up the separate video stream
+      if (this.localVideoStream) {
+        this.localVideoStream.getTracks().forEach((track) => {
+          track.stop()
+        })
+      }
 
       this.localVideoStream = null
       this.videoEnabled = false

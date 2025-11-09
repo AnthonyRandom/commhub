@@ -644,12 +644,63 @@ class VoiceManager {
    */
   private handleVoiceChannelMembers(data: {
     channelId: number
-    members: Array<{ userId: number; username: string }>
+    members: Array<{ userId: number; username: string; hasCamera?: boolean }>
   }) {
     console.log(`[VoiceManager] 📋 Voice channel ${data.channelId} members update:`, data.members)
+
+    // If this is the channel we're currently in, clean up disconnected peers
+    const currentChannelId = webrtcService.getCurrentChannelId()
+    if (currentChannelId === data.channelId) {
+      const voiceStore = useVoiceStore.getState()
+      const currentUserId = useAuthStore.getState().user?.id
+
+      // Get set of user IDs from the updated member list
+      const updatedMemberIds = new Set(data.members.map((m) => m.userId))
+
+      // Find users who are in our connected list but not in the updated member list
+      const usersToRemove: number[] = []
+      voiceStore.connectedUsers.forEach((_, userId) => {
+        // Don't check ourselves
+        if (userId === currentUserId) return
+
+        // If user is not in the updated member list, they've disconnected
+        if (!updatedMemberIds.has(userId)) {
+          usersToRemove.push(userId)
+        }
+      })
+
+      // Clean up disconnected users
+      if (usersToRemove.length > 0) {
+        console.log(
+          `[VoiceManager] 🧹 Cleaning up ${usersToRemove.length} disconnected user(s):`,
+          usersToRemove
+        )
+
+        usersToRemove.forEach((userId) => {
+          // Remove peer connection (this will stop video streams)
+          webrtcService.removePeer(userId)
+
+          // Remove from voice store
+          voiceStore.removeConnectedUser(userId)
+
+          console.log(`[VoiceManager] ✅ Cleaned up peer connection for user ${userId}`)
+        })
+      }
+
+      // Update camera states for remaining members
+      data.members.forEach((member) => {
+        if (member.userId !== currentUserId && member.hasCamera !== undefined) {
+          const user = voiceStore.connectedUsers.get(member.userId)
+          if (user && user.hasVideo !== member.hasCamera) {
+            voiceStore.updateUserVideo(member.userId, member.hasCamera)
+          }
+        }
+      })
+    }
+
     // This will be used by ChannelList to show who's in voice channels
     // Store it in a way that components can access it
-    // For now, we'll emit a custom event that components can listen to
+    // Emit a custom event that components can listen to
     window.dispatchEvent(
       new CustomEvent('voice-channel-members-update', {
         detail: data,

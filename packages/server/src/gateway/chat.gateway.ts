@@ -1720,7 +1720,7 @@ export class ChatGateway
    */
   private async performPeriodicCleanup() {
     // Safety check: ensure server is initialized
-    if (!this.server || !this.server.sockets) {
+    if (!this.server || !this.server.sockets || !this.server.sockets.sockets) {
       this.logger.warn(
         '[Cleanup] WebSocket server not initialized yet, skipping cleanup'
       );

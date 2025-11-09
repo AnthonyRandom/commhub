@@ -236,21 +236,23 @@ class WebSocketService {
     // Rejoin voice channel if we were in one
     if (this.wasInVoiceChannel && this.voiceChannelId) {
       console.log(`[WebSocket] Rejoining voice channel: ${this.voiceChannelId}`)
-      // Import voice manager dynamically to avoid circular dependency
-      import('./voice-manager').then(({ voiceManager }) => {
-        // Only rejoin if we're still supposed to be in a voice channel
-        const currentChannelId = voiceManager.getCurrentChannelId()
-        if (currentChannelId === this.voiceChannelId! && this.voiceChannelId) {
-          // Pass reconnecting=true to suppress join sounds
-          voiceManager.joinVoiceChannel(this.voiceChannelId!, true).catch((error) => {
-            console.error('[WebSocket] Failed to rejoin voice channel:', error)
-            // Clear voice state if rejoin fails
+      // Import voice manager factory to avoid circular dependency
+      import('./voice-manager.factory').then(({ getVoiceManager }) => {
+        getVoiceManager().then((voiceManager) => {
+          // Only rejoin if we're still supposed to be in a voice channel
+          const currentChannelId = voiceManager.getCurrentChannelId()
+          if (currentChannelId === this.voiceChannelId! && this.voiceChannelId) {
+            // Pass reconnecting=true to suppress join sounds
+            voiceManager.joinVoiceChannel(this.voiceChannelId!, true).catch((error: unknown) => {
+              console.error('[WebSocket] Failed to rejoin voice channel:', error)
+              // Clear voice state if rejoin fails
+              this.clearVoiceChannelState()
+            })
+          } else {
+            // Voice state has changed, clear our tracking
             this.clearVoiceChannelState()
-          })
-        } else {
-          // Voice state has changed, clear our tracking
-          this.clearVoiceChannelState()
-        }
+          }
+        })
       })
     }
   }

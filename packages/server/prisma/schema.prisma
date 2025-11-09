@@ -88,9 +88,9 @@ model Message {
   replyTo   Message? @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
   replies   Message[] @relation("MessageReplies")
 
-  @@index([channelId, createdAt])
+  @@index([channelId, createdAt(sort: Desc)])
   @@index([userId])
-  @@index([replyToId])
+  @@index([replyToId, createdAt(sort: Desc)])
 }
 
 model FriendRequest {
@@ -124,5 +124,8 @@ model DirectMessage {
   receiverId Int
   receiver   User @relation("DirectMessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
 
-  @@index([senderId, receiverId])
+  // Optimized indexes for conversation queries
+  @@index([senderId, receiverId, createdAt(sort: Desc)])
+  @@index([receiverId, senderId, createdAt(sort: Desc)])
+  @@index([receiverId, isRead])
 }

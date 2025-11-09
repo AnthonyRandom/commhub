@@ -37,5 +37,27 @@ export default defineConfig({
     minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
     // produce sourcemaps for debug builds
     sourcemap: !!process.env.TAURI_DEBUG,
+
+    // Code splitting configuration for better bundle size
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Separate vendor chunks for better caching
+          'vendor-react': ['react', 'react-dom', 'zustand'],
+          'vendor-socket': ['socket.io-client'],
+          'vendor-webrtc': ['simple-peer'],
+          'vendor-ui': ['lucide-react'],
+        },
+      },
+    },
+
+    // Increase chunk size limit to avoid warnings during development
+    // Target is still to reduce overall bundle size through splitting
+    chunkSizeWarningLimit: 600,
+  },
+
+  // Optimize dependencies for faster dev server startup
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'socket.io-client', 'simple-peer'],
   },
 })

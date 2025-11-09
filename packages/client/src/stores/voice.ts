@@ -104,11 +104,19 @@ export const useVoiceStore = create<VoiceState>((set) => ({
 
   setIsDeafened: (isDeafened) =>
     set((state) => {
-      // When deafened, also mute the user
-      if (isDeafened && state.localStream) {
-        state.localStream.getAudioTracks().forEach((track) => {
-          track.enabled = false
-        })
+      if (state.localStream) {
+        if (isDeafened) {
+          // When deafening, disable audio tracks
+          state.localStream.getAudioTracks().forEach((track) => {
+            track.enabled = false
+          })
+        } else {
+          // When undeafening, restore audio based on mute state
+          // User stays muted after undeafening (Discord behavior)
+          state.localStream.getAudioTracks().forEach((track) => {
+            track.enabled = !state.isMuted
+          })
+        }
       }
       return { isDeafened, isMuted: isDeafened ? true : state.isMuted }
     }),

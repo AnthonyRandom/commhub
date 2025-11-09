@@ -9,9 +9,16 @@ import { logger } from '../../utils/logger'
  */
 export class VoiceSettingsManager {
   toggleMute(): void {
-    const currentState = useVoiceStore.getState().isMuted
-    const newMutedState = !currentState
-    useVoiceStore.getState().setIsMuted(newMutedState)
+    const voiceStore = useVoiceStore.getState()
+
+    // Can't unmute while deafened
+    if (voiceStore.isDeafened && voiceStore.isMuted) {
+      logger.warn('VoiceSettings', 'Cannot unmute while deafened')
+      return
+    }
+
+    const newMutedState = !voiceStore.isMuted
+    voiceStore.setIsMuted(newMutedState)
     webrtcService.setMuted(newMutedState)
   }
 

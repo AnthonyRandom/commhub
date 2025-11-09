@@ -24,6 +24,8 @@ export class VoiceSignalingHandler {
     socket.on('voice-channel-members', this.handleVoiceChannelMembers.bind(this))
     socket.on('voice-user-speaking', this.handleVoiceUserSpeaking.bind(this))
     socket.on('voice-reconnect-request', this.handleVoiceReconnectRequest.bind(this))
+    socket.on('voice-camera-enabled', this.handleVoiceCameraEnabled.bind(this))
+    socket.on('voice-camera-disabled', this.handleVoiceCameraDisabled.bind(this))
   }
 
   private handleVoiceChannelUsers(data: {
@@ -285,6 +287,14 @@ export class VoiceSignalingHandler {
     // Update voice members store
     const voiceMembersStore = useVoiceMembersStore()
     voiceMembersStore.setMembers(data.channelId, data.members)
+
+    // Sync camera state to connected users
+    const voiceStore = useVoiceStore.getState()
+    data.members.forEach((member) => {
+      if (voiceStore.connectedUsers.has(member.userId)) {
+        voiceStore.updateUserVideo(member.userId, member.hasCamera)
+      }
+    })
   }
 
   private handleVoiceUserSpeaking(data: {
@@ -325,6 +335,36 @@ export class VoiceSignalingHandler {
 
     // Create new peer connection (we initiate)
     this.createPeerConnection(data.targetUserId, user.username, true)
+  }
+
+  private handleVoiceCameraEnabled(data: {
+    channelId: number
+    userId: number
+    username: string
+  }): void {
+    logger.info('VoiceSignaling', 'User enabled camera', {
+      channelId: data.channelId,
+      userId: data.userId,
+      username: data.username,
+    })
+
+    // Update user's video state in the store
+    useVoiceStore.getState().updateUserVideo(data.userId, true)
+  }
+
+  private handleVoiceCameraDisabled(data: {
+    channelId: number
+    userId: number
+    username: string
+  }): void {
+    logger.info('VoiceSignaling', 'User disabled camera', {
+      channelId: data.channelId,
+      userId: data.userId,
+      username: data.username,
+    })
+
+    // Update user's video state in the store
+    useVoiceStore.getState().updateUserVideo(data.userId, false)
   }
 }
 

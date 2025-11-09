@@ -1,6 +1,7 @@
 import { wsService } from './websocket'
 import { webrtcService } from './webrtc'
 import { useVoiceStore } from '../stores/voice'
+import { useVoiceMembersStore } from '../stores/voiceMembers'
 import { soundManager } from './sound-manager'
 import { useSettingsStore } from '../stores/settings'
 import { useAuthStore } from '../stores/auth'
@@ -70,7 +71,7 @@ class VoiceManager {
   /**
    * Join a voice channel
    */
-  async joinVoiceChannel(channelId: number): Promise<void> {
+  async joinVoiceChannel(channelId: number, reconnecting: boolean = false): Promise<void> {
     try {
       useVoiceStore.getState().setIsConnecting(true)
       useVoiceStore.getState().setConnectionError(null)
@@ -101,14 +102,14 @@ class VoiceManager {
         })
       }
 
-      // Join the voice channel via WebSocket
-      wsService.getSocket()?.emit('join-voice-channel', { channelId })
+      // Join the voice channel via WebSocket with reconnecting flag
+      wsService.getSocket()?.emit('join-voice-channel', { channelId, reconnecting })
 
       // Track voice channel state in WebSocket service for reconnection
       wsService.setVoiceChannelState(channelId)
 
-      // Play join sound for ourselves (if enabled)
-      if (this.shouldPlaySounds()) {
+      // Only play join sound for fresh joins, not reconnects
+      if (!reconnecting && this.shouldPlaySounds()) {
         soundManager.playUserJoined()
       }
 
@@ -152,6 +153,10 @@ class VoiceManager {
 
     // Clean up
     this.cleanup()
+
+    // Clear the voice members for this channel from the sidebar
+    // This ensures the UI updates immediately when we leave
+    useVoiceMembersStore.getState().clearChannel(channelId)
   }
 
   /**
@@ -177,11 +182,24 @@ class VoiceManager {
   /**
    * Handle new user joining voice channel
    */
-  private handleVoiceUserJoined(data: { channelId: number; userId: number; username: string }) {
-    console.log(`[VoiceManager] ➕ User joined voice channel: ${data.username} (${data.userId})`)
+  private handleVoiceUserJoined(data: {
+    channelId: number
+    userId: number
+    username: string
+    reconnecting?: boolean
+  }) {
+    console.log(
+      `[VoiceManager] ➕ User joined voice channel: ${data.username} (${data.userId})`,
+      data.reconnecting ? '(reconnecting)' : '(fresh join)'
+    )
 
-    // Play join sound (only if we're already in the channel and sounds are enabled)
-    if (webrtcService.getCurrentChannelId() === data.channelId && this.shouldPlaySounds()) {
+    // Only play join sound for fresh joins, not reconnects
+    // This prevents confusion from network reconnections
+    if (
+      !data.reconnecting &&
+      webrtcService.getCurrentChannelId() === data.channelId &&
+      this.shouldPlaySounds()
+    ) {
       soundManager.playUserJoined()
     }
 
@@ -205,11 +223,25 @@ class VoiceManager {
   /**
    * Handle user leaving voice channel
    */
-  private handleVoiceUserLeft(data: { channelId: number; userId: number; username: string }) {
-    console.log('User left voice channel:', data.username)
+  private handleVoiceUserLeft(data: {
+    channelId: number
+    userId: number
+    username: string
+    graceful?: boolean
+  }) {
+    console.log(
+      'User left voice channel:',
+      data.username,
+      data.graceful ? '(intentional)' : '(network disconnect)'
+    )
 
-    // Play leave sound (only if we're still in the channel and sounds are enabled)
-    if (webrtcService.getCurrentChannelId() === data.channelId && this.shouldPlaySounds()) {
+    // Only play leave sound for graceful (intentional) disconnects
+    // This prevents confusion from network disconnects/reconnects
+    if (
+      data.graceful &&
+      webrtcService.getCurrentChannelId() === data.channelId &&
+      this.shouldPlaySounds()
+    ) {
       soundManager.playUserLeft()
     }
 

@@ -1026,7 +1026,24 @@ class WebRTCService {
     const peerConnection = this.peers.get(userId)
     if (peerConnection) {
       try {
-        peerConnection.peer.destroy()
+        // Manually close the peer connection to avoid process.nextTick errors
+        const simplePeer = peerConnection.peer
+        const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
+
+        if (rtcPeerConnection) {
+          rtcPeerConnection.close()
+        }
+
+        // Now destroy the simple-peer instance
+        // Suppress errors from simple-peer's internal stream cleanup
+        try {
+          simplePeer.destroy()
+        } catch (destroyError) {
+          // Ignore process.nextTick errors from simple-peer
+          if (!(destroyError instanceof TypeError && destroyError.message.includes('nextTick'))) {
+            throw destroyError
+          }
+        }
       } catch (error) {
         console.error('Error destroying peer:', error)
       }

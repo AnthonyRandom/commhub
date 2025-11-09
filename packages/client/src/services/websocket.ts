@@ -95,6 +95,17 @@ class WebSocketService {
         clientVersion: CLIENT_VERSION,
       },
       transports: ['websocket', 'polling'],
+      // Match server timeout settings for stable connections
+      timeout: 60000, // 60 seconds - match server pingTimeout
+      // Reconnection settings for better resilience
+      reconnection: true,
+      reconnectionAttempts: 10, // Increased from implicit default of Infinity (we manage this separately)
+      reconnectionDelay: 1000, // Start with 1 second
+      reconnectionDelayMax: 5000, // Max 5 seconds between attempts
+      // Enable automatic upgrades from polling to websocket
+      upgrade: true,
+      // Disable autoconnect since we control connection lifecycle
+      autoConnect: false,
     })
 
     this.socket.on('connect', () => {
@@ -171,6 +182,9 @@ class WebSocketService {
     this.socket.on('error', (error: any) => {
       this.errorListeners.forEach((listener) => listener(error))
     })
+
+    // Manually connect since autoConnect is false
+    this.socket.connect()
   }
 
   private attemptReconnect(token: string): void {
@@ -227,7 +241,8 @@ class WebSocketService {
         // Only rejoin if we're still supposed to be in a voice channel
         const currentChannelId = voiceManager.getCurrentChannelId()
         if (currentChannelId === this.voiceChannelId! && this.voiceChannelId) {
-          voiceManager.joinVoiceChannel(this.voiceChannelId!).catch((error) => {
+          // Pass reconnecting=true to suppress join sounds
+          voiceManager.joinVoiceChannel(this.voiceChannelId!, true).catch((error) => {
             console.error('[WebSocket] Failed to rejoin voice channel:', error)
             // Clear voice state if rejoin fails
             this.clearVoiceChannelState()

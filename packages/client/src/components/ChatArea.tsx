@@ -67,10 +67,15 @@ const VoiceChannelParticipants: React.FC = () => {
 
   // Set local video stream
   useEffect(() => {
-    if (localVideoRef.current && localVideoStream) {
-      localVideoRef.current.srcObject = localVideoStream
+    if (localVideoRef.current) {
+      if (localVideoStream && localVideoEnabled) {
+        localVideoRef.current.srcObject = localVideoStream
+      } else {
+        // Clear video source when camera is disabled
+        localVideoRef.current.srcObject = null
+      }
     }
-  }, [localVideoStream])
+  }, [localVideoStream, localVideoEnabled])
 
   if (isConnecting) {
     return (
@@ -252,8 +257,13 @@ const RemoteParticipantVideo: React.FC<{
 
   // Set video stream on remote video element
   useEffect(() => {
-    if (videoRef.current && videoStream && hasVideo) {
-      videoRef.current.srcObject = videoStream
+    if (videoRef.current) {
+      if (videoStream && hasVideo) {
+        videoRef.current.srcObject = videoStream
+      } else {
+        // Clear video source when camera is disabled
+        videoRef.current.srcObject = null
+      }
     }
   }, [videoStream, hasVideo])
 

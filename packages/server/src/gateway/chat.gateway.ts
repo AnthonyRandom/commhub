@@ -6,6 +6,7 @@ import {
   ConnectedSocket,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger, Inject, forwardRef, OnModuleDestroy } from '@nestjs/common';
@@ -19,6 +20,7 @@ import { PrismaService } from '../prisma/prisma.service';
 interface AuthenticatedSocket extends Socket {
   userId?: number;
   username?: string;
+  gracefulLeaving?: boolean;
 }
 
 @WebSocketGateway({
@@ -31,9 +33,21 @@ interface AuthenticatedSocket extends Socket {
     credentials: true,
   },
   namespace: '/chat',
+  // Increase timeouts to be more forgiving of network latency
+  pingTimeout: 60000, // 60 seconds (default is 5 seconds - too aggressive!)
+  pingInterval: 25000, // 25 seconds (keep default, but client has 60s to respond)
+  // Allow all transport types for better compatibility
+  transports: ['websocket', 'polling'],
+  // Performance optimizations
+  maxHttpBufferSize: 1e6, // 1MB (default is 1MB, keeping it)
+  allowUpgrades: true, // Allow upgrading from polling to websocket
 })
 export class ChatGateway
-  implements OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy
+  implements
+    OnGatewayConnection,
+    OnGatewayDisconnect,
+    OnGatewayInit,
+    OnModuleDestroy
 {
   @WebSocketServer()
   server: Server;
@@ -57,7 +71,15 @@ export class ChatGateway
     private prisma: PrismaService,
     @Inject(forwardRef(() => ChannelsService))
     private channelsService: ChannelsService
-  ) {
+  ) {}
+
+  /**
+   * Lifecycle hook called after the gateway is initialized
+   * Set up periodic cleanup here to ensure server is ready
+   */
+  afterInit(server: Server) {
+    this.logger.log('WebSocket Gateway initialized');
+
     // Set up periodic cleanup to prevent memory leaks
     // Run every 5 minutes to clean up stale entries
     this.cleanupInterval = setInterval(
@@ -66,6 +88,8 @@ export class ChatGateway
       },
       5 * 60 * 1000
     ); // 5 minutes
+
+    this.logger.log('Periodic cleanup interval established (5 minutes)');
   }
 
   async handleConnection(client: AuthenticatedSocket) {
@@ -160,45 +184,51 @@ export class ChatGateway
       }
 
       if (voiceChannelId) {
+        const isGracefulLeave = client.gracefulLeaving === true;
+
         this.logger.log(
-          `[Voice] User ${client.username} disconnected while in voice channel ${voiceChannelId}`
+          `[Voice] User ${client.username} disconnected while in voice channel ${voiceChannelId} (graceful: ${isGracefulLeave})`
         );
 
-        // Clear voice channel tracking immediately on disconnect
-        // This prevents stale state from persisting across reconnections
-        this.userVoiceChannels.delete(client.userId);
-
-        // Remove from voice channel members tracking
-        const members = this.voiceChannelMembers.get(voiceChannelId);
-        if (members) {
-          const userToRemove = Array.from(members).find(
-            m => m.userId === client.userId
+        if (isGracefulLeave) {
+          // Graceful leave - user clicked disconnect button
+          // Already handled in handleLeaveVoiceChannel, nothing more to do
+          this.logger.log(
+            `[Voice] Graceful disconnect - already notified in handleLeaveVoiceChannel`
           );
-          if (userToRemove) {
-            members.delete(userToRemove);
-            this.logger.log(
-              `[Voice] Removed ${client.username} from voiceChannelMembers for channel ${voiceChannelId}`
+        } else {
+          // Network disconnect - don't notify others to avoid confusion
+          // Allow silent reconnect by keeping them in tracking briefly
+          this.logger.log(
+            `[Voice] Network disconnect detected - suppressing notifications to allow silent reconnect`
+          );
+
+          // Still clean up tracking to prevent stale state
+          this.userVoiceChannels.delete(client.userId);
+
+          // Remove from voice channel members tracking
+          const members = this.voiceChannelMembers.get(voiceChannelId);
+          if (members) {
+            const userToRemove = Array.from(members).find(
+              m => m.userId === client.userId
             );
+            if (userToRemove) {
+              members.delete(userToRemove);
+              this.logger.log(
+                `[Voice] Removed ${client.username} from voiceChannelMembers for channel ${voiceChannelId}`
+              );
+            }
+            if (members.size === 0) {
+              this.voiceChannelMembers.delete(voiceChannelId);
+            }
           }
-          if (members.size === 0) {
-            this.voiceChannelMembers.delete(voiceChannelId);
-          }
+
+          // DON'T emit voice-user-left for network disconnects
+          // This prevents the leave sound from playing
+
+          // Broadcast updated member list silently
+          await this.broadcastVoiceChannelMembers(voiceChannelId);
         }
-
-        // Notify others in the voice channel that this user left
-        const roomName = `voice-${voiceChannelId}`;
-        this.server.to(roomName).emit('voice-user-left', {
-          channelId: voiceChannelId,
-          userId: client.userId,
-          username: client.username,
-        });
-
-        // Broadcast updated member list
-        await this.broadcastVoiceChannelMembers(voiceChannelId);
-
-        this.logger.log(
-          `[Voice] Notified voice channel ${voiceChannelId} that ${client.username} disconnected`
-        );
       }
 
       // Remove user from online tracking (they'll be re-added on reconnect)
@@ -925,12 +955,12 @@ export class ChatGateway
 
   @SubscribeMessage('join-voice-channel')
   async handleJoinVoiceChannel(
-    @MessageBody() data: { channelId: number },
+    @MessageBody() data: { channelId: number; reconnecting?: boolean },
     @ConnectedSocket() client: AuthenticatedSocket
   ) {
     try {
       this.logger.log(
-        `[Voice] Join request from ${client.username} (${client.userId}) for channel ${data.channelId}`
+        `[Voice] Join request from ${client.username} (${client.userId}) for channel ${data.channelId} (reconnecting: ${data.reconnecting || false})`
       );
 
       // Validate input
@@ -1099,14 +1129,16 @@ export class ChatGateway
       });
 
       this.logger.log(
-        `[Voice] Broadcasting voice-user-joined to room ${roomName}`
+        `[Voice] Broadcasting voice-user-joined to room ${roomName} (reconnecting: ${data.reconnecting || false})`
       );
 
       // Notify other users in the channel about the new user
+      // Include reconnecting flag to suppress sounds on auto-rejoin
       client.to(roomName).emit('voice-user-joined', {
         channelId: data.channelId,
         userId: client.userId,
         username: client.username,
+        reconnecting: data.reconnecting || false,
       });
 
       // Broadcast updated member list to all users who can see this channel
@@ -1131,7 +1163,12 @@ export class ChatGateway
   ) {
     const roomName = `voice-${data.channelId}`;
     client.leave(roomName);
-    this.logger.log(`${client.username} left voice channel room: ${roomName}`);
+    this.logger.log(
+      `${client.username} left voice channel room: ${roomName} (graceful)`
+    );
+
+    // Mark this as a graceful leave (intentional disconnect by user)
+    client.gracefulLeaving = true;
 
     // Clean up tracking
     this.userVoiceChannels.delete(client.userId);
@@ -1150,11 +1187,12 @@ export class ChatGateway
       }
     }
 
-    // Notify others in the voice channel
+    // Notify others in the voice channel (with graceful flag)
     client.to(roomName).emit('voice-user-left', {
       channelId: data.channelId,
       userId: client.userId,
       username: client.username,
+      graceful: true,
     });
 
     // Broadcast updated member list to all users who can see this channel

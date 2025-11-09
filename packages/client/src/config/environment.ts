@@ -13,14 +13,14 @@ export const config = {
    * @default 'http://localhost:3000/chat' in development
    * @example 'https://commhub-production.up.railway.app/chat'
    */
-  WS_URL: import.meta.env.VITE_WS_URL || 'http://localhost:3000/chat',
+  WS_URL: import.meta.env.VITE_WS_URL || 'https://commhub-production.up.railway.app/chat',
 
   /**
    * HTTP API server URL for REST endpoints
    * @default 'http://localhost:3000' in development
    * @example 'https://commhub-production.up.railway.app'
    */
-  API_URL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
+  API_URL: import.meta.env.VITE_API_URL || 'https://commhub-production.up.railway.app',
 
   /**
    * Client application version (synced with package.json)

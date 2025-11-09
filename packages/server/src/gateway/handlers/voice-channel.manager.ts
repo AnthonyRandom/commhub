@@ -81,13 +81,10 @@ export class VoiceChannelManager {
       }
 
       const roomName = `voice-${data.channelId}`;
-      client.join(roomName);
-      this.logger.log(
-        `[Voice] ${client.username} joined voice channel room: ${roomName}`
-      );
 
-      // Track which channel this user is in (for disconnect cleanup)
-      userVoiceChannels.set(client.userId, data.channelId);
+      // IMPORTANT: Fetch existing sockets BEFORE joining the room
+      // This ensures we see users who were already there, not including the joining user
+      const socketsInRoom = await server.in(roomName).fetchSockets();
 
       // Get list of users already in the voice channel
       const trackedMembers = voiceChannelMembers.get(data.channelId);
@@ -106,7 +103,6 @@ export class VoiceChannelManager {
       }
 
       // Also check Socket.IO rooms as a backup and for validation
-      const socketsInRoom = await server.in(roomName).fetchSockets();
       this.logger.log(
         `[Voice] Room ${roomName} has ${socketsInRoom.length} sockets, tracked members: ${trackedMembers ? trackedMembers.size : 0}`
       );
@@ -159,6 +155,15 @@ export class VoiceChannelManager {
           }
         }
       }
+
+      // Now join the room after fetching existing users
+      client.join(roomName);
+      this.logger.log(
+        `[Voice] ${client.username} joined voice channel room: ${roomName}`
+      );
+
+      // Track which channel this user is in (for disconnect cleanup)
+      userVoiceChannels.set(client.userId, data.channelId);
 
       // Ensure current user is in voice channel members tracking
       if (!voiceChannelMembers.has(data.channelId)) {

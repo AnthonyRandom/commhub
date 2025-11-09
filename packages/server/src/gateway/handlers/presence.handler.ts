@@ -62,6 +62,7 @@ export class PresenceHandler {
 
   async handleStatusChange(
     server: Server,
+    onlineUsers: LRUCache<number, string>,
     data: { userId: number; status: 'online' | 'idle' | 'dnd' | 'invisible' },
     client: AuthenticatedSocket
   ) {
@@ -87,7 +88,7 @@ export class PresenceHandler {
       if (data.status !== 'invisible') {
         await this.notifyFriendsPresence(
           server,
-          client['onlineUsers'],
+          onlineUsers,
           client.userId,
           data.status
         );
@@ -97,7 +98,7 @@ export class PresenceHandler {
       if (data.status === 'invisible') {
         await this.notifyFriendsPresence(
           server,
-          client['onlineUsers'],
+          onlineUsers,
           client.userId,
           'offline'
         );

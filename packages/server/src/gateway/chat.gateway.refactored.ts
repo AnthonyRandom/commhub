@@ -230,7 +230,12 @@ export class ChatGateway
     data: { userId: number; status: 'online' | 'idle' | 'dnd' | 'invisible' },
     @ConnectedSocket() client: AuthenticatedSocket
   ) {
-    await this.presenceHandler.handleStatusChange(this.server, data, client);
+    await this.presenceHandler.handleStatusChange(
+      this.server,
+      this.onlineUsers,
+      data,
+      client
+    );
   }
 
   @SubscribeMessage('get-online-friends')

@@ -56,8 +56,8 @@ export class PeerConnectionManager {
       status: 'connecting',
     })
 
-    // Remove existing peer if it exists
-    this.removePeer(userId)
+    // Remove existing peer if it exists (but don't remove from voice store)
+    this.cleanupPeerConnection(userId)
 
     const peer = this.createPeerWithRetry(userId, username, isInitiator, callbacks)
 
@@ -412,9 +412,10 @@ export class PeerConnectionManager {
   }
 
   /**
-   * Remove a peer connection
+   * Clean up peer connection without removing from voice store
+   * Used when recreating a connection to an existing user
    */
-  removePeer(userId: number): void {
+  private cleanupPeerConnection(userId: number): void {
     const peerConnection = this.peers.get(userId)
     if (peerConnection) {
       // Stop audio playback
@@ -440,8 +441,16 @@ export class PeerConnectionManager {
       }
       this.connectionStates.delete(userId)
     }
+  }
 
-    // Update store
+  /**
+   * Remove a peer connection and remove from voice store
+   * Used when a user actually leaves the channel
+   */
+  removePeer(userId: number): void {
+    this.cleanupPeerConnection(userId)
+
+    // Update store - only called when user actually leaves
     useVoiceStore.getState().removeConnectedUser(userId)
   }
 

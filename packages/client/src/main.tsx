@@ -1,3 +1,13 @@
+// Polyfill process.nextTick for browser compatibility with simple-peer
+if (typeof process === 'undefined') {
+  ;(window as any).process = {
+    env: {},
+    nextTick: (fn: Function, ...args: any[]) => setTimeout(() => fn(...args), 0),
+  }
+} else if (!process.nextTick) {
+  process.nextTick = (fn: Function, ...args: any[]) => setTimeout(() => fn(...args), 0)
+}
+
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'

@@ -45,6 +45,20 @@ export class VoiceSignalingHandler {
         userId: user.userId,
         username: user.username,
       })
+
+      // Add user to voice store so they appear in the UI
+      useVoiceStore.getState().addConnectedUser({
+        userId: user.userId,
+        username: user.username,
+        isSpeaking: false,
+        isMuted: false,
+        hasVideo: false,
+        connectionStatus: 'connecting',
+        connectionQuality: 'connecting',
+        localMuted: false,
+        localVolume: 1.0,
+      })
+
       this.createPeerConnection(user.userId, user.username, true)
     })
   }

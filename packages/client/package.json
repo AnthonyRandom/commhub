@@ -1,6 +1,6 @@
 {
   "name": "commhub-client",
-  "version": "1.1.9",
+  "version": "1.2.0",
   "description": "CommHub desktop client application",
   "private": true,
   "type": "module",

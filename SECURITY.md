@@ -4,10 +4,11 @@
 
 | Version | Supported |
 | ------- | --------- |
+| 1.2.x   | Yes       |
 | 1.1.x   | Yes       |
 | < 1.1.0 | No        |
 
-Current stable version: 1.1.9
+Current stable version: 1.2.0
 
 ## Reporting a Vulnerability
 

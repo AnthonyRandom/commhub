@@ -9,7 +9,7 @@
   },
   "package": {
     "productName": "CommHub",
-    "version": "1.1.9"
+    "version": "1.2.0"
   },
   "tauri": {
     "allowlist": {
@@ -29,10 +29,7 @@
       "http": {
         "all": false,
         "request": true,
-        "scope": [
-          "https://commhub-production.up.railway.app/*",
-          "https://tenor.googleapis.com/*"
-        ]
+        "scope": ["https://commhub-production.up.railway.app/*", "https://tenor.googleapis.com/*"]
       },
       "path": {
         "all": false

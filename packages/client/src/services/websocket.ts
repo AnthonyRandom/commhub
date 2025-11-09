@@ -1,5 +1,7 @@
 import { io, Socket } from 'socket.io-client'
 import config from '../config/environment'
+import { logger } from '../utils/logger'
+import { handleError, NetworkError } from '../utils/errors'
 
 // WebSocket URL from environment configuration
 const WS_BASE_URL = config.WS_URL
@@ -109,7 +111,7 @@ class WebSocketService {
     })
 
     this.socket.on('connect', () => {
-      console.log('WebSocket connected')
+      logger.info('WebSocket', 'Connected successfully')
       this.reconnectAttempts = 0
 
       // Restore previous state after reconnection
@@ -117,7 +119,7 @@ class WebSocketService {
     })
 
     this.socket.on('disconnect', (reason) => {
-      console.log('WebSocket disconnected:', reason)
+      logger.info('WebSocket', 'Disconnected', { reason })
       if (reason === 'io server disconnect' || reason === 'io client disconnect') {
         // Server or client initiated disconnect, don't reconnect
         return
@@ -126,7 +128,11 @@ class WebSocketService {
     })
 
     this.socket.on('connect_error', (error) => {
-      console.error('WebSocket connection error:', error)
+      logger.error('WebSocket', 'Connection error', { error })
+      handleError(
+        error instanceof Error ? error : new NetworkError('Connection error'),
+        'WebSocket'
+      )
       this.attemptReconnect(token)
     })
 
@@ -134,7 +140,11 @@ class WebSocketService {
     this.socket.on(
       'version-mismatch',
       (data: { currentVersion: string; requiredVersion: string; message: string }) => {
-        console.error('Version mismatch:', data)
+        logger.error('WebSocket', 'Version mismatch detected', {
+          currentVersion: data.currentVersion,
+          requiredVersion: data.requiredVersion,
+          message: data.message,
+        })
         alert(
           `⚠️ App Update Required\n\n${data.message}\n\nYour version: ${data.currentVersion}\nRequired version: ${data.requiredVersion}\n\nPlease refresh the page (Ctrl+R or Cmd+R) or restart the app.`
         )
@@ -149,11 +159,11 @@ class WebSocketService {
     })
 
     this.socket.on('friend-presence', (presence: FriendPresence) => {
-      console.log('[WebSocket Service] Received friend-presence event:', presence)
-      console.log(
-        '[WebSocket Service] Number of presence listeners:',
-        this.friendPresenceListeners.length
-      )
+      logger.debug('WebSocket', 'Received friend-presence event', {
+        userId: presence.userId,
+        status: presence.status,
+        listenerCount: this.friendPresenceListeners.length,
+      })
       this.friendPresenceListeners.forEach((listener) => listener(presence))
     })
 
@@ -170,8 +180,11 @@ class WebSocketService {
     })
 
     this.socket.on('direct-message', (message: DirectMessageWS) => {
-      console.log('[WebSocket Service] Received direct-message event:', message)
-      console.log('[WebSocket Service] Number of DM listeners:', this.directMessageListeners.length)
+      logger.debug('WebSocket', 'Received direct-message event', {
+        messageId: message.id,
+        senderId: message.senderId,
+        listenerCount: this.directMessageListeners.length,
+      })
       this.directMessageListeners.forEach((listener) => listener(message))
     })
 
@@ -189,14 +202,17 @@ class WebSocketService {
 
   private attemptReconnect(token: string): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('Max reconnection attempts reached')
+      logger.error('WebSocket', 'Max reconnection attempts reached', {
+        maxAttempts: this.maxReconnectAttempts,
+      })
       return
     }
 
     this.reconnectAttempts++
-    console.log(
-      `Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`
-    )
+    logger.info('WebSocket', 'Attempting to reconnect', {
+      attempt: this.reconnectAttempts,
+      maxAttempts: this.maxReconnectAttempts,
+    })
 
     setTimeout(() => {
       this.connect(token)
@@ -220,7 +236,7 @@ class WebSocketService {
     // Rejoin server rooms
     this.joinedServers.forEach((serverId) => {
       if (this.socket) {
-        console.log(`[WebSocket] Rejoining server room: ${serverId}`)
+        logger.info('WebSocket', 'Rejoining server room', { serverId })
         this.socket.emit('join-server', { serverId })
       }
     })
@@ -228,14 +244,14 @@ class WebSocketService {
     // Rejoin channel rooms
     this.joinedChannels.forEach((channelId) => {
       if (this.socket) {
-        console.log(`[WebSocket] Rejoining channel room: ${channelId}`)
+        logger.info('WebSocket', 'Rejoining channel room', { channelId })
         this.socket.emit('join-channel', { channelId })
       }
     })
 
     // Rejoin voice channel if we were in one
     if (this.wasInVoiceChannel && this.voiceChannelId) {
-      console.log(`[WebSocket] Rejoining voice channel: ${this.voiceChannelId}`)
+      logger.info('WebSocket', 'Rejoining voice channel', { voiceChannelId: this.voiceChannelId })
       // Import voice manager factory to avoid circular dependency
       import('./voice-manager.factory').then(({ getVoiceManager }) => {
         getVoiceManager().then((voiceManager) => {
@@ -244,7 +260,8 @@ class WebSocketService {
           if (currentChannelId === this.voiceChannelId! && this.voiceChannelId) {
             // Pass reconnecting=true to suppress join sounds
             voiceManager.joinVoiceChannel(this.voiceChannelId!, true).catch((error: unknown) => {
-              console.error('[WebSocket] Failed to rejoin voice channel:', error)
+              logger.error('WebSocket', 'Failed to rejoin voice channel', { error })
+              handleError(error, 'WebSocket')
               // Clear voice state if rejoin fails
               this.clearVoiceChannelState()
             })

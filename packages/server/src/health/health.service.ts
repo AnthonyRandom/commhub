@@ -36,7 +36,7 @@ export class HealthService {
       status: 'ok',
       timestamp: new Date().toISOString(),
       uptime: Math.floor((Date.now() - this.startTime) / 1000), // uptime in seconds
-      version: process.env.npm_package_version || '1.1.9',
+      version: process.env.npm_package_version || '1.2.0',
     };
   }
 

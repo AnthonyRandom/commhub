@@ -366,6 +366,19 @@ export class ChatGateway
     );
   }
 
+  @SubscribeMessage('voice-user-muted')
+  async handleVoiceUserMuted(
+    @MessageBody() data: { channelId: number; isMuted: boolean },
+    @ConnectedSocket() client: AuthenticatedSocket
+  ) {
+    this.voiceSignalingHandler.handleVoiceUserMuted(
+      this.server,
+      this.userVoiceChannels,
+      data,
+      client
+    );
+  }
+
   // Camera Controls
   @SubscribeMessage('enable-camera')
   async handleEnableCamera(

@@ -219,4 +219,43 @@ export class VoiceSignalingHandler {
       this.logger.error('Error handling voice speaking status:', error.message);
     }
   }
+
+  handleVoiceUserMuted(
+    server: Server,
+    userVoiceChannels: LRUCache<number, number>,
+    data: { channelId: number; isMuted: boolean },
+    client: AuthenticatedSocket
+  ) {
+    try {
+      if (
+        !data.channelId ||
+        typeof data.channelId !== 'number' ||
+        data.channelId <= 0 ||
+        typeof data.isMuted !== 'boolean'
+      ) {
+        return;
+      }
+
+      // Check if user is in the voice channel
+      const userVoiceChannel = userVoiceChannels.get(client.userId);
+
+      if (userVoiceChannel === data.channelId) {
+        // Broadcast mute status to other users in the channel
+        const roomName = `voice-${data.channelId}`;
+        client.to(roomName).emit('voice-user-muted', {
+          channelId: data.channelId,
+          userId: client.userId,
+          username: client.username,
+          isMuted: data.isMuted,
+        });
+        return;
+      }
+
+      this.logger.warn(
+        `[Voice] User ${client.username} (${client.userId}) attempted to update mute status in channel ${data.channelId} but is not joined`
+      );
+    } catch (error) {
+      this.logger.error('Error handling voice mute status:', error.message);
+    }
+  }
 }

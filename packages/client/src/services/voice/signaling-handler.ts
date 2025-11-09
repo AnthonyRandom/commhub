@@ -23,6 +23,7 @@ export class VoiceSignalingHandler {
     socket.on('voice-ice-candidate', this.handleVoiceIceCandidate.bind(this))
     socket.on('voice-channel-members', this.handleVoiceChannelMembers.bind(this))
     socket.on('voice-user-speaking', this.handleVoiceUserSpeaking.bind(this))
+    socket.on('voice-user-muted', this.handleVoiceUserMuted.bind(this))
     socket.on('voice-reconnect-request', this.handleVoiceReconnectRequest.bind(this))
     socket.on('voice-camera-enabled', this.handleVoiceCameraEnabled.bind(this))
     socket.on('voice-camera-disabled', this.handleVoiceCameraDisabled.bind(this))
@@ -310,6 +311,21 @@ export class VoiceSignalingHandler {
       isSpeaking: data.isSpeaking,
     })
     useVoiceStore.getState().updateUserSpeaking(data.userId, data.isSpeaking)
+  }
+
+  private handleVoiceUserMuted(data: {
+    channelId: number
+    userId: number
+    username: string
+    isMuted: boolean
+  }): void {
+    logger.info('VoiceSignaling', 'User mute status changed', {
+      channelId: data.channelId,
+      userId: data.userId,
+      username: data.username,
+      isMuted: data.isMuted,
+    })
+    useVoiceStore.getState().updateUserMuted(data.userId, data.isMuted)
   }
 
   private handleVoiceReconnectRequest(data: { channelId: number; targetUserId: number }): void {

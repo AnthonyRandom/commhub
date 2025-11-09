@@ -1,6 +1,7 @@
 import { useVoiceStore } from '../../stores/voice'
 import { webrtcService } from '../webrtc'
 import { useSettingsStore } from '../../stores/settings'
+import { wsService } from '../websocket'
 import { logger } from '../../utils/logger'
 
 /**
@@ -20,13 +21,34 @@ export class VoiceSettingsManager {
     const newMutedState = !voiceStore.isMuted
     voiceStore.setIsMuted(newMutedState)
     webrtcService.setMuted(newMutedState)
+
+    // Broadcast mute state to other users
+    const socket = wsService.getSocket()
+    const channelId = webrtcService.getCurrentChannelId()
+    if (socket && channelId) {
+      socket.emit('voice-user-muted', {
+        channelId,
+        isMuted: newMutedState,
+      })
+    }
   }
 
   toggleDeafen(): void {
-    const currentState = useVoiceStore.getState().isDeafened
-    const newDeafenedState = !currentState
-    useVoiceStore.getState().setIsDeafened(newDeafenedState)
+    const voiceStore = useVoiceStore.getState()
+    const newDeafenedState = !voiceStore.isDeafened
+    voiceStore.setIsDeafened(newDeafenedState)
     webrtcService.setDeafened(newDeafenedState)
+
+    // Broadcast deafen state to other users
+    // When deafened, also broadcast muted state
+    const socket = wsService.getSocket()
+    const channelId = webrtcService.getCurrentChannelId()
+    if (socket && channelId) {
+      socket.emit('voice-user-muted', {
+        channelId,
+        isMuted: newDeafenedState || voiceStore.isMuted,
+      })
+    }
   }
 
   setUserLocalMuted(userId: number, muted: boolean): void {

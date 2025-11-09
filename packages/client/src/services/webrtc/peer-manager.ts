@@ -367,6 +367,11 @@ export class PeerConnectionManager {
       audioElement.volume = connectedUser.localVolume
     }
 
+    // Mute audio if user is deafened
+    if (voiceStore.isDeafened) {
+      audioElement.muted = true
+    }
+
     audioElement.addEventListener('error', (e) => {
       logger.error('PeerManager', `Audio playback error for ${username}`, {
         userId,
@@ -509,6 +514,21 @@ export class PeerConnectionManager {
         const localVolume = user?.localVolume ?? 1.0
         peerConnection.audioElement.volume = localVolume * attenuationFactor
       }
+    })
+  }
+
+  /**
+   * Mute or unmute all remote audio elements (for deafen functionality)
+   */
+  setAllAudioMuted(muted: boolean): void {
+    this.peers.forEach((peerConnection) => {
+      if (peerConnection.audioElement) {
+        peerConnection.audioElement.muted = muted
+      }
+    })
+
+    logger.info('PeerManager', `${muted ? 'Muted' : 'Unmuted'} all remote audio`, {
+      peerCount: this.peers.size,
     })
   }
 

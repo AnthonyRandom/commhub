@@ -91,10 +91,12 @@ class WebRTCService {
   }
 
   /**
-   * Set deafened state
+   * Set deafened state (mutes all remote audio)
    */
   setDeafened(deafened: boolean): void {
     this.streamManager.setDeafened(deafened)
+    // Mute all remote audio elements when deafened
+    this.peerManager.setAllAudioMuted(deafened)
   }
 
   /**

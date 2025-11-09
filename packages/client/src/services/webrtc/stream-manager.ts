@@ -244,10 +244,14 @@ export class StreamManager {
   }
 
   /**
-   * Set deafened state (mute mic and don't hear others)
+   * Set deafened state
+   * Note: Audio track muting is handled by the voice store
+   * This method exists for API compatibility but doesn't need to do anything
+   * since the voice store handles the full deafen logic
    */
-  setDeafened(deafened: boolean): void {
-    this.setMuted(deafened)
+  setDeafened(_deafened: boolean): void {
+    // No-op: Voice store handles deafen/mute state
+    // Keeping this method for API compatibility
   }
 
   /**

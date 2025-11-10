@@ -8,7 +8,7 @@
 | 1.1.x   | Yes       |
 | < 1.1.0 | No        |
 
-Current stable version: 1.2.0
+Current stable version: 1.2.1
 
 ## Reporting a Vulnerability
 

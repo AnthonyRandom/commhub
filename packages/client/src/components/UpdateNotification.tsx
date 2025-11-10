@@ -36,7 +36,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) =>
       const latestData = await response.json()
 
       const latestVersion = latestData.version
-      const currentVersion = '1.2.0' // This should match the version in package.json
+      const currentVersion = '1.2.1' // This should match the version in package.json
 
       // Simple version comparison (assuming semantic versioning)
       const isLatest = compareVersions(currentVersion, latestVersion) >= 0
@@ -138,7 +138,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) =>
           </div>
           <div className="p-4">
             <p className="text-grey-300 text-sm mb-4">
-              You are running the latest version of CommHub (v1.2.0).
+              You are running the latest version of CommHub (v1.2.1).
             </p>
             <p className="text-grey-400 text-xs mb-4">Check for new releases manually:</p>
             <a

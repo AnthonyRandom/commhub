@@ -3,7 +3,7 @@
 A lightweight, cross-platform communication platform for real-time messaging, voice, and video.
 
 [![License](https://img.shields.io/badge/License-Source%20Available-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.2.0-green.svg)](https://github.com/AnthonyRandom/commhub/releases)
+[![Version](https://img.shields.io/badge/Version-1.2.1-green.svg)](https://github.com/AnthonyRandom/commhub/releases)
 
 ## Features
 

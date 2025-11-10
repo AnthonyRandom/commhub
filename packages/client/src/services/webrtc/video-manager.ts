@@ -564,13 +564,36 @@ export class VideoManager {
                   return rtcPeerConnection.setLocalDescription(offer).then(() => offer)
                 })
                 .then((offer) => {
-                  // SimplePeer will emit 'signal' event with the new offer
-                  // We need to manually trigger this since SimplePeer doesn't do it for mid-connection changes
+                  // Send the renegotiation offer directly through WebSocket
+                  // Don't use SimplePeer's emit as it causes the remote to create a new connection
                   console.log(`[VideoManager] Created renegotiation offer for peer ${userId}`)
 
-                  // Emit the offer through SimplePeer's signal mechanism
-                  // This will trigger the 'signal' event that gets sent to the remote peer
-                  simplePeer.emit('signal', offer)
+                  // Get WebRTC service to access current channel ID
+                  const webrtcService = require('../index')
+                  const channelId = webrtcService.webrtcService.getCurrentChannelId()
+
+                  if (!channelId) {
+                    console.error('[VideoManager] No channel ID available for renegotiation')
+                    return
+                  }
+
+                  // Import wsService to send offer directly
+                  const { wsService } = require('../../websocket')
+                  const socket = wsService.getSocket()
+
+                  if (socket) {
+                    // Send as a voice-offer which the remote peer will handle as renegotiation
+                    socket.emit('voice-offer', {
+                      targetUserId: userId,
+                      offer: offer,
+                      channelId: channelId,
+                    })
+                    console.log(
+                      `[VideoManager] Sent renegotiation offer to peer ${userId} via WebSocket`
+                    )
+                  } else {
+                    console.error('[VideoManager] WebSocket not available for renegotiation')
+                  }
                 })
                 .catch((error) => {
                   console.error(

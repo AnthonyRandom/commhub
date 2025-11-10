@@ -153,8 +153,25 @@ export class VoiceSignalingHandler {
       fromUsername: data.fromUsername,
     })
 
-    // Create peer connection (we are not the initiator)
-    this.createPeerConnection(data.fromUserId, data.fromUsername, false, data.offer)
+    // Check if peer connection already exists (renegotiation scenario)
+    const existingPeer = webrtcService.getPeer(data.fromUserId)
+
+    if (existingPeer) {
+      // This is a renegotiation (e.g., adding screen share audio)
+      logger.info('VoiceSignaling', 'Renegotiation offer received, signaling existing peer', {
+        userId: data.fromUserId,
+      })
+
+      // Signal the existing peer with the new offer
+      webrtcService.signal(data.fromUserId, data.offer)
+    } else {
+      // This is a new connection, create peer connection (we are not the initiator)
+      logger.info('VoiceSignaling', 'New connection offer received, creating peer', {
+        userId: data.fromUserId,
+      })
+
+      this.createPeerConnection(data.fromUserId, data.fromUsername, false, data.offer)
+    }
   }
 
   private handleVoiceAnswer(data: {

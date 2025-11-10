@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Download, X, AlertCircle } from 'lucide-react'
+import { config } from '../config/environment'
 
 // Define our own UpdateManifest interface since we're not using Tauri's
 interface UpdateManifest {
@@ -36,10 +37,15 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) =>
       const latestData = await response.json()
 
       const latestVersion = latestData.version
-      const currentVersion = '1.2.1' // This should match the version in package.json
+      const currentVersion = config.CLIENT_VERSION // Get version from environment config
+
+      console.log('[UpdateCheck] Current version:', currentVersion)
+      console.log('[UpdateCheck] Latest version from GitHub:', latestVersion)
+      console.log('[UpdateCheck] Fetched data:', latestData)
 
       // Simple version comparison (assuming semantic versioning)
       const isLatest = compareVersions(currentVersion, latestVersion) >= 0
+      console.log('[UpdateCheck] Is latest?', isLatest, `(${currentVersion} >= ${latestVersion})`)
 
       if (isLatest) {
         // No update available - will show "no updates" message
@@ -138,7 +144,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onDismiss }) =>
           </div>
           <div className="p-4">
             <p className="text-grey-300 text-sm mb-4">
-              You are running the latest version of CommHub (v1.2.1).
+              You are running the latest version of CommHub (v{config.CLIENT_VERSION}).
             </p>
             <p className="text-grey-400 text-xs mb-4">Check for new releases manually:</p>
             <a

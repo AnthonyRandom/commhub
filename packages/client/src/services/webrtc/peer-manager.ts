@@ -134,6 +134,34 @@ export class PeerConnectionManager {
         peerConnection.audioElement = audioElement
       }
 
+      // Listen for dynamically added tracks (e.g., screen share audio during renegotiation)
+      stream.addEventListener('addtrack', (event) => {
+        const track = event.track
+        if (track.kind === 'audio') {
+          const audioTracks = stream.getAudioTracks()
+          const trackIndex = audioTracks.indexOf(track)
+
+          // If this is not the first audio track (microphone), it's screen share audio
+          if (trackIndex > 0) {
+            // Check if this user is currently focused
+            const focusedUserId = useVoiceStore.getState().focusedStreamUserId
+            const shouldEnable = focusedUserId === userId
+
+            track.enabled = shouldEnable
+            logger.info(
+              'PeerManager',
+              `New audio track added for ${username}, ${shouldEnable ? 'enabled' : 'disabled'} based on focus state`,
+              {
+                userId,
+                trackId: track.id,
+                trackIndex,
+                focusedUserId,
+              }
+            )
+          }
+        }
+      })
+
       // Start quality monitoring
       const rtcPeerConnection = (peer as any)._pc as RTCPeerConnection
       if (rtcPeerConnection) {

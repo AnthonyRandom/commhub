@@ -19,6 +19,14 @@ export class VoiceCameraManager {
 
       logger.info('VoiceCamera', 'Enabling camera for channel', { channelId })
 
+      // If screen share is currently enabled, disable it on the server side
+      const wasScreenShareEnabled = useVoiceStore.getState().localScreenShareEnabled
+      if (wasScreenShareEnabled) {
+        logger.info('VoiceCamera', 'Disabling screen share on server before camera')
+        wsService.getSocket()?.emit('screen-share-disabled', { channelId })
+        useVoiceStore.getState().setLocalScreenShareEnabled(false)
+      }
+
       // Enable video in WebRTC
       await webrtcService.enableCamera()
 
@@ -90,6 +98,14 @@ export class VoiceCameraManager {
       username: data.username,
     })
     useVoiceStore.getState().updateUserVideo(data.userId, false)
+
+    // Clear the video stream reference to ensure UI updates properly
+    const user = useVoiceStore.getState().connectedUsers.get(data.userId)
+    if (user) {
+      const newUsers = new Map(useVoiceStore.getState().connectedUsers)
+      newUsers.set(data.userId, { ...user, videoStream: undefined })
+      useVoiceStore.setState({ connectedUsers: newUsers })
+    }
   }
 }
 

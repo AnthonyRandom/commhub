@@ -43,6 +43,14 @@ export class VoiceScreenShareManager {
       this.screenShareStream = stream
       this.screenShareEnabled = true
 
+      // If camera is currently enabled, disable it on the server side
+      const wasCameraEnabled = useVoiceStore.getState().localVideoEnabled
+      if (wasCameraEnabled && this.currentChannelId) {
+        logger.info('ScreenShareManager', 'Disabling camera on server before screen share')
+        wsService.getSocket()?.emit('disable-camera', { channelId: this.currentChannelId })
+        useVoiceStore.getState().setLocalVideoEnabled(false)
+      }
+
       // Update voice store
       useVoiceStore.getState().setLocalScreenShareEnabled(true)
       useVoiceStore.getState().setLocalScreenShareStream(stream)

@@ -196,10 +196,19 @@ export const VoiceChannelParticipants: React.FC = () => {
           const voiceUser = connectedUsers.get(participant.userId)
           const hasVideo = voiceUser?.hasVideo || false
           const hasScreenShare = voiceUser?.hasScreenShare || false
-          // Screen share takes priority over camera
-          const displayStream = hasScreenShare
-            ? voiceUser?.screenShareStream || voiceUser?.stream
-            : voiceUser?.videoStream || voiceUser?.stream
+
+          // Determine which stream to display
+          let displayStream: MediaStream | undefined
+          if (hasScreenShare) {
+            // Show screen share stream
+            displayStream = voiceUser?.screenShareStream || voiceUser?.stream
+          } else if (hasVideo) {
+            // Show camera stream
+            displayStream = voiceUser?.videoStream || voiceUser?.stream
+          } else {
+            // No video or screen share - don't pass a stream
+            displayStream = undefined
+          }
 
           return (
             <RemoteParticipantVideo

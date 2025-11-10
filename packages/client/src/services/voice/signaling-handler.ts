@@ -416,6 +416,14 @@ export class VoiceSignalingHandler {
 
     // Update user's screen share state in the store
     useVoiceStore.getState().updateUserScreenShare(data.userId, false)
+
+    // Clear the screen share stream reference to ensure UI updates properly
+    const user = useVoiceStore.getState().connectedUsers.get(data.userId)
+    if (user) {
+      const newUsers = new Map(useVoiceStore.getState().connectedUsers)
+      newUsers.set(data.userId, { ...user, screenShareStream: undefined })
+      useVoiceStore.setState({ connectedUsers: newUsers })
+    }
   }
 }
 

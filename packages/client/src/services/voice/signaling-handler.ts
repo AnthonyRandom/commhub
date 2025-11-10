@@ -33,7 +33,12 @@ export class VoiceSignalingHandler {
 
   private handleVoiceChannelUsers(data: {
     channelId: number
-    users: Array<{ userId: number; username: string }>
+    users: Array<{
+      userId: number
+      username: string
+      hasCamera?: boolean
+      hasScreenShare?: boolean
+    }>
   }): void {
     logger.info('VoiceSignaling', 'Users already in channel', {
       channelId: data.channelId,
@@ -49,6 +54,8 @@ export class VoiceSignalingHandler {
       logger.info('VoiceSignaling', 'Initiating connection to user', {
         userId: user.userId,
         username: user.username,
+        hasCamera: user.hasCamera,
+        hasScreenShare: user.hasScreenShare,
       })
 
       // Add user to voice store so they appear in the UI
@@ -57,8 +64,8 @@ export class VoiceSignalingHandler {
         username: user.username,
         isSpeaking: false,
         isMuted: false,
-        hasVideo: false,
-        hasScreenShare: false,
+        hasVideo: user.hasCamera || false,
+        hasScreenShare: user.hasScreenShare || false,
         connectionStatus: 'connecting',
         connectionQuality: 'connecting',
         localMuted: false,
@@ -282,7 +289,12 @@ export class VoiceSignalingHandler {
 
   private handleVoiceChannelMembers(data: {
     channelId: number
-    members: Array<{ userId: number; username: string; hasCamera: boolean }>
+    members: Array<{
+      userId: number
+      username: string
+      hasCamera: boolean
+      hasScreenShare: boolean
+    }>
   }): void {
     logger.info('VoiceSignaling', 'Voice channel members update', {
       channelId: data.channelId,
@@ -294,11 +306,12 @@ export class VoiceSignalingHandler {
     const voiceMembersStore = useVoiceMembersStore()
     voiceMembersStore.setMembers(data.channelId, data.members)
 
-    // Sync camera state to connected users
+    // Sync camera and screen share state to connected users
     const voiceStore = useVoiceStore.getState()
     data.members.forEach((member) => {
       if (voiceStore.connectedUsers.has(member.userId)) {
         voiceStore.updateUserVideo(member.userId, member.hasCamera)
+        voiceStore.updateUserScreenShare(member.userId, member.hasScreenShare)
       }
     })
   }

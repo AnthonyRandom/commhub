@@ -104,6 +104,21 @@ export class VoiceConnectionManager {
 
     logger.info('VoiceConnection', 'Leaving voice channel', { channelId })
 
+    // Disable camera and screen share before leaving
+    if (this.camera.isCameraEnabled()) {
+      logger.info('VoiceConnection', 'Disabling camera before leaving')
+      this.camera.disableCamera().catch((error) => {
+        logger.error('VoiceConnection', 'Failed to disable camera while leaving', { error })
+      })
+    }
+
+    if (this.screenShare.isScreenShareEnabled()) {
+      logger.info('VoiceConnection', 'Disabling screen share before leaving')
+      this.screenShare.disableScreenShare().catch((error) => {
+        logger.error('VoiceConnection', 'Failed to disable screen share while leaving', { error })
+      })
+    }
+
     // Notify server we're leaving
     wsService.getSocket()?.emit('leave-voice-channel', { channelId })
 
@@ -113,9 +128,15 @@ export class VoiceConnectionManager {
     // Clean up WebRTC connections
     webrtcService.cleanup()
 
-    // Clear voice store
+    // Clear voice store (this also stops all streams)
     useVoiceStore.getState().clearConnectedUsers()
     useVoiceStore.getState().setConnectedChannel(null)
+
+    // Reset local streaming state
+    useVoiceStore.getState().setLocalVideoEnabled(false)
+    useVoiceStore.getState().setLocalVideoStream(null)
+    useVoiceStore.getState().setLocalScreenShareEnabled(false)
+    useVoiceStore.getState().setLocalScreenShareStream(null)
 
     // Play leave sound
     if (voiceSettingsManager.shouldPlaySounds()) {

@@ -14,6 +14,7 @@ import {
   Users,
   X,
   Video,
+  Monitor,
 } from 'lucide-react'
 import { useChannelsStore } from '../stores/channels'
 import { useServersStore } from '../stores/servers'
@@ -442,6 +443,24 @@ const ChannelList: React.FC<ChannelListProps> = ({
                                 >
                                   {member.username}
                                 </span>
+                                {member.hasScreenShare && (
+                                  <Monitor
+                                    className={`w-3 h-3 flex-shrink-0 ${
+                                      selectedChannel?.id === channel.id
+                                        ? 'text-green-400'
+                                        : 'text-green-500'
+                                    }`}
+                                  />
+                                )}
+                                {member.hasCamera && (
+                                  <Video
+                                    className={`w-3 h-3 flex-shrink-0 ${
+                                      selectedChannel?.id === channel.id
+                                        ? 'text-blue-400'
+                                        : 'text-blue-500'
+                                    }`}
+                                  />
+                                )}
                               </div>
                             )
                           })}
@@ -477,8 +496,11 @@ const ChannelList: React.FC<ChannelListProps> = ({
                                   <span className="text-white text-xs truncate flex-1">
                                     {member.username}
                                   </span>
+                                  {member.hasScreenShare && (
+                                    <Monitor className="w-3 h-3 text-green-400 flex-shrink-0" />
+                                  )}
                                   {member.hasCamera && (
-                                    <Video className="w-3 h-3 text-white flex-shrink-0" />
+                                    <Video className="w-3 h-3 text-blue-400 flex-shrink-0" />
                                   )}
                                 </div>
                               ))}

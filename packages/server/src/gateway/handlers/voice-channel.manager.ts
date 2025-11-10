@@ -88,7 +88,12 @@ export class VoiceChannelManager {
 
       // Get list of users already in the voice channel
       const trackedMembers = voiceChannelMembers.get(data.channelId);
-      const usersInChannel: Array<{ userId: number; username: string }> = [];
+      const usersInChannel: Array<{
+        userId: number;
+        username: string;
+        hasCamera?: boolean;
+        hasScreenShare?: boolean;
+      }> = [];
 
       if (trackedMembers) {
         // Add tracked members (excluding the joining user)
@@ -97,6 +102,8 @@ export class VoiceChannelManager {
             usersInChannel.push({
               userId: member.userId,
               username: member.username,
+              hasCamera: member.hasCamera || false,
+              hasScreenShare: member.hasScreenShare || false,
             });
           }
         }
@@ -119,6 +126,8 @@ export class VoiceChannelManager {
             usersInChannel.push({
               userId: authSocket.userId,
               username: authSocket.username,
+              hasCamera: false,
+              hasScreenShare: false,
             });
             this.logger.log(
               `[Voice] Found untracked user in channel: ${authSocket.username} (${authSocket.userId})`

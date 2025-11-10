@@ -66,17 +66,56 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   const { getTimeFormat } = useSettingsStore()
   const { blockedUsers } = useFriendsStore()
 
-  const { connectedChannelId, isConnecting, connectedUsers, focusedStreamUserId } = useVoiceStore()
+  const {
+    connectedChannelId,
+    isConnecting,
+    connectedUsers,
+    focusedStreamUserId,
+    localVideoEnabled,
+    localVideoStream,
+    localScreenShareEnabled,
+    localScreenShareStream,
+  } = useVoiceStore()
   const isVoiceChannel = selectedChannel?.type === 'voice'
   const isConnectedToVoice = connectedChannelId === selectedChannel?.id
 
   // Get focused user data
-  const focusedUser = focusedStreamUserId ? connectedUsers.get(focusedStreamUserId) : null
-  const focusedStream = focusedUser?.hasScreenShare
-    ? focusedUser.screenShareStream || focusedUser.stream
-    : focusedUser?.hasVideo
-      ? focusedUser.videoStream || focusedUser.stream
-      : undefined
+  const isLocalUserFocused = user && focusedStreamUserId === user.id
+
+  let focusedUser: any = null
+  let focusedStream: MediaStream | undefined
+
+  if (isLocalUserFocused && user) {
+    // For local user, construct focused user from local state
+    focusedUser = {
+      userId: user.id,
+      username: user.username,
+      hasVideo: localVideoEnabled,
+      hasScreenShare: localScreenShareEnabled,
+      isSpeaking: connectedUsers.get(user.id)?.isSpeaking || false,
+      isMuted: useVoiceStore.getState().isMuted,
+      localMuted: false,
+      localVolume: 1.0,
+    }
+
+    // Use local streams
+    if (localScreenShareEnabled && localScreenShareStream) {
+      focusedStream = localScreenShareStream
+    } else if (localVideoEnabled && localVideoStream) {
+      focusedStream = localVideoStream
+    }
+  } else if (focusedStreamUserId) {
+    // For remote users, use data from connectedUsers
+    focusedUser = connectedUsers.get(focusedStreamUserId) || null
+
+    if (focusedUser) {
+      if (focusedUser.hasScreenShare) {
+        focusedStream = focusedUser.screenShareStream || focusedUser.stream
+      } else if (focusedUser.hasVideo) {
+        focusedStream = focusedUser.videoStream || focusedUser.stream
+      }
+    }
+  }
 
   // Helper function to check if a user is blocked
   const isUserBlocked = (userId: number) => {

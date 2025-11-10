@@ -534,19 +534,32 @@ export class VideoManager {
           }
         })
 
-        // Add audio tracks to all peer connections
+        // Replace stream in all peer connections to include audio tracks
         for (const [userId, peerConnection] of this.peers.entries()) {
           try {
             const simplePeer = peerConnection.peer
-            const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
 
-            if (rtcPeerConnection) {
-              for (const audioTrack of audioTracks) {
-                // Add the screen share audio track as a new sender
-                rtcPeerConnection.addTrack(audioTrack, this.localStream!)
-                console.log(
-                  `[VideoManager] ✅ Added screen share audio track to peer ${userId}`
-                )
+            // Use SimplePeer's addStream method which handles renegotiation
+            if (typeof (simplePeer as any).addStream === 'function') {
+              // Remove old stream and add new stream with audio tracks
+              ;(simplePeer as any).removeStream(this.localStream!)
+              ;(simplePeer as any).addStream(this.localStream!)
+              console.log(
+                `[VideoManager] ✅ Replaced stream with audio tracks for peer ${userId} (via SimplePeer)`
+              )
+            } else {
+              // Fallback: use addTrack and trigger renegotiation via _pc
+              const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
+              if (rtcPeerConnection) {
+                for (const audioTrack of audioTracks) {
+                  rtcPeerConnection.addTrack(audioTrack, this.localStream!)
+                  console.log(`[VideoManager] ✅ Added screen share audio track to peer ${userId}`)
+                }
+
+                // Fire the negotiationneeded event to trigger renegotiation
+                const negotiationNeededEvent = new Event('negotiationneeded')
+                rtcPeerConnection.dispatchEvent(negotiationNeededEvent)
+                console.log(`[VideoManager] Triggered negotiationneeded event for peer ${userId}`)
               }
             }
           } catch (error) {
@@ -614,7 +627,7 @@ export class VideoManager {
 
           if (rtcPeerConnection) {
             const senders = rtcPeerConnection.getSenders()
-            
+
             // Replace video track
             const videoSender = senders.find((sender) => sender.track?.kind === 'video')
             if (videoSender && this.localStream) {
@@ -629,9 +642,7 @@ export class VideoManager {
 
             // Remove screen share audio senders
             for (const audioTrack of screenShareAudioTracks) {
-              const audioSender = senders.find(
-                (sender) => sender.track?.id === audioTrack.id
-              )
+              const audioSender = senders.find((sender) => sender.track?.id === audioTrack.id)
               if (audioSender) {
                 rtcPeerConnection.removeTrack(audioSender)
                 console.log(

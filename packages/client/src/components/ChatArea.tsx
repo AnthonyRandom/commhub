@@ -152,6 +152,15 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
     voiceManager.initialize()
   }, [])
 
+  // Control screen share audio based on focused stream
+  useEffect(() => {
+    // Only enable screen share audio for the focused user (if any)
+    // When no user is focused (null), all screen share audio is disabled
+    if (focusedStreamUserId !== undefined) {
+      voiceManager.setFocusedUserScreenShareAudio(focusedStreamUserId)
+    }
+  }, [focusedStreamUserId])
+
   // Auto-scroll to bottom when new messages arrive (but not when loading older messages or user is scrolled up)
   useEffect(() => {
     if (messages.length > 0 && !isLoadingOlder[selectedChannel?.id || 0] && !isScrolledUp) {

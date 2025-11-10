@@ -360,6 +360,27 @@ export class PeerConnectionManager {
     audioElement.srcObject = stream
     audioElement.autoplay = true
 
+    // Handle multiple audio tracks: first is voice (always on), rest are screen share audio (off by default)
+    const audioTracks = stream.getAudioTracks()
+    if (audioTracks.length > 1) {
+      logger.info(
+        'PeerManager',
+        `Stream has ${audioTracks.length} audio tracks, muting screen share audio by default`,
+        {
+          userId,
+          username,
+        }
+      )
+      // Keep first track (microphone) enabled, disable additional tracks (screen share audio)
+      for (let i = 1; i < audioTracks.length; i++) {
+        audioTracks[i].enabled = false
+        logger.info('PeerManager', `Disabled screen share audio track ${i} for ${username}`, {
+          userId,
+          trackId: audioTracks[i].id,
+        })
+      }
+    }
+
     // Apply user-specific volume settings
     const voiceStore = useVoiceStore.getState()
     const connectedUser = voiceStore.connectedUsers.get(userId)
@@ -545,6 +566,46 @@ export class PeerConnectionManager {
 
     logger.info('PeerManager', `${muted ? 'Muted' : 'Unmuted'} all remote audio`, {
       peerCount: this.peers.size,
+    })
+  }
+
+  /**
+   * Enable or disable screen share audio for a specific user
+   * Screen share audio is in additional audio tracks (beyond the first microphone track)
+   */
+  setUserScreenShareAudio(userId: number, enabled: boolean): void {
+    const peerConnection = this.peers.get(userId)
+    if (!peerConnection?.audioElement?.srcObject) {
+      return
+    }
+
+    const stream = peerConnection.audioElement.srcObject as MediaStream
+    const audioTracks = stream.getAudioTracks()
+
+    // If there's more than one audio track, the additional ones are screen share audio
+    if (audioTracks.length > 1) {
+      for (let i = 1; i < audioTracks.length; i++) {
+        audioTracks[i].enabled = enabled
+        logger.info(
+          'PeerManager',
+          `${enabled ? 'Enabled' : 'Disabled'} screen share audio track ${i} for user ${userId}`,
+          {
+            userId,
+            trackId: audioTracks[i].id,
+          }
+        )
+      }
+    }
+  }
+
+  /**
+   * Disable screen share audio for all users except the specified one
+   * Used when focusing on a specific user's stream
+   */
+  setFocusedUserScreenShareAudio(focusedUserId: number | null): void {
+    this.peers.forEach((_, userId) => {
+      const shouldEnable = focusedUserId === userId
+      this.setUserScreenShareAudio(userId, shouldEnable)
     })
   }
 

@@ -187,6 +187,10 @@ export class VoiceConnectionManager {
   enableScreenShare = (captureAudio: boolean) => this.screenShare.enableScreenShare(captureAudio)
   disableScreenShare = () => this.screenShare.disableScreenShare()
   isScreenShareEnabled = () => this.screenShare.isScreenShareEnabled()
+
+  // Control screen share audio based on focused user
+  setFocusedUserScreenShareAudio = (userId: number | null) =>
+    webrtcService.setFocusedUserScreenShareAudio(userId)
 }
 
 export const voiceConnectionManager = new VoiceConnectionManager()

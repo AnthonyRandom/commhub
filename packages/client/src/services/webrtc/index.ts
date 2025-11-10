@@ -252,6 +252,14 @@ class WebRTCService {
   }
 
   /**
+   * Set which user's screen share audio should be enabled
+   * Pass null to disable all screen share audio
+   */
+  setFocusedUserScreenShareAudio(userId: number | null): void {
+    this.peerManager.setFocusedUserScreenShareAudio(userId)
+  }
+
+  /**
    * Set detection mode for speaking detection
    */
   setDetectionMode(mode: 'voice_activity' | 'push_to_talk'): void {

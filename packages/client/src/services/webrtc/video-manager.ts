@@ -534,33 +534,55 @@ export class VideoManager {
           }
         })
 
-        // Replace stream in all peer connections to include audio tracks
+        // Add audio tracks to all peer connections with proper renegotiation
         for (const [userId, peerConnection] of this.peers.entries()) {
           try {
             const simplePeer = peerConnection.peer
+            const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
 
-            // Use SimplePeer's addStream method which handles renegotiation
-            if (typeof (simplePeer as any).addStream === 'function') {
-              // Remove old stream and add new stream with audio tracks
-              ;(simplePeer as any).removeStream(this.localStream!)
-              ;(simplePeer as any).addStream(this.localStream!)
-              console.log(
-                `[VideoManager] ✅ Replaced stream with audio tracks for peer ${userId} (via SimplePeer)`
-              )
-            } else {
-              // Fallback: use addTrack and trigger renegotiation via _pc
-              const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
-              if (rtcPeerConnection) {
-                for (const audioTrack of audioTracks) {
-                  rtcPeerConnection.addTrack(audioTrack, this.localStream!)
-                  console.log(`[VideoManager] ✅ Added screen share audio track to peer ${userId}`)
-                }
+            if (rtcPeerConnection && rtcPeerConnection.connectionState === 'connected') {
+              const isInitiator = (simplePeer as any).initiator
 
-                // Fire the negotiationneeded event to trigger renegotiation
-                const negotiationNeededEvent = new Event('negotiationneeded')
-                rtcPeerConnection.dispatchEvent(negotiationNeededEvent)
-                console.log(`[VideoManager] Triggered negotiationneeded event for peer ${userId}`)
+              for (const audioTrack of audioTracks) {
+                // Add track to RTCPeerConnection
+                rtcPeerConnection.addTrack(audioTrack, this.localStream!)
+                console.log(`[VideoManager] ✅ Added screen share audio track to peer ${userId}`, {
+                  trackId: audioTrack.id,
+                  isInitiator,
+                })
               }
+
+              // Manually trigger renegotiation by creating a new offer
+              // This works regardless of initiator status (proper bidirectional negotiation)
+              console.log(
+                `[VideoManager] Triggering renegotiation for peer ${userId} to send audio tracks`
+              )
+
+              rtcPeerConnection
+                .createOffer()
+                .then((offer) => {
+                  return rtcPeerConnection.setLocalDescription(offer).then(() => offer)
+                })
+                .then((offer) => {
+                  // SimplePeer will emit 'signal' event with the new offer
+                  // We need to manually trigger this since SimplePeer doesn't do it for mid-connection changes
+                  console.log(`[VideoManager] Created renegotiation offer for peer ${userId}`)
+
+                  // Emit the offer through SimplePeer's signal mechanism
+                  // This will trigger the 'signal' event that gets sent to the remote peer
+                  simplePeer.emit('signal', offer)
+                })
+                .catch((error) => {
+                  console.error(
+                    `[VideoManager] Failed to create renegotiation offer for peer ${userId}:`,
+                    error
+                  )
+                })
+            } else {
+              console.warn(
+                `[VideoManager] Peer ${userId} not in connected state, skipping audio track addition`,
+                { connectionState: rtcPeerConnection?.connectionState }
+              )
             }
           } catch (error) {
             console.error(

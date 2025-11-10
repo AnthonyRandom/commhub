@@ -174,6 +174,31 @@ class WebRTCService {
   }
 
   /**
+   * Enable screen share
+   */
+  async enableScreenShare(screenShareStream: MediaStream): Promise<void> {
+    // Update video manager with current peers
+    this.videoManager.setPeers(this.peerManager.getPeers())
+    await this.videoManager.enableScreenShare(screenShareStream)
+  }
+
+  /**
+   * Disable screen share
+   */
+  async disableScreenShare(): Promise<void> {
+    // Update video manager with current peers
+    this.videoManager.setPeers(this.peerManager.getPeers())
+    await this.videoManager.disableScreenShare()
+  }
+
+  /**
+   * Check if screen share is enabled
+   */
+  isScreenShareEnabled(): boolean {
+    return this.videoManager.isScreenShareEnabled()
+  }
+
+  /**
    * Handle video quality adjustment
    */
   async handleVideoQualityAdjustment(

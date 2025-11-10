@@ -1,4 +1,5 @@
 import { wsService } from '../websocket'
+import { webrtcService } from '../webrtc'
 import { useVoiceStore } from '../../stores/voice'
 import { logger } from '../../utils/logger'
 import { handleError } from '../../utils/errors'
@@ -46,6 +47,9 @@ export class VoiceScreenShareManager {
       useVoiceStore.getState().setLocalScreenShareEnabled(true)
       useVoiceStore.getState().setLocalScreenShareStream(stream)
 
+      // Replace video tracks in all peer connections with screen share
+      await webrtcService.enableScreenShare(stream)
+
       // Listen for track ended (user stops sharing via browser UI)
       const videoTrack = stream.getVideoTracks()[0]
       if (videoTrack) {
@@ -72,7 +76,7 @@ export class VoiceScreenShareManager {
   /**
    * Disable screen sharing
    */
-  disableScreenShare(): void {
+  async disableScreenShare(): Promise<void> {
     try {
       if (!this.screenShareEnabled) {
         logger.warn('ScreenShareManager', 'Screen share not enabled')
@@ -91,6 +95,9 @@ export class VoiceScreenShareManager {
       }
 
       this.screenShareEnabled = false
+
+      // Replace screen share tracks with black placeholder in peer connections
+      await webrtcService.disableScreenShare()
 
       // Update voice store
       useVoiceStore.getState().setLocalScreenShareEnabled(false)

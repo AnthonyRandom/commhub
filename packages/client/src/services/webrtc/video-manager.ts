@@ -519,6 +519,47 @@ export class VideoManager {
         }
       }
 
+      // Handle screen share audio tracks (desktop audio)
+      const audioTracks = screenShareStream.getAudioTracks()
+      if (audioTracks.length > 0) {
+        console.log('[VideoManager] Screen share has audio tracks, adding to peer connections...', {
+          audioTrackCount: audioTracks.length,
+        })
+
+        // Add audio tracks to local stream
+        audioTracks.forEach((track) => {
+          if (this.localStream) {
+            this.localStream.addTrack(track)
+            console.log('[VideoManager] Added screen share audio track to local stream')
+          }
+        })
+
+        // Add audio tracks to all peer connections
+        for (const [userId, peerConnection] of this.peers.entries()) {
+          try {
+            const simplePeer = peerConnection.peer
+            const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
+
+            if (rtcPeerConnection) {
+              for (const audioTrack of audioTracks) {
+                // Add the screen share audio track as a new sender
+                rtcPeerConnection.addTrack(audioTrack, this.localStream!)
+                console.log(
+                  `[VideoManager] ✅ Added screen share audio track to peer ${userId}`
+                )
+              }
+            }
+          } catch (error) {
+            console.error(
+              `[VideoManager] Failed to add screen share audio track for peer ${userId}:`,
+              error
+            )
+          }
+        }
+      } else {
+        console.log('[VideoManager] No audio tracks in screen share stream')
+      }
+
       console.log('[VideoManager] Screen share enabled successfully')
     } catch (error) {
       console.error('[VideoManager] Failed to enable screen share:', error)
@@ -539,6 +580,9 @@ export class VideoManager {
         return
       }
 
+      // Get the screen share audio tracks before we stop the stream
+      const screenShareAudioTracks = this.localScreenShareStream.getAudioTracks()
+
       // Replace screen share track with black track in localStream
       if (this.localStream) {
         const videoTracks = this.localStream.getVideoTracks()
@@ -546,6 +590,14 @@ export class VideoManager {
           this.localStream!.removeTrack(track)
           track.stop()
           console.log('[VideoManager] Removed and stopped screen share track:', track.label)
+        })
+
+        // Remove screen share audio tracks from local stream
+        screenShareAudioTracks.forEach((track) => {
+          if (this.localStream && this.localStream.getTrackById(track.id)) {
+            this.localStream.removeTrack(track)
+            console.log('[VideoManager] Removed screen share audio track from local stream')
+          }
         })
 
         // Add a new black placeholder track
@@ -562,14 +614,28 @@ export class VideoManager {
 
           if (rtcPeerConnection) {
             const senders = rtcPeerConnection.getSenders()
+            
+            // Replace video track
             const videoSender = senders.find((sender) => sender.track?.kind === 'video')
-
             if (videoSender && this.localStream) {
               const blackTrack = this.localStream.getVideoTracks()[0]
               if (blackTrack) {
                 await videoSender.replaceTrack(blackTrack)
                 console.log(
                   `[VideoManager] ✅ Replaced screen share with black track for peer ${userId}`
+                )
+              }
+            }
+
+            // Remove screen share audio senders
+            for (const audioTrack of screenShareAudioTracks) {
+              const audioSender = senders.find(
+                (sender) => sender.track?.id === audioTrack.id
+              )
+              if (audioSender) {
+                rtcPeerConnection.removeTrack(audioSender)
+                console.log(
+                  `[VideoManager] ✅ Removed screen share audio track from peer ${userId}`
                 )
               }
             }

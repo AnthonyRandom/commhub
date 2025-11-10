@@ -94,6 +94,8 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
       hasScreenShare: localScreenShareEnabled,
       isSpeaking: connectedUsers.get(user.id)?.isSpeaking || false,
       isMuted: useVoiceStore.getState().isMuted,
+      connectionStatus: 'connected' as const,
+      connectionQuality: 'excellent' as const,
       localMuted: false,
       localVolume: 1.0,
     }

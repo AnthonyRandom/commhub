@@ -102,7 +102,7 @@ export const FocusedStreamView: React.FC<FocusedStreamViewProps> = ({
           <div className="flex flex-col items-center justify-center">
             <div className="w-32 h-32 bg-grey-800 border-4 border-grey-700 flex items-center justify-center mb-4">
               <span className="font-bold text-4xl text-grey-300">
-                {user.username.charAt(0).toUpperCase()}
+                {user.username?.charAt(0).toUpperCase() || '?'}
               </span>
             </div>
             <p className="text-grey-400">No stream available</p>
@@ -112,7 +112,7 @@ export const FocusedStreamView: React.FC<FocusedStreamViewProps> = ({
 
       {/* User info overlay */}
       <div className="absolute bottom-4 left-4 bg-grey-900/90 border-2 border-grey-700 px-4 py-2 flex items-center gap-3">
-        <span className="text-white font-bold">{user.username}</span>
+        <span className="text-white font-bold">{user.username || 'Unknown User'}</span>
         {isScreenShare && (
           <span className="text-xs bg-grey-800 border border-grey-700 px-2 py-1 text-grey-300">
             SCREEN SHARING
@@ -131,21 +131,23 @@ export const FocusedStreamView: React.FC<FocusedStreamViewProps> = ({
       </div>
 
       {/* Connection quality indicator */}
-      <div className="absolute top-4 left-4 bg-grey-900/90 border-2 border-grey-700 px-3 py-1">
-        <span
-          className={`text-xs font-bold ${
-            user.connectionQuality === 'excellent'
-              ? 'text-green-400'
-              : user.connectionQuality === 'good'
-                ? 'text-yellow-400'
-                : user.connectionQuality === 'poor'
-                  ? 'text-orange-400'
-                  : 'text-red-400'
-          }`}
-        >
-          {user.connectionQuality.toUpperCase()}
-        </span>
-      </div>
+      {user.connectionQuality && (
+        <div className="absolute top-4 left-4 bg-grey-900/90 border-2 border-grey-700 px-3 py-1">
+          <span
+            className={`text-xs font-bold ${
+              user.connectionQuality === 'excellent'
+                ? 'text-green-400'
+                : user.connectionQuality === 'good'
+                  ? 'text-yellow-400'
+                  : user.connectionQuality === 'poor'
+                    ? 'text-orange-400'
+                    : 'text-red-400'
+            }`}
+          >
+            {user.connectionQuality.toUpperCase()}
+          </span>
+        </div>
+      )}
 
       {/* Right-click context menu */}
       {showContextMenu && (

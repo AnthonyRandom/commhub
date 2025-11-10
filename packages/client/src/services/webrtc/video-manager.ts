@@ -1,6 +1,7 @@
 import { useVoiceStore } from '../../stores/voice'
 import { useVoiceSettingsStore } from '../../stores/voice-settings'
 import type { PeerConnection } from './types'
+import { wsService } from '../websocket'
 
 /**
  * Manages video/camera functionality including enable/disable, device switching,
@@ -18,6 +19,7 @@ export class VideoManager {
   }
   private qualityAdjustmentTimeout: number | null = null
   private peers: Map<number, PeerConnection> = new Map()
+  private currentChannelId: number | null = null
 
   setLocalStream(stream: MediaStream | null): void {
     this.localStream = stream
@@ -25,6 +27,10 @@ export class VideoManager {
 
   setPeers(peers: Map<number, PeerConnection>): void {
     this.peers = peers
+  }
+
+  setCurrentChannelId(channelId: number | null): void {
+    this.currentChannelId = channelId
   }
 
   /**
@@ -568,17 +574,11 @@ export class VideoManager {
                   // Don't use SimplePeer's emit as it causes the remote to create a new connection
                   console.log(`[VideoManager] Created renegotiation offer for peer ${userId}`)
 
-                  // Get WebRTC service to access current channel ID
-                  const webrtcService = require('../index')
-                  const channelId = webrtcService.webrtcService.getCurrentChannelId()
-
-                  if (!channelId) {
+                  if (!this.currentChannelId) {
                     console.error('[VideoManager] No channel ID available for renegotiation')
                     return
                   }
 
-                  // Import wsService to send offer directly
-                  const { wsService } = require('../../websocket')
                   const socket = wsService.getSocket()
 
                   if (socket) {
@@ -586,7 +586,7 @@ export class VideoManager {
                     socket.emit('voice-offer', {
                       targetUserId: userId,
                       offer: offer,
-                      channelId: channelId,
+                      channelId: this.currentChannelId,
                     })
                     console.log(
                       `[VideoManager] Sent renegotiation offer to peer ${userId} via WebSocket`

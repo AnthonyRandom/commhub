@@ -271,6 +271,7 @@ class WebRTCService {
   setCurrentChannelId(channelId: number | null): void {
     this.currentChannelId = channelId
     this.peerManager.setCurrentChannelId(channelId)
+    this.videoManager.setCurrentChannelId(channelId)
   }
 
   /**

@@ -8,6 +8,7 @@ import { voiceSettingsManager } from './settings-manager'
 import { voiceDeviceManager } from './device-manager'
 import { voiceQualityMonitor } from './quality-monitor'
 import { voiceCameraManager } from './camera-manager'
+import { voiceScreenShareManager } from './screen-share-manager'
 import { logger } from '../../utils/logger'
 import { handleError } from '../../utils/errors'
 
@@ -24,6 +25,7 @@ export class VoiceConnectionManager {
   readonly devices = voiceDeviceManager
   readonly quality = voiceQualityMonitor
   readonly camera = voiceCameraManager
+  readonly screenShare = voiceScreenShareManager
 
   initialize(): void {
     if (this.isInitialized) {
@@ -47,6 +49,7 @@ export class VoiceConnectionManager {
 
       // Set current channel
       webrtcService.setCurrentChannelId(channelId)
+      voiceScreenShareManager.setCurrentChannelId(channelId)
       useVoiceStore.getState().setConnectedChannel(channelId)
 
       // Add local user to voice store
@@ -58,6 +61,7 @@ export class VoiceConnectionManager {
           isSpeaking: false,
           isMuted: useVoiceStore.getState().isMuted,
           hasVideo: false,
+          hasScreenShare: false,
           connectionStatus: 'connected',
           connectionQuality: 'excellent',
           localMuted: false,
@@ -67,6 +71,9 @@ export class VoiceConnectionManager {
 
       // Tell server we're joining
       wsService.getSocket()?.emit('join-voice-channel', { channelId, reconnecting })
+
+      // Track voice channel state in WebSocket service for reconnection
+      wsService.setVoiceChannelState(channelId)
 
       // Play join sound
       if (!reconnecting && voiceSettingsManager.shouldPlaySounds()) {
@@ -99,6 +106,9 @@ export class VoiceConnectionManager {
 
     // Notify server we're leaving
     wsService.getSocket()?.emit('leave-voice-channel', { channelId })
+
+    // Clear voice channel state in WebSocket service
+    wsService.clearVoiceChannelState()
 
     // Clean up WebRTC connections
     webrtcService.cleanup()
@@ -152,6 +162,10 @@ export class VoiceConnectionManager {
   isCameraEnabled = () => this.camera.isCameraEnabled()
   getAvailableVideoDevices = () => this.camera.getAvailableVideoDevices()
   switchVideoDevice = (deviceId: string) => this.camera.switchVideoDevice(deviceId)
+
+  enableScreenShare = (captureAudio: boolean) => this.screenShare.enableScreenShare(captureAudio)
+  disableScreenShare = () => this.screenShare.disableScreenShare()
+  isScreenShareEnabled = () => this.screenShare.isScreenShareEnabled()
 }
 
 export const voiceConnectionManager = new VoiceConnectionManager()

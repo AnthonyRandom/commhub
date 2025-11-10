@@ -27,6 +27,8 @@ export class VoiceSignalingHandler {
     socket.on('voice-reconnect-request', this.handleVoiceReconnectRequest.bind(this))
     socket.on('voice-camera-enabled', this.handleVoiceCameraEnabled.bind(this))
     socket.on('voice-camera-disabled', this.handleVoiceCameraDisabled.bind(this))
+    socket.on('voice-screen-share-enabled', this.handleVoiceScreenShareEnabled.bind(this))
+    socket.on('voice-screen-share-disabled', this.handleVoiceScreenShareDisabled.bind(this))
   }
 
   private handleVoiceChannelUsers(data: {
@@ -56,6 +58,7 @@ export class VoiceSignalingHandler {
         isSpeaking: false,
         isMuted: false,
         hasVideo: false,
+        hasScreenShare: false,
         connectionStatus: 'connecting',
         connectionQuality: 'connecting',
         localMuted: false,
@@ -95,6 +98,7 @@ export class VoiceSignalingHandler {
       isSpeaking: false,
       isMuted: false,
       hasVideo: false,
+      hasScreenShare: false,
       connectionStatus: 'connecting',
       connectionQuality: 'connecting',
       localMuted: false,
@@ -204,6 +208,7 @@ export class VoiceSignalingHandler {
         isSpeaking: false,
         isMuted: false,
         hasVideo: false,
+        hasScreenShare: false,
         connectionStatus: 'connecting',
         connectionQuality: 'connecting',
         localMuted: false,
@@ -381,6 +386,36 @@ export class VoiceSignalingHandler {
 
     // Update user's video state in the store
     useVoiceStore.getState().updateUserVideo(data.userId, false)
+  }
+
+  private handleVoiceScreenShareEnabled(data: {
+    channelId: number
+    userId: number
+    username: string
+  }): void {
+    logger.info('VoiceSignaling', 'User enabled screen share', {
+      channelId: data.channelId,
+      userId: data.userId,
+      username: data.username,
+    })
+
+    // Update user's screen share state in the store
+    useVoiceStore.getState().updateUserScreenShare(data.userId, true)
+  }
+
+  private handleVoiceScreenShareDisabled(data: {
+    channelId: number
+    userId: number
+    username: string
+  }): void {
+    logger.info('VoiceSignaling', 'User disabled screen share', {
+      channelId: data.channelId,
+      userId: data.userId,
+      username: data.username,
+    })
+
+    // Update user's screen share state in the store
+    useVoiceStore.getState().updateUserScreenShare(data.userId, false)
   }
 }
 

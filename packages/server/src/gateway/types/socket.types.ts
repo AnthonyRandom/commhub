@@ -10,4 +10,5 @@ export interface VoiceMember {
   userId: number;
   username: string;
   hasCamera: boolean;
+  hasScreenShare: boolean;
 }

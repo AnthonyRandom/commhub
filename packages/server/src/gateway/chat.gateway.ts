@@ -408,6 +408,47 @@ export class ChatGateway
     );
   }
 
+  // Screen Share Controls
+  @SubscribeMessage('screen-share-enabled')
+  async handleScreenShareEnabled(
+    @MessageBody() data: { channelId: number },
+    @ConnectedSocket() client: AuthenticatedSocket
+  ) {
+    this.voiceSignalingHandler.handleScreenShareEnabled(
+      this.server,
+      this.userVoiceChannels,
+      data,
+      client
+    );
+    await this.voiceChannelManager.handleScreenShareEnabled(
+      this.server,
+      this.userVoiceChannels,
+      this.voiceChannelMembers,
+      data,
+      client
+    );
+  }
+
+  @SubscribeMessage('screen-share-disabled')
+  async handleScreenShareDisabled(
+    @MessageBody() data: { channelId: number },
+    @ConnectedSocket() client: AuthenticatedSocket
+  ) {
+    this.voiceSignalingHandler.handleScreenShareDisabled(
+      this.server,
+      this.userVoiceChannels,
+      data,
+      client
+    );
+    await this.voiceChannelManager.handleScreenShareDisabled(
+      this.server,
+      this.userVoiceChannels,
+      this.voiceChannelMembers,
+      data,
+      client
+    );
+  }
+
   // Public methods for external controllers
   public notifyChannelCreated(serverId: number, channel: any) {
     this.channelEventsHandler.notifyChannelCreated(

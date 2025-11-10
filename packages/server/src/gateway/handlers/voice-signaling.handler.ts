@@ -258,4 +258,84 @@ export class VoiceSignalingHandler {
       this.logger.error('Error handling voice mute status:', error.message);
     }
   }
+
+  handleScreenShareEnabled(
+    server: Server,
+    userVoiceChannels: LRUCache<number, number>,
+    data: { channelId: number },
+    client: AuthenticatedSocket
+  ) {
+    try {
+      if (
+        !data.channelId ||
+        typeof data.channelId !== 'number' ||
+        data.channelId <= 0
+      ) {
+        return;
+      }
+
+      // Check if user is in the voice channel
+      const userVoiceChannel = userVoiceChannels.get(client.userId);
+
+      if (userVoiceChannel === data.channelId) {
+        // Broadcast screen share status to other users in the channel
+        const roomName = `voice-${data.channelId}`;
+        client.to(roomName).emit('voice-screen-share-enabled', {
+          channelId: data.channelId,
+          userId: client.userId,
+          username: client.username,
+        });
+        this.logger.log(
+          `[Voice] User ${client.username} (${client.userId}) started screen sharing in channel ${data.channelId}`
+        );
+        return;
+      }
+
+      this.logger.warn(
+        `[Voice] User ${client.username} (${client.userId}) attempted to start screen sharing in channel ${data.channelId} but is not joined`
+      );
+    } catch (error) {
+      this.logger.error('Error handling screen share enabled:', error.message);
+    }
+  }
+
+  handleScreenShareDisabled(
+    server: Server,
+    userVoiceChannels: LRUCache<number, number>,
+    data: { channelId: number },
+    client: AuthenticatedSocket
+  ) {
+    try {
+      if (
+        !data.channelId ||
+        typeof data.channelId !== 'number' ||
+        data.channelId <= 0
+      ) {
+        return;
+      }
+
+      // Check if user is in the voice channel
+      const userVoiceChannel = userVoiceChannels.get(client.userId);
+
+      if (userVoiceChannel === data.channelId) {
+        // Broadcast screen share status to other users in the channel
+        const roomName = `voice-${data.channelId}`;
+        client.to(roomName).emit('voice-screen-share-disabled', {
+          channelId: data.channelId,
+          userId: client.userId,
+          username: client.username,
+        });
+        this.logger.log(
+          `[Voice] User ${client.username} (${client.userId}) stopped screen sharing in channel ${data.channelId}`
+        );
+        return;
+      }
+
+      this.logger.warn(
+        `[Voice] User ${client.username} (${client.userId}) attempted to stop screen sharing in channel ${data.channelId} but is not joined`
+      );
+    } catch (error) {
+      this.logger.error('Error handling screen share disabled:', error.message);
+    }
+  }
 }

@@ -11,6 +11,7 @@ import VoiceControls from './VoiceControls'
 import GifPicker from './GifPicker'
 import EmojiPicker from './EmojiPicker'
 import { VoiceChannelParticipants } from './chat/VoiceChannelParticipants'
+import { FocusedStreamView } from './chat/FocusedStreamView'
 import { MessageInput } from './chat/MessageInput'
 import { MessageItem } from './chat/MessageItem'
 import type { Channel, Server, Message } from '../services/api'
@@ -65,9 +66,17 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   const { getTimeFormat } = useSettingsStore()
   const { blockedUsers } = useFriendsStore()
 
-  const { connectedChannelId, isConnecting } = useVoiceStore()
+  const { connectedChannelId, isConnecting, connectedUsers, focusedStreamUserId } = useVoiceStore()
   const isVoiceChannel = selectedChannel?.type === 'voice'
   const isConnectedToVoice = connectedChannelId === selectedChannel?.id
+
+  // Get focused user data
+  const focusedUser = focusedStreamUserId ? connectedUsers.get(focusedStreamUserId) : null
+  const focusedStream = focusedUser?.hasScreenShare
+    ? focusedUser.screenShareStream || focusedUser.stream
+    : focusedUser?.hasVideo
+      ? focusedUser.videoStream || focusedUser.stream
+      : undefined
 
   // Helper function to check if a user is blocked
   const isUserBlocked = (userId: number) => {
@@ -338,7 +347,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
         </div>
 
         {/* Voice Channel Content */}
-        <div className="flex-1 flex items-center justify-center p-8 overflow-y-auto">
+        <div className="flex-1 flex items-center justify-center p-8 overflow-y-auto relative">
           {!isConnectedToVoice && !isConnecting ? (
             <div className="text-center max-w-md">
               <div className="w-24 h-24 bg-grey-850 border-2 border-grey-700 flex items-center justify-center mx-auto mb-6">
@@ -357,6 +366,13 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
                 Join Voice Channel
               </button>
             </div>
+          ) : focusedUser && focusedStreamUserId ? (
+            <FocusedStreamView
+              user={focusedUser}
+              stream={focusedStream}
+              isScreenShare={focusedUser.hasScreenShare}
+              onClose={() => useVoiceStore.getState().setFocusedStreamUserId(null)}
+            />
           ) : (
             <VoiceChannelParticipants />
           )}

@@ -15,10 +15,12 @@ export interface VoiceUser {
   isSpeaking: boolean
   isMuted: boolean
   hasVideo: boolean
+  hasScreenShare: boolean
   connectionStatus: ConnectionStatus
   connectionQuality: ConnectionQuality
   stream?: MediaStream
   videoStream?: MediaStream
+  screenShareStream?: MediaStream
   localMuted: boolean
   localVolume: number
 }
@@ -39,6 +41,11 @@ interface VoiceState {
   localStream: MediaStream | null
   localVideoEnabled: boolean
   localVideoStream: MediaStream | null
+  localScreenShareEnabled: boolean
+  localScreenShareStream: MediaStream | null
+
+  // Focused stream for expanding
+  focusedStreamUserId: number | null
 
   // Voice channel participants
   connectedUsers: Map<number, VoiceUser>
@@ -52,13 +59,18 @@ interface VoiceState {
   setLocalStream: (stream: MediaStream | null) => void
   setLocalVideoEnabled: (enabled: boolean) => void
   setLocalVideoStream: (stream: MediaStream | null) => void
+  setLocalScreenShareEnabled: (enabled: boolean) => void
+  setLocalScreenShareStream: (stream: MediaStream | null) => void
+  setFocusedStreamUserId: (userId: number | null) => void
   addConnectedUser: (user: VoiceUser) => void
   removeConnectedUser: (userId: number) => void
   updateUserSpeaking: (userId: number, isSpeaking: boolean) => void
   updateUserMuted: (userId: number, isMuted: boolean) => void
   updateUserVideo: (userId: number, hasVideo: boolean) => void
+  updateUserScreenShare: (userId: number, hasScreenShare: boolean) => void
   updateUserStream: (userId: number, stream: MediaStream) => void
   updateUserVideoStream: (userId: number, stream: MediaStream) => void
+  updateUserScreenShareStream: (userId: number, stream: MediaStream) => void
   updateUserConnectionStatus: (userId: number, status: ConnectionStatus) => void
   updateUserConnectionQuality: (userId: number, quality: ConnectionQuality) => void
   setUserLocalMuted: (userId: number, muted: boolean) => void
@@ -83,6 +95,9 @@ export const useVoiceStore = create<VoiceState>((set) => ({
   localStream: null,
   localVideoEnabled: false,
   localVideoStream: null,
+  localScreenShareEnabled: false,
+  localScreenShareStream: null,
+  focusedStreamUserId: null,
   connectedUsers: new Map(),
 
   // Actions
@@ -127,6 +142,12 @@ export const useVoiceStore = create<VoiceState>((set) => ({
 
   setLocalVideoStream: (stream) => set({ localVideoStream: stream }),
 
+  setLocalScreenShareEnabled: (enabled) => set({ localScreenShareEnabled: enabled }),
+
+  setLocalScreenShareStream: (stream) => set({ localScreenShareStream: stream }),
+
+  setFocusedStreamUserId: (userId) => set({ focusedStreamUserId: userId }),
+
   addConnectedUser: (user) =>
     set((state) => {
       const newUsers = new Map(state.connectedUsers)
@@ -135,6 +156,7 @@ export const useVoiceStore = create<VoiceState>((set) => ({
         ...user,
         connectionQuality: user.connectionQuality || 'unknown',
         hasVideo: user.hasVideo || false,
+        hasScreenShare: user.hasScreenShare || false,
       }
       newUsers.set(user.userId, userWithDefaults)
       return { connectedUsers: newUsers }
@@ -184,6 +206,16 @@ export const useVoiceStore = create<VoiceState>((set) => ({
       return { connectedUsers: newUsers }
     }),
 
+  updateUserScreenShare: (userId, hasScreenShare) =>
+    set((state) => {
+      const newUsers = new Map(state.connectedUsers)
+      const user = newUsers.get(userId)
+      if (user) {
+        newUsers.set(userId, { ...user, hasScreenShare })
+      }
+      return { connectedUsers: newUsers }
+    }),
+
   updateUserStream: (userId, stream) =>
     set((state) => {
       const newUsers = new Map(state.connectedUsers)
@@ -200,6 +232,16 @@ export const useVoiceStore = create<VoiceState>((set) => ({
       const user = newUsers.get(userId)
       if (user) {
         newUsers.set(userId, { ...user, videoStream: stream })
+      }
+      return { connectedUsers: newUsers }
+    }),
+
+  updateUserScreenShareStream: (userId, stream) =>
+    set((state) => {
+      const newUsers = new Map(state.connectedUsers)
+      const user = newUsers.get(userId)
+      if (user) {
+        newUsers.set(userId, { ...user, screenShareStream: stream })
       }
       return { connectedUsers: newUsers }
     }),
@@ -281,6 +323,11 @@ export const useVoiceStore = create<VoiceState>((set) => ({
         state.localVideoStream.getTracks().forEach((track) => track.stop())
       }
 
+      // Stop local screen share stream
+      if (state.localScreenShareStream) {
+        state.localScreenShareStream.getTracks().forEach((track) => track.stop())
+      }
+
       // Stop all remote streams
       state.connectedUsers.forEach((user) => {
         if (user.stream) {
@@ -288,6 +335,9 @@ export const useVoiceStore = create<VoiceState>((set) => ({
         }
         if (user.videoStream) {
           user.videoStream.getTracks().forEach((track) => track.stop())
+        }
+        if (user.screenShareStream) {
+          user.screenShareStream.getTracks().forEach((track) => track.stop())
         }
       })
 
@@ -302,6 +352,9 @@ export const useVoiceStore = create<VoiceState>((set) => ({
         localStream: null,
         localVideoEnabled: false,
         localVideoStream: null,
+        localScreenShareEnabled: false,
+        localScreenShareStream: null,
+        focusedStreamUserId: null,
         connectedUsers: new Map(),
       }
     }),

@@ -195,8 +195,7 @@ class WebRTCService {
    * Set user local muted state
    */
   setUserLocalMuted(userId: number, muted: boolean): void {
-    // This is handled in the voice store directly, WebRTC doesn't need to know
-    console.log('[WebRTC] User local mute state changed:', userId, muted)
+    this.peerManager.setUserLocalMuted(userId, muted)
   }
 
   /**

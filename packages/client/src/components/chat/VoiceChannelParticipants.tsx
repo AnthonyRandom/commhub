@@ -18,10 +18,18 @@ const speakingAnimationStyle = `
 
 // Twitter Spaces-style voice participant grid with video support
 export const VoiceChannelParticipants: React.FC = () => {
-  const { connectedUsers, isMuted, isDeafened, isConnecting, localVideoEnabled, localVideoStream } =
-    useVoiceStore()
+  const {
+    connectedUsers,
+    isMuted,
+    isDeafened,
+    isConnecting,
+    localVideoEnabled,
+    localVideoStream,
+    localScreenShareEnabled,
+    localScreenShareStream,
+    focusedStreamUserId,
+  } = useVoiceStore()
   const { user } = useAuthStore()
-  const [selectedUser, setSelectedUser] = useState<number | null>(null)
   const [showVolumeSlider, setShowVolumeSlider] = useState<number | null>(null)
   const localVideoRef = useRef<HTMLVideoElement>(null)
 
@@ -35,17 +43,20 @@ export const VoiceChannelParticipants: React.FC = () => {
     }
   }, [])
 
-  // Set local video stream
+  // Set local video/screen share stream
   useEffect(() => {
     if (localVideoRef.current) {
-      if (localVideoStream && localVideoEnabled) {
+      // Screen share takes priority over camera
+      if (localScreenShareStream && localScreenShareEnabled) {
+        localVideoRef.current.srcObject = localScreenShareStream
+      } else if (localVideoStream && localVideoEnabled) {
         localVideoRef.current.srcObject = localVideoStream
       } else {
-        // Clear video source when camera is disabled
+        // Clear video source when both are disabled
         localVideoRef.current.srcObject = null
       }
     }
-  }, [localVideoStream, localVideoEnabled])
+  }, [localVideoStream, localVideoEnabled, localScreenShareStream, localScreenShareEnabled])
 
   if (isConnecting) {
     return (
@@ -81,9 +92,13 @@ export const VoiceChannelParticipants: React.FC = () => {
     voiceManager.setUserVolume(userId, volume)
   }
 
-  const handleUserClick = (userId: number, isCurrentUser: boolean) => {
-    if (isCurrentUser) return
-    setSelectedUser(selectedUser === userId ? null : userId)
+  const handleStreamClick = (userId: number) => {
+    // Toggle focused stream
+    if (focusedStreamUserId === userId) {
+      useVoiceStore.getState().setFocusedStreamUserId(null)
+    } else {
+      useVoiceStore.getState().setFocusedStreamUserId(userId)
+    }
     setShowVolumeSlider(null)
   }
 
@@ -115,9 +130,17 @@ export const VoiceChannelParticipants: React.FC = () => {
             justifySelf: connectedUsersArray.length === 0 ? 'center' : 'auto',
           }}
         >
-          {/* Avatar or Video */}
-          <div className="relative">
-            {localVideoEnabled && localVideoStream ? (
+          {/* Avatar or Video/Screen Share */}
+          <div
+            className="relative cursor-pointer"
+            onClick={() => {
+              if (user && (localVideoEnabled || localScreenShareEnabled)) {
+                handleStreamClick(user.id)
+              }
+            }}
+          >
+            {(localVideoEnabled || localScreenShareEnabled) &&
+            (localVideoStream || localScreenShareStream) ? (
               <div
                 className={`transition-all duration-300 border-4 overflow-hidden ${
                   currentUser.isSpeaking ? 'border-white' : 'border-grey-800'
@@ -130,7 +153,7 @@ export const VoiceChannelParticipants: React.FC = () => {
                   muted
                   playsInline
                   className="w-full h-full object-cover"
-                  style={{ transform: 'scaleX(-1)' }}
+                  style={localScreenShareEnabled ? {} : { transform: 'scaleX(-1)' }}
                 />
               </div>
             ) : (
@@ -171,20 +194,23 @@ export const VoiceChannelParticipants: React.FC = () => {
         {/* Other Users */}
         {connectedUsersArray.map((participant, index) => {
           const voiceUser = connectedUsers.get(participant.userId)
-          const isSelected = selectedUser === participant.userId
           const hasVideo = voiceUser?.hasVideo || false
-          const videoStream = voiceUser?.videoStream || voiceUser?.stream
+          const hasScreenShare = voiceUser?.hasScreenShare || false
+          // Screen share takes priority over camera
+          const displayStream = hasScreenShare
+            ? voiceUser?.screenShareStream || voiceUser?.stream
+            : voiceUser?.videoStream || voiceUser?.stream
 
           return (
             <RemoteParticipantVideo
               key={participant.userId}
               participant={participant}
               voiceUser={voiceUser}
-              isSelected={isSelected}
               hasVideo={hasVideo}
-              videoStream={videoStream}
+              hasScreenShare={hasScreenShare}
+              videoStream={displayStream}
               index={index}
-              onUserClick={() => handleUserClick(participant.userId, false)}
+              onUserClick={() => handleStreamClick(participant.userId)}
               onUserLocalMute={(e) => handleUserLocalMute(participant.userId, e)}
               onToggleVolumeSlider={(e) => toggleVolumeSlider(participant.userId, e)}
               showVolumeSlider={showVolumeSlider === participant.userId}

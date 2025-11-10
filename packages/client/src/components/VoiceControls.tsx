@@ -7,12 +7,15 @@ import {
   PhoneOff,
   Camera,
   CameraOff,
+  Monitor,
+  MonitorOff,
   ChevronDown,
 } from 'lucide-react'
 import { useVoiceStore } from '../stores/voice'
 import { voiceManager } from '../services/voice-manager'
 import { soundManager } from '../services/sound-manager'
 import { useVoiceSettingsStore } from '../stores/voice-settings'
+import ScreenShareModal from './ScreenShareModal'
 import type { Channel } from '../services/api'
 
 interface VoiceControlsProps {
@@ -27,8 +30,10 @@ const VoiceControls: React.FC<VoiceControlsProps> = ({ channel }) => {
     isConnecting,
     connectionError,
     localVideoEnabled,
+    localScreenShareEnabled,
   } = useVoiceStore()
   const [showCameraPreview, setShowCameraPreview] = useState(false)
+  const [showScreenShareModal, setShowScreenShareModal] = useState(false)
   const [previewStream, setPreviewStream] = useState<MediaStream | null>(null)
   const [selectedDevice, setSelectedDevice] = useState<string>('')
   const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([])
@@ -62,6 +67,27 @@ const VoiceControls: React.FC<VoiceControlsProps> = ({ channel }) => {
       }
     } else {
       setShowCameraPreview(true)
+    }
+  }
+
+  const handleToggleScreenShare = async () => {
+    if (localScreenShareEnabled) {
+      try {
+        await voiceManager.disableScreenShare()
+      } catch (err) {
+        console.error('Failed to disable screen share:', err)
+      }
+    } else {
+      setShowScreenShareModal(true)
+    }
+  }
+
+  const handleStartScreenShare = async (captureAudio: boolean) => {
+    try {
+      await voiceManager.enableScreenShare(captureAudio)
+    } catch (err) {
+      console.error('Failed to start screen share:', err)
+      throw err
     }
   }
 
@@ -249,6 +275,25 @@ const VoiceControls: React.FC<VoiceControlsProps> = ({ channel }) => {
           </button>
 
           <button
+            onClick={handleToggleScreenShare}
+            className={`flex-1 p-2.5 border-2 font-bold text-xs transition-all duration-100 ${
+              localScreenShareEnabled
+                ? 'bg-grey-850 border-grey-700 text-white hover:bg-grey-800 hover:border-white'
+                : 'bg-grey-850 border-grey-700 text-white hover:bg-grey-800 hover:border-white'
+            }`}
+            title={localScreenShareEnabled ? 'Stop Screen Share' : 'Start Screen Share'}
+          >
+            <div className="flex items-center justify-center gap-1.5">
+              {localScreenShareEnabled ? (
+                <MonitorOff className="w-3.5 h-3.5" />
+              ) : (
+                <Monitor className="w-3.5 h-3.5" />
+              )}
+              <span>{localScreenShareEnabled ? 'Sharing' : 'Share'}</span>
+            </div>
+          </button>
+
+          <button
             onClick={handleDisconnect}
             className="p-2.5 bg-red-900 border-2 border-red-700 text-white hover:bg-red-800 hover:border-red-500 transition-all duration-100"
             title="Disconnect"
@@ -373,6 +418,13 @@ const VoiceControls: React.FC<VoiceControlsProps> = ({ channel }) => {
           </div>
         </div>
       )}
+
+      {/* Screen Share Modal */}
+      <ScreenShareModal
+        isOpen={showScreenShareModal}
+        onClose={() => setShowScreenShareModal(false)}
+        onStartScreenShare={handleStartScreenShare}
+      />
     </div>
   )
 }

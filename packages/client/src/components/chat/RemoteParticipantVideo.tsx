@@ -4,8 +4,8 @@ import { MicOff, VolumeX, Volume2, Volume1 } from 'lucide-react'
 interface RemoteParticipantVideoProps {
   participant: any
   voiceUser: any
-  isSelected: boolean
   hasVideo: boolean
+  hasScreenShare: boolean
   videoStream: MediaStream | undefined
   index: number
   onUserClick: () => void
@@ -19,8 +19,8 @@ interface RemoteParticipantVideoProps {
 export const RemoteParticipantVideo: React.FC<RemoteParticipantVideoProps> = ({
   participant,
   voiceUser,
-  isSelected,
   hasVideo,
+  hasScreenShare,
   videoStream,
   index,
   onUserClick,
@@ -30,18 +30,32 @@ export const RemoteParticipantVideo: React.FC<RemoteParticipantVideoProps> = ({
   onUserVolumeChange,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const [showContextMenu, setShowContextMenu] = React.useState(false)
 
   // Set video stream on remote video element
   useEffect(() => {
     if (videoRef.current) {
-      if (videoStream && hasVideo) {
+      if (videoStream && (hasVideo || hasScreenShare)) {
         videoRef.current.srcObject = videoStream
       } else {
-        // Clear video source when camera is disabled
+        // Clear video source when both are disabled
         videoRef.current.srcObject = null
       }
     }
-  }, [videoStream, hasVideo])
+  }, [videoStream, hasVideo, hasScreenShare])
+
+  const handleRightClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    setShowContextMenu(!showContextMenu)
+  }
+
+  const handleClick = (e: React.MouseEvent) => {
+    // Only call onUserClick if clicking on video/avatar, not on controls
+    if (!(e.target as HTMLElement).closest('.controls-panel')) {
+      onUserClick()
+      setShowContextMenu(false)
+    }
+  }
 
   return (
     <div
@@ -49,18 +63,25 @@ export const RemoteParticipantVideo: React.FC<RemoteParticipantVideoProps> = ({
       style={{
         animationDelay: `${index * 50}ms`,
       }}
-      onClick={onUserClick}
+      onClick={handleClick}
+      onContextMenu={handleRightClick}
     >
-      {/* Avatar or Video */}
+      {/* Avatar or Video/Screen Share */}
       <div className="relative">
-        {hasVideo && videoStream ? (
+        {(hasVideo || hasScreenShare) && videoStream ? (
           <div
             className={`transition-all duration-300 border-4 overflow-hidden ${
               participant.isSpeaking ? 'border-white' : 'border-grey-800'
-            } ${isSelected ? 'ring-2 ring-grey-600' : ''}`}
+            }`}
             style={{ width: '256px', aspectRatio: '16/9' }}
           >
-            <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              className="w-full h-full object-cover"
+              style={hasScreenShare ? {} : {}}
+            />
           </div>
         ) : (
           <div
@@ -68,7 +89,7 @@ export const RemoteParticipantVideo: React.FC<RemoteParticipantVideoProps> = ({
               participant.isSpeaking
                 ? 'bg-white border-white'
                 : 'bg-grey-800 border-grey-800 hover:bg-grey-750'
-            } ${isSelected ? 'ring-2 ring-grey-600' : ''}`}
+            }`}
           >
             <span
               className={`font-bold text-3xl transition-colors ${
@@ -102,13 +123,16 @@ export const RemoteParticipantVideo: React.FC<RemoteParticipantVideoProps> = ({
         <p className="text-white font-bold text-sm">{participant.username}</p>
       </div>
 
-      {/* Controls panel - shown when selected */}
-      {isSelected && voiceUser && (
-        <div className="absolute top-full mt-4 z-50 animate-slide-up">
+      {/* Controls panel - shown on right-click */}
+      {showContextMenu && voiceUser && (
+        <div className="absolute top-full mt-4 z-50 animate-slide-up controls-panel">
           <div className="bg-grey-950 border-2 border-grey-700 p-4 min-w-[240px] shadow-xl">
             <div className="flex gap-2 mb-3">
               <button
-                onClick={onUserLocalMute}
+                onClick={(e) => {
+                  onUserLocalMute(e)
+                  setShowContextMenu(false)
+                }}
                 className={`flex-1 p-3 border-2 transition-all duration-100 text-sm font-bold ${
                   voiceUser.localMuted
                     ? 'bg-red-900 border-red-700 text-white hover:bg-red-800'

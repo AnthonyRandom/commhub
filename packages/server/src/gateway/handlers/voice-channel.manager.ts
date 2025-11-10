@@ -140,6 +140,7 @@ export class VoiceChannelManager {
                 userId: authSocket.userId,
                 username: authSocket.username,
                 hasCamera: false,
+                hasScreenShare: false,
               });
 
               // CRITICAL: Also track in userVoiceChannels to maintain consistency
@@ -185,6 +186,7 @@ export class VoiceChannelManager {
           userId: client.userId,
           username: client.username,
           hasCamera: false,
+          hasScreenShare: false,
         });
         this.logger.log(
           `[Voice] Added ${client.username} (${client.userId}) to voice channel ${data.channelId} members`
@@ -324,6 +326,7 @@ export class VoiceChannelManager {
             userId: client.userId,
             username: client.username,
             hasCamera: true,
+            hasScreenShare: userMember.hasScreenShare || false,
           });
 
           this.logger.log(
@@ -392,6 +395,7 @@ export class VoiceChannelManager {
             userId: client.userId,
             username: client.username,
             hasCamera: false,
+            hasScreenShare: userMember.hasScreenShare || false,
           });
 
           this.logger.log(
@@ -417,6 +421,131 @@ export class VoiceChannelManager {
     } catch (error) {
       this.logger.error('Error disabling camera:', error.message);
       client.emit('error', { message: 'Failed to disable camera' });
+    }
+  }
+
+  async handleScreenShareEnabled(
+    server: Server,
+    userVoiceChannels: LRUCache<number, number>,
+    voiceChannelMembers: Map<number, Set<VoiceMember>>,
+    data: { channelId: number },
+    client: AuthenticatedSocket
+  ) {
+    try {
+      // Validate input
+      if (
+        !data.channelId ||
+        typeof data.channelId !== 'number' ||
+        data.channelId <= 0
+      ) {
+        client.emit('error', { message: 'Invalid channel ID' });
+        return;
+      }
+
+      // Verify user is in this voice channel
+      const userChannel = userVoiceChannels.get(client.userId);
+      if (userChannel !== data.channelId) {
+        this.logger.warn(
+          `[ScreenShare] User ${client.username} (${client.userId}) tried to enable screen share in channel ${data.channelId} but is not in that voice channel`
+        );
+        client.emit('error', {
+          message: 'You must be in the voice channel to enable screen share',
+        });
+        return;
+      }
+
+      // Update member's screen share state
+      const members = voiceChannelMembers.get(data.channelId);
+      if (members) {
+        const memberArray = Array.from(members);
+        const userMember = memberArray.find(m => m.userId === client.userId);
+
+        if (userMember) {
+          // Remove old member object and add updated one
+          members.delete(userMember);
+          members.add({
+            userId: client.userId,
+            username: client.username,
+            hasCamera: userMember.hasCamera || false,
+            hasScreenShare: true,
+          });
+
+          this.logger.log(
+            `[ScreenShare] ${client.username} (${client.userId}) enabled screen share in channel ${data.channelId}`
+          );
+
+          // Broadcast updated member list
+          await this.broadcastVoiceChannelMembers(
+            server,
+            voiceChannelMembers,
+            data.channelId
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.error('Error enabling screen share:', error.message);
+      client.emit('error', { message: 'Failed to enable screen share' });
+    }
+  }
+
+  async handleScreenShareDisabled(
+    server: Server,
+    userVoiceChannels: LRUCache<number, number>,
+    voiceChannelMembers: Map<number, Set<VoiceMember>>,
+    data: { channelId: number },
+    client: AuthenticatedSocket
+  ) {
+    try {
+      // Validate input
+      if (
+        !data.channelId ||
+        typeof data.channelId !== 'number' ||
+        data.channelId <= 0
+      ) {
+        client.emit('error', { message: 'Invalid channel ID' });
+        return;
+      }
+
+      // Verify user is in this voice channel
+      const userChannel = userVoiceChannels.get(client.userId);
+      if (userChannel !== data.channelId) {
+        this.logger.warn(
+          `[ScreenShare] User ${client.username} (${client.userId}) tried to disable screen share in channel ${data.channelId} but is not in that voice channel`
+        );
+        return;
+      }
+
+      // Update member's screen share state
+      const members = voiceChannelMembers.get(data.channelId);
+      if (members) {
+        const memberArray = Array.from(members);
+        const userMember = memberArray.find(m => m.userId === client.userId);
+
+        if (userMember) {
+          // Remove old member object and add updated one
+          members.delete(userMember);
+          members.add({
+            userId: client.userId,
+            username: client.username,
+            hasCamera: userMember.hasCamera || false,
+            hasScreenShare: false,
+          });
+
+          this.logger.log(
+            `[ScreenShare] ${client.username} (${client.userId}) disabled screen share in channel ${data.channelId}`
+          );
+
+          // Broadcast updated member list
+          await this.broadcastVoiceChannelMembers(
+            server,
+            voiceChannelMembers,
+            data.channelId
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.error('Error disabling screen share:', error.message);
+      client.emit('error', { message: 'Failed to disable screen share' });
     }
   }
 

@@ -57,9 +57,10 @@ export class VoiceSettingsManager {
   }
 
   setUserVolume(userId: number, volume: number): void {
-    const volumePercentage = Math.max(0, Math.min(200, volume))
-    useVoiceStore.getState().setUserLocalVolume(userId, volumePercentage / 100)
-    webrtcService.setUserVolume(userId, volumePercentage)
+    // Volume comes in as 0-2.0 range (0-200%)
+    const normalizedVolume = Math.max(0, Math.min(2.0, volume))
+    useVoiceStore.getState().setUserLocalVolume(userId, normalizedVolume)
+    webrtcService.setUserVolume(userId, normalizedVolume)
   }
 
   updateVoiceSettings(settings: { attenuation?: number; masterVolume?: number }): void {

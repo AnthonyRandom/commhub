@@ -9,7 +9,9 @@ import type { PeerConnection } from './types'
 export class VideoManager {
   private localStream: MediaStream | null = null
   private localVideoStream: MediaStream | null = null
+  private localScreenShareStream: MediaStream | null = null
   private videoEnabled = false
+  private screenShareEnabled = false
   private currentVideoQuality: { resolution: '360p' | '480p' | '720p'; frameRate: 15 | 30 } = {
     resolution: '720p',
     frameRate: 30,
@@ -87,6 +89,12 @@ export class VideoManager {
       if (this.videoEnabled) {
         console.log('[VideoManager] Camera already enabled')
         return
+      }
+
+      // If screen share is enabled, disable it first
+      if (this.screenShareEnabled) {
+        console.log('[VideoManager] Disabling screen share before enabling camera')
+        await this.disableScreenShare()
       }
 
       // Get video constraints
@@ -455,6 +463,145 @@ export class VideoManager {
   }
 
   /**
+   * Enable screen share and replace video track in all peer connections
+   */
+  async enableScreenShare(screenShareStream: MediaStream): Promise<void> {
+    try {
+      console.log('[VideoManager] Enabling screen share...')
+
+      if (this.screenShareEnabled) {
+        console.log('[VideoManager] Screen share already enabled')
+        return
+      }
+
+      // If camera is enabled, disable it first
+      if (this.videoEnabled) {
+        console.log('[VideoManager] Disabling camera before enabling screen share')
+        await this.disableCamera()
+      }
+
+      this.localScreenShareStream = screenShareStream
+      this.screenShareEnabled = true
+
+      // Replace the video track with screen share track
+      const videoTrack = screenShareStream.getVideoTracks()[0]
+      if (videoTrack && this.localStream) {
+        // Remove current video track from localStream
+        const currentVideoTracks = this.localStream.getVideoTracks()
+        currentVideoTracks.forEach((track) => {
+          this.localStream!.removeTrack(track)
+          track.stop()
+        })
+
+        this.localStream.addTrack(videoTrack)
+        console.log('[VideoManager] Replaced video track with screen share track')
+
+        // Replace the track in all peer connections
+        for (const [userId, peerConnection] of this.peers.entries()) {
+          try {
+            const simplePeer = peerConnection.peer
+            const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
+
+            if (rtcPeerConnection) {
+              const senders = rtcPeerConnection.getSenders()
+              const videoSender = senders.find((sender) => sender.track?.kind === 'video')
+
+              if (videoSender) {
+                await videoSender.replaceTrack(videoTrack)
+                console.log(
+                  `[VideoManager] ✅ Replaced video track with screen share for peer ${userId}`
+                )
+              }
+            }
+          } catch (error) {
+            console.error(`[VideoManager] Failed to replace video track for peer ${userId}:`, error)
+          }
+        }
+      }
+
+      console.log('[VideoManager] Screen share enabled successfully')
+    } catch (error) {
+      console.error('[VideoManager] Failed to enable screen share:', error)
+      this.screenShareEnabled = false
+      throw error
+    }
+  }
+
+  /**
+   * Disable screen share and replace with black placeholder track
+   */
+  async disableScreenShare(): Promise<void> {
+    try {
+      console.log('[VideoManager] Disabling screen share...')
+
+      if (!this.screenShareEnabled || !this.localScreenShareStream) {
+        console.log('[VideoManager] Screen share already disabled')
+        return
+      }
+
+      // Replace screen share track with black track in localStream
+      if (this.localStream) {
+        const videoTracks = this.localStream.getVideoTracks()
+        videoTracks.forEach((track) => {
+          this.localStream!.removeTrack(track)
+          track.stop()
+          console.log('[VideoManager] Removed and stopped screen share track:', track.label)
+        })
+
+        // Add a new black placeholder track
+        const blackTrack = this.createBlackVideoTrack()
+        this.localStream.addTrack(blackTrack)
+        console.log('[VideoManager] Added black placeholder track')
+      }
+
+      // Replace screen share track with black track in all peer connections
+      this.peers.forEach(async (peerConnection, userId) => {
+        try {
+          const simplePeer = peerConnection.peer
+          const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
+
+          if (rtcPeerConnection) {
+            const senders = rtcPeerConnection.getSenders()
+            const videoSender = senders.find((sender) => sender.track?.kind === 'video')
+
+            if (videoSender && this.localStream) {
+              const blackTrack = this.localStream.getVideoTracks()[0]
+              if (blackTrack) {
+                await videoSender.replaceTrack(blackTrack)
+                console.log(
+                  `[VideoManager] ✅ Replaced screen share with black track for peer ${userId}`
+                )
+              }
+            }
+          }
+        } catch (error) {
+          console.error(
+            `[VideoManager] Failed to replace screen share track for peer ${userId}:`,
+            error
+          )
+        }
+      })
+
+      // Stop screen share stream tracks
+      this.localScreenShareStream.getTracks().forEach((track) => track.stop())
+      this.localScreenShareStream = null
+      this.screenShareEnabled = false
+
+      console.log('[VideoManager] Screen share disabled successfully')
+    } catch (error) {
+      console.error('[VideoManager] Error disabling screen share:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Check if screen share is enabled
+   */
+  isScreenShareEnabled(): boolean {
+    return this.screenShareEnabled
+  }
+
+  /**
    * Clean up resources
    */
   cleanup(): void {
@@ -463,11 +610,17 @@ export class VideoManager {
       this.localVideoStream = null
     }
 
+    if (this.localScreenShareStream) {
+      this.localScreenShareStream.getTracks().forEach((track) => track.stop())
+      this.localScreenShareStream = null
+    }
+
     if (this.qualityAdjustmentTimeout) {
       clearTimeout(this.qualityAdjustmentTimeout)
       this.qualityAdjustmentTimeout = null
     }
 
     this.videoEnabled = false
+    this.screenShareEnabled = false
   }
 }

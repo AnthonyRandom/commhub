@@ -483,7 +483,23 @@ export class PeerConnectionManager {
   setUserVolume(userId: number, volume: number): void {
     const peerConnection = this.peers.get(userId)
     if (peerConnection?.audioElement) {
+      // Clamp volume to 0-1 range (HTML5 Audio API limitation)
+      // Note: Values above 1.0 from UI (for boost) are clamped to 1.0
       peerConnection.audioElement.volume = Math.max(0, Math.min(1, volume))
+    }
+  }
+
+  /**
+   * Set user local muted state
+   */
+  setUserLocalMuted(userId: number, muted: boolean): void {
+    const peerConnection = this.peers.get(userId)
+    if (peerConnection?.audioElement) {
+      peerConnection.audioElement.muted = muted
+      logger.info('PeerManager', `${muted ? 'Locally muted' : 'Locally unmuted'} user ${userId}`, {
+        userId,
+        username: peerConnection.username,
+      })
     }
   }
 

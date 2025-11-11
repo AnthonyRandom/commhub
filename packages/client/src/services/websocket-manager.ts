@@ -165,8 +165,8 @@ class WebSocketManager {
     })
   }
 
-  connect() {
-    const token = apiService.getAuthToken()
+  async connect() {
+    const token = await apiService.getAuthToken()
     if (token) {
       wsService.connect(token)
       const socket = wsService.getSocket()
@@ -197,9 +197,10 @@ class WebSocketManager {
     wsService.disconnect()
   }
 
-  checkAndConnect() {
-    if (apiService.isAuthenticated()) {
-      this.connect()
+  async checkAndConnect() {
+    const isAuth = await apiService.isAuthenticated()
+    if (isAuth) {
+      await this.connect()
     }
   }
 

@@ -39,8 +39,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
   // Status settings
   const { updateStatus, getUserStatus } = useStatusStore()
-  const currentUser = apiService.getUser()
+  const [currentUser, setCurrentUser] = useState<{ id: number } | null>(null)
   const currentStatus = currentUser ? getUserStatus(currentUser.id) : 'online'
+
+  // Load current user asynchronously
+  useEffect(() => {
+    apiService.getUser().then(setCurrentUser)
+  }, [])
 
   // Voice settings state
   const voiceSettings = useVoiceSettingsStore((state) => state.settings)

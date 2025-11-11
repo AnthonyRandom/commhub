@@ -26,8 +26,8 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
     set({ isLoading: true, error: null })
     try {
       const response = await apiService.login({ username, password })
-      apiService.setAuthToken(response.access_token)
-      apiService.setUser(response.user)
+      await apiService.setAuthToken(response.access_token)
+      await apiService.setUser(response.user)
 
       set({
         user: response.user,
@@ -37,7 +37,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
       })
 
       // Connect to WebSocket
-      wsManager.connect()
+      await wsManager.connect()
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Login failed'
       set({
@@ -52,8 +52,8 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
     set({ isLoading: true, error: null })
     try {
       const response = await apiService.register({ username, email, password })
-      apiService.setAuthToken(response.access_token)
-      apiService.setUser(response.user)
+      await apiService.setAuthToken(response.access_token)
+      await apiService.setUser(response.user)
 
       set({
         user: response.user,
@@ -63,7 +63,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
       })
 
       // Connect to WebSocket
-      wsManager.connect()
+      await wsManager.connect()
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Registration failed'
       set({
@@ -85,7 +85,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
       // Disconnect from WebSocket
       wsManager.disconnect()
 
-      apiService.removeAuthToken()
+      await apiService.removeAuthToken()
       set({
         user: null,
         isAuthenticated: false,
@@ -98,8 +98,8 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
   checkAuth: async () => {
     console.log('AuthStore: checkAuth called')
     try {
-      const token = apiService.getAuthToken()
-      const user = apiService.getUser()
+      const token = await apiService.getAuthToken()
+      const user = await apiService.getUser()
 
       console.log('AuthStore: token exists:', !!token)
       console.log('AuthStore: user exists:', !!user)

@@ -42,7 +42,7 @@ export const useStatusStore = create<StatusState>((set, get) => ({
   },
 
   updateStatus: async (status: UserStatus) => {
-    const user = apiService.getUser()
+    const user = await apiService.getUser()
     if (!user) return
 
     try {
@@ -56,8 +56,8 @@ export const useStatusStore = create<StatusState>((set, get) => ({
     }
   },
 
-  updateLastActivity: () => {
-    const user = apiService.getUser()
+  updateLastActivity: async () => {
+    const user = await apiService.getUser()
     if (!user) return
 
     set({ lastActivity: Date.now() })
@@ -68,7 +68,7 @@ export const useStatusStore = create<StatusState>((set, get) => ({
 
     if (wasAutoIdled && currentStatus === 'idle') {
       set({ wasAutoIdled: false })
-      get().updateStatus('online')
+      await get().updateStatus('online')
     }
   },
 
@@ -78,13 +78,13 @@ export const useStatusStore = create<StatusState>((set, get) => ({
     return get().userStatuses.get(userId)
   },
 
-  initializeStatusTracking: () => {
-    const user = apiService.getUser()
+  initializeStatusTracking: async () => {
+    const user = await apiService.getUser()
     if (!user) return
 
     // Set initial status to online
     get().setUserStatus(user.id, 'online')
-    get().updateStatus('online')
+    await get().updateStatus('online')
 
     // Track user activity
     const handleActivity = () => {
@@ -103,7 +103,7 @@ export const useStatusStore = create<StatusState>((set, get) => ({
     })
 
     // Auto-set idle status after 15 minutes of inactivity
-    const checkIdleStatus = () => {
+    const checkIdleStatus = async () => {
       const { lastActivity } = get()
       const now = Date.now()
       const idleTime = now - lastActivity
@@ -120,7 +120,7 @@ export const useStatusStore = create<StatusState>((set, get) => ({
           // Don't go idle if in voice channel
           if (!isInVoiceChannel) {
             set({ wasAutoIdled: true })
-            get().updateStatus('idle')
+            await get().updateStatus('idle')
           }
         }
       }

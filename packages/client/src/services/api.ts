@@ -150,7 +150,18 @@ class ApiService {
 
     // Add request interceptor to include auth token
     this.axiosInstance.interceptors.request.use(
-      (config) => {
+      async (config) => {
+        // Try to get token from persistent storage first, fallback to localStorage
+        try {
+          const { storageService } = await import('./storage')
+          const { token } = await storageService.loadAuth()
+          if (token) {
+            config.headers.Authorization = `Bearer ${token}`
+            return config
+          }
+        } catch (error) {
+          // Fallback to localStorage
+        }
         const token = localStorage.getItem('auth_token')
         if (token) {
           config.headers.Authorization = `Bearer ${token}`
@@ -163,11 +174,17 @@ class ApiService {
     // Add response interceptor to handle auth errors
     this.axiosInstance.interceptors.response.use(
       (response) => response,
-      (error) => {
+      async (error) => {
         if (error.response?.status === 401) {
-          // Token expired or invalid, clear local storage
-          localStorage.removeItem('auth_token')
-          localStorage.removeItem('user')
+          // Token expired or invalid, clear storage
+          try {
+            const { storageService } = await import('./storage')
+            await storageService.removeAuth()
+          } catch (e) {
+            // Fallback to localStorage
+            localStorage.removeItem('auth_token')
+            localStorage.removeItem('user')
+          }
           window.location.reload() // Force re-authentication
         }
         return Promise.reject(error)
@@ -557,30 +574,73 @@ class ApiService {
   }
 
   // Utility methods
-  setAuthToken(token: string): void {
-    localStorage.setItem('auth_token', token)
+  async setAuthToken(token: string): Promise<void> {
+    const user = await this.getUser()
+    if (user) {
+      // Use persistent storage (Tauri filesystem) for cross-update persistence
+      const { storageService } = await import('./storage')
+      await storageService.saveAuth(token, user)
+    } else {
+      // Fallback to localStorage if user not set yet
+      localStorage.setItem('auth_token', token)
+    }
   }
 
-  getAuthToken(): string | null {
+  async getAuthToken(): Promise<string | null> {
+    try {
+      // Try persistent storage first
+      const { storageService } = await import('./storage')
+      const { token } = await storageService.loadAuth()
+      if (token) {
+        return token
+      }
+    } catch (error) {
+      // Fallback to localStorage
+    }
     return localStorage.getItem('auth_token')
   }
 
-  removeAuthToken(): void {
-    localStorage.removeItem('auth_token')
-    localStorage.removeItem('user')
+  async removeAuthToken(): Promise<void> {
+    try {
+      const { storageService } = await import('./storage')
+      await storageService.removeAuth()
+    } catch (error) {
+      // Fallback to localStorage
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('user')
+    }
   }
 
-  setUser(user: User): void {
-    localStorage.setItem('user', JSON.stringify(user))
+  async setUser(user: User): Promise<void> {
+    const token = await this.getAuthToken()
+    if (token) {
+      // Use persistent storage (Tauri filesystem) for cross-update persistence
+      const { storageService } = await import('./storage')
+      await storageService.saveAuth(token, user)
+    } else {
+      // Fallback to localStorage if token not set yet
+      localStorage.setItem('user', JSON.stringify(user))
+    }
   }
 
-  getUser(): User | null {
+  async getUser(): Promise<User | null> {
+    try {
+      // Try persistent storage first
+      const { storageService } = await import('./storage')
+      const { user } = await storageService.loadAuth()
+      if (user) {
+        return user
+      }
+    } catch (error) {
+      // Fallback to localStorage
+    }
     const userStr = localStorage.getItem('user')
     return userStr ? JSON.parse(userStr) : null
   }
 
-  isAuthenticated(): boolean {
-    return !!this.getAuthToken()
+  async isAuthenticated(): Promise<boolean> {
+    const token = await this.getAuthToken()
+    return !!token
   }
 }
 

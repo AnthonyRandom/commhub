@@ -64,7 +64,10 @@ async function bootstrap() {
     });
 
     // Serve static files from uploads directory with range request support for videos
-    const uploadsPath = path.join(process.cwd(), 'uploads');
+    // Use Railway volume mount if UPLOADS_DIR is set, otherwise use local uploads directory
+    const uploadsPath =
+      process.env.UPLOADS_DIR || path.join(process.cwd(), 'uploads');
+    console.log(`[Server] Serving static files from: ${uploadsPath}`);
     app.use(
       '/uploads',
       express.static(uploadsPath, {

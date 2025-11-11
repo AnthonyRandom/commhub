@@ -28,6 +28,9 @@ interface EnvironmentConfig {
   // External APIs (optional)
   TENOR_API_KEY?: string;
 
+  // File storage (optional)
+  UPLOADS_DIR?: string; // Path to persistent uploads directory (e.g., /data/uploads for Railway volumes)
+
   // Rate limiting (optional)
   THROTTLE_TTL?: string;
   THROTTLE_LIMIT?: string;

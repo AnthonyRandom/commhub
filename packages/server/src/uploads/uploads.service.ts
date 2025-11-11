@@ -13,17 +13,40 @@ import { fileTypeFromBuffer } from 'file-type';
 @Injectable()
 export class UploadsService {
   private logger = new Logger('UploadsService');
-  private readonly uploadDir = path.join(process.cwd(), 'uploads');
+  /**
+   * Upload directory path.
+   * Uses Railway volume mount if UPLOADS_DIR is set, otherwise falls back to process.cwd()/uploads for local development.
+   * Railway volume should be mounted at /data/uploads for persistent storage.
+   */
+  private readonly uploadDir: string;
 
   constructor(private prisma: PrismaService) {
+    // Use Railway volume mount if available, otherwise use local uploads directory
+    this.uploadDir =
+      process.env.UPLOADS_DIR || path.join(process.cwd(), 'uploads');
+
+    // Log the upload directory being used
+    this.logger.log(`Using upload directory: ${this.uploadDir}`);
+
     this.ensureUploadDir();
   }
 
   private async ensureUploadDir() {
     try {
       await fs.access(this.uploadDir);
+      this.logger.log(`Upload directory exists: ${this.uploadDir}`);
     } catch {
       await fs.mkdir(this.uploadDir, { recursive: true });
+      this.logger.log(`Created upload directory: ${this.uploadDir}`);
+    }
+
+    // Also ensure temp directory exists
+    const tempDir = path.join(this.uploadDir, 'temp');
+    try {
+      await fs.access(tempDir);
+    } catch {
+      await fs.mkdir(tempDir, { recursive: true });
+      this.logger.log(`Created temp directory: ${tempDir}`);
     }
   }
 
@@ -221,6 +244,11 @@ export class UploadsService {
   /**
    * Clean up orphaned files (files uploaded but not attached to messages)
    * This should be run periodically
+   *
+   * NOTE: This checks for attachments linked to BOTH Message and DirectMessage records.
+   * Only deletes files that are:
+   * 1. Older than 1 hour
+   * 2. Not referenced in any Attachment record (regardless of message type)
    */
   async cleanupOrphanedFiles() {
     try {
@@ -230,21 +258,38 @@ export class UploadsService {
 
       for (const file of files) {
         const filePath = path.join(this.uploadDir, file);
-        const stats = await fs.stat(filePath);
 
-        // Check if file is older than 1 hour
-        if (now - stats.mtimeMs > ONE_HOUR) {
-          // Check if file exists in database
-          const exists = await this.prisma.attachment.findFirst({
-            where: {
-              url: `/uploads/${file}`,
-            },
-          });
+        // Skip temp directory
+        if (file === 'temp') continue;
 
-          if (!exists) {
-            this.logger.log(`Cleaning up orphaned file: ${file}`);
-            await fs.unlink(filePath).catch(() => {});
+        try {
+          const stats = await fs.stat(filePath);
+
+          // Skip directories
+          if (stats.isDirectory()) continue;
+
+          // Check if file is older than 1 hour
+          if (now - stats.mtimeMs > ONE_HOUR) {
+            // Check if file exists in database (checks both Message and DirectMessage attachments)
+            const exists = await this.prisma.attachment.findFirst({
+              where: {
+                url: `/uploads/${file}`,
+              },
+            });
+
+            if (!exists) {
+              this.logger.log(`Cleaning up orphaned file: ${file}`);
+              await fs.unlink(filePath).catch(err => {
+                this.logger.warn(
+                  `Failed to delete orphaned file ${file}:`,
+                  err.message
+                );
+              });
+            }
           }
+        } catch (statError) {
+          // File might have been deleted already or doesn't exist
+          this.logger.debug(`Skipping file ${file}:`, statError.message);
         }
       }
     } catch (error) {

@@ -16,6 +16,8 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
 }) => {
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [imageError, setImageError] = useState(false)
+  const [videoError, setVideoError] = useState(false)
+  const [audioError, setAudioError] = useState(false)
 
   const fullUrl = attachment.url.startsWith('http')
     ? attachment.url
@@ -102,10 +104,47 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
 
   // Video attachment
   if (attachment.mimeType.startsWith('video/')) {
+    if (videoError) {
+      // Fallback UI when video fails to load
+      return (
+        <div className="mt-2 max-w-md animate-slide-up">
+          <div className="bg-grey-850 border-2 border-grey-700 p-4">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-grey-800 flex items-center justify-center flex-shrink-0">
+                <Film className="w-6 h-6 text-grey-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-bold text-sm truncate">{attachment.filename}</p>
+                <p className="text-grey-400 text-xs">{formatFileSize(attachment.size)}</p>
+              </div>
+            </div>
+            <div className="bg-grey-900 border-2 border-grey-800 p-4 text-center">
+              <p className="text-grey-400 text-sm mb-2">Video file not available</p>
+              <p className="text-grey-500 text-xs mb-3">The file may have been deleted or moved.</p>
+              <a
+                href={fullUrl}
+                download={attachment.filename}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-grey-200 text-black border-2 border-white transition-colors text-sm"
+                title="Try downloading the file"
+              >
+                <Download className="w-4 h-4" />
+                Try Download
+              </a>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div className="mt-2 max-w-md animate-slide-up">
         <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden">
-          <video src={fullUrl} controls className="w-full h-auto max-h-96">
+          <video
+            src={fullUrl}
+            controls
+            className="w-full h-auto max-h-96"
+            onError={() => setVideoError(true)}
+          >
             Your browser does not support the video tag.
           </video>
         </div>
@@ -118,6 +157,47 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
 
   // Audio attachment
   if (attachment.mimeType.startsWith('audio/')) {
+    if (audioError) {
+      // Fallback UI when audio fails to load
+      return (
+        <div className="mt-2 max-w-md animate-slide-up">
+          <div className="bg-grey-850 border-2 border-grey-700 p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 bg-grey-800 flex items-center justify-center flex-shrink-0">
+                <Music className="w-5 h-5 text-grey-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-bold text-sm truncate">{attachment.filename}</p>
+                <p className="text-grey-400 text-xs">{formatFileSize(attachment.size)}</p>
+              </div>
+              {showRemove && onRemove && (
+                <button
+                  onClick={onRemove}
+                  className="p-1 bg-red-600 hover:bg-red-700 text-white border-2 border-white transition-colors"
+                  title="Remove attachment"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            <div className="bg-grey-900 border-2 border-grey-800 p-4 text-center">
+              <p className="text-grey-400 text-sm mb-2">Audio file not available</p>
+              <p className="text-grey-500 text-xs mb-3">The file may have been deleted or moved.</p>
+              <a
+                href={fullUrl}
+                download={attachment.filename}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-grey-200 text-black border-2 border-white transition-colors text-sm"
+                title="Try downloading the file"
+              >
+                <Download className="w-4 h-4" />
+                Try Download
+              </a>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div className="mt-2 max-w-md animate-slide-up">
         <div className="bg-grey-850 border-2 border-grey-700 p-4">
@@ -139,7 +219,7 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
               </button>
             )}
           </div>
-          <audio src={fullUrl} controls className="w-full">
+          <audio src={fullUrl} controls className="w-full" onError={() => setAudioError(true)}>
             Your browser does not support the audio tag.
           </audio>
         </div>

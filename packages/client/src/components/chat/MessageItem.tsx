@@ -344,8 +344,11 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                   {/* Display file attachments */}
                   {message.attachments && message.attachments.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {message.attachments.map((attachment) => (
-                        <FileAttachment key={attachment.id} attachment={attachment} />
+                      {message.attachments.map((attachment, index) => (
+                        <FileAttachment
+                          key={`${message.id}-attachment-${attachment.id}-${index}`}
+                          attachment={attachment}
+                        />
                       ))}
                     </div>
                   )}

@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { FileText, Film, Music, Image as ImageIcon, Download, X, Archive, File } from 'lucide-react'
 import type { Attachment } from '../../services/api'
 import config from '../../config/environment'
+import { GifHoverActions } from './GifHoverActions'
 
 interface FileAttachmentProps {
   attachment: Attachment
@@ -48,6 +49,8 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
 
   // Image attachment
   if (attachment.mimeType.startsWith('image/') && !imageError) {
+    const isGif = attachment.mimeType === 'image/gif'
+
     return (
       <>
         <div className="relative inline-block animate-slide-up">
@@ -60,6 +63,26 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
               onError={() => setImageError(true)}
               loading="lazy"
             />
+            {/* Show favorite button for GIFs (positioned on left when editing, right when not) */}
+            {isGif && !showRemove && (
+              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                <GifHoverActions
+                  gifUrl={fullUrl}
+                  thumbnailUrl={fullUrl}
+                  contentDescription={attachment.filename}
+                />
+              </div>
+            )}
+            {/* Show favorite button on left side when editing (to avoid conflict with remove button) */}
+            {isGif && showRemove && (
+              <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                <GifHoverActions
+                  gifUrl={fullUrl}
+                  thumbnailUrl={fullUrl}
+                  contentDescription={attachment.filename}
+                />
+              </div>
+            )}
             {showRemove && onRemove && (
               <button
                 onClick={(e) => {

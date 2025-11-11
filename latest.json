@@ -1,11 +1,11 @@
 {
-  "version": "1.2.2",
-  "notes": "Version 1.2.2 - Enhanced Text Communication & Rich Media Support. Major new features: File upload system supporting images, videos, audio, documents, archives, and executables up to 20MB with automatic media compression. Expanded GIF picker with pagination (up to 3 pages) and personal GIF favorites - save any GIF with hover actions for quick reuse. Discord-style @mentions with autocomplete, visual highlighting, taskbar notifications, and channel badges. Comprehensive backend includes file storage, compression services (Sharp for images, FFmpeg for video/audio), saved GIFs database, and real-time mention parsing. All features maintain the app's sleek design language with fluid animations and responsive UI. Zero breaking changes - fully backward compatible with 1.2.1.",
-  "pub_date": "2025-11-11T12:00:00Z",
+  "version": "1.2.3",
+  "notes": "Version 1.2.3 - Screen Sharing Stability & Performance Fixes. Critical bug fixes: Fixed major screen sharing issues causing robot voice, connection glitches, and bandwidth spikes. Implemented sequential WebRTC negotiation queue to prevent concurrent offer creation that was overwhelming network connections. Improved track replacement timing to eliminate black screen flickering during screen share transitions. Enhanced audio track management with better screen share audio detection using track labels, ensuring microphone audio always remains enabled. Added proper connection state validation and error handling during renegotiation. Screen sharing now works smoothly without affecting voice quality or connection stability. All fixes maintain backward compatibility with existing voice channels.",
+  "pub_date": "2025-01-27T12:00:00Z",
   "platforms": {
     "windows-x86_64": {
       "signature": "",
-      "url": "https://github.com/AnthonyRandom/commhub/releases/download/v1.2.2/commhub_1.2.2_x64_en-US.msi"
+      "url": "https://github.com/AnthonyRandom/commhub/releases/download/v1.2.3/commhub_1.2.3_x64_en-US.msi"
     }
   }
 }

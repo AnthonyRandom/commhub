@@ -65,6 +65,43 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     setShowMentionAutocomplete(false)
   }, [channelId])
 
+  // Add document-level drag and drop handlers for Tauri compatibility
+  // This ensures drag events work even if they don't bubble properly
+  useEffect(() => {
+    const handleDocumentDragOver = (e: DragEvent) => {
+      // Prevent default to allow drop
+      e.preventDefault()
+      e.stopPropagation()
+    }
+
+    const handleDocumentDragEnter = (e: DragEvent) => {
+      // Only set dragging state if over our container
+      if (containerRef.current && containerRef.current.contains(e.target as Node)) {
+        if (uploadingFiles.length === 0) {
+          setIsDragging(true)
+        }
+      }
+    }
+
+    const handleDocumentDragLeave = (e: DragEvent) => {
+      // Only clear dragging state if leaving our container
+      if (containerRef.current && !containerRef.current.contains(e.relatedTarget as Node)) {
+        setIsDragging(false)
+      }
+    }
+
+    // Prevent default drag behavior on document to allow drop
+    document.addEventListener('dragover', handleDocumentDragOver, false)
+    document.addEventListener('dragenter', handleDocumentDragEnter, false)
+    document.addEventListener('dragleave', handleDocumentDragLeave, false)
+
+    return () => {
+      document.removeEventListener('dragover', handleDocumentDragOver, false)
+      document.removeEventListener('dragenter', handleDocumentDragEnter, false)
+      document.removeEventListener('dragleave', handleDocumentDragLeave, false)
+    }
+  }, [uploadingFiles.length])
+
   // Handle mention autocomplete
   useEffect(() => {
     if (!showMentionAutocomplete) {
@@ -220,8 +257,14 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (uploadingFiles.length === 0 && e.dataTransfer.types.includes('Files')) {
-      e.dataTransfer.dropEffect = 'copy'
+    if (uploadingFiles.length === 0) {
+      // Check for files in dataTransfer
+      const hasFiles = e.dataTransfer.types.some(
+        (type) => type === 'Files' || type === 'application/x-moz-file'
+      )
+      if (hasFiles) {
+        e.dataTransfer.dropEffect = 'copy'
+      }
     }
   }
 
@@ -232,9 +275,29 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
     if (uploadingFiles.length > 0) return
 
+    // Get files from dataTransfer
     const files = Array.from(e.dataTransfer.files)
     if (files.length > 0) {
       handleFilesSelected(files)
+    } else {
+      // Fallback: try to get files from items (for Tauri and some browsers)
+      const items = Array.from(e.dataTransfer.items)
+      const filesFromItems: File[] = []
+
+      for (const item of items) {
+        if (item.kind === 'file') {
+          const file = item.getAsFile()
+          if (file) {
+            filesFromItems.push(file)
+          }
+        }
+      }
+
+      if (filesFromItems.length > 0) {
+        handleFilesSelected(filesFromItems)
+      } else {
+        console.warn('No files found in drag and drop event')
+      }
     }
   }
 

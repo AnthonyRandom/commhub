@@ -25,7 +25,7 @@ export const config = {
   /**
    * Client application version (synced with package.json)
    */
-  CLIENT_VERSION: import.meta.env.VITE_CLIENT_VERSION || '1.2.2',
+  CLIENT_VERSION: import.meta.env.VITE_CLIENT_VERSION || '1.2.3',
 
   /**
    * Environment mode (development, production, test)

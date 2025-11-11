@@ -140,9 +140,19 @@ export class PeerConnectionManager {
         if (track.kind === 'audio') {
           const audioTracks = stream.getAudioTracks()
           const trackIndex = audioTracks.indexOf(track)
+          const label = track.label.toLowerCase()
 
-          // If this is not the first audio track (microphone), it's screen share audio
-          if (trackIndex > 0) {
+          // Identify if this is a screen share audio track
+          // Screen share audio typically has labels containing "desktop", "screen", "system", etc.
+          // OR it's a track after the first one (microphone)
+          const isScreenShareAudio =
+            trackIndex > 0 ||
+            label.includes('desktop') ||
+            label.includes('screen') ||
+            label.includes('system') ||
+            label.includes('audio capture')
+
+          if (isScreenShareAudio) {
             // Check if this user is currently focused
             const focusedUserId = useVoiceStore.getState().focusedStreamUserId
             const shouldEnable = focusedUserId === userId
@@ -150,14 +160,23 @@ export class PeerConnectionManager {
             track.enabled = shouldEnable
             logger.info(
               'PeerManager',
-              `New audio track added for ${username}, ${shouldEnable ? 'enabled' : 'disabled'} based on focus state`,
+              `New screen share audio track added for ${username}, ${shouldEnable ? 'enabled' : 'disabled'} based on focus state`,
               {
                 userId,
                 trackId: track.id,
                 trackIndex,
+                trackLabel: track.label,
                 focusedUserId,
               }
             )
+          } else {
+            // This is likely the microphone track - ensure it's always enabled
+            track.enabled = true
+            logger.debug('PeerManager', `Ensured microphone track enabled for ${username}`, {
+              userId,
+              trackId: track.id,
+              trackLabel: track.label,
+            })
           }
         }
       })
@@ -600,35 +619,95 @@ export class PeerConnectionManager {
   /**
    * Enable or disable screen share audio for a specific user
    * Screen share audio is in additional audio tracks (beyond the first microphone track)
+   * Uses track labels to identify screen share audio more reliably than index
    */
   setUserScreenShareAudio(userId: number, enabled: boolean): void {
     const peerConnection = this.peers.get(userId)
     if (!peerConnection?.audioElement?.srcObject) {
+      logger.debug(
+        'PeerManager',
+        `No audio element for user ${userId}, skipping screen share audio update`
+      )
       return
     }
 
     const stream = peerConnection.audioElement.srcObject as MediaStream
     const audioTracks = stream.getAudioTracks()
 
-    // Ensure the first track (microphone) is always enabled (never touch it)
-    if (audioTracks.length > 0 && audioTracks[0]) {
-      audioTracks[0].enabled = true
+    if (audioTracks.length === 0) {
+      logger.debug('PeerManager', `No audio tracks for user ${userId}`)
+      return
+    }
+
+    // Identify microphone track (first track is typically the microphone)
+    // Screen share audio tracks typically have labels like "Desktop Audio" or similar
+    const microphoneTrack = audioTracks[0]
+    const screenShareTracks: MediaStreamTrack[] = []
+
+    // Find screen share audio tracks
+    // They are typically tracks after the first one, OR tracks with screen share-like labels
+    for (let i = 0; i < audioTracks.length; i++) {
+      const track = audioTracks[i]
+      const label = track.label.toLowerCase()
+
+      // Skip the first track (microphone) - it's never screen share audio
+      if (i === 0) {
+        continue
+      }
+
+      // Check if this is a screen share audio track by label
+      // Screen share audio typically has labels containing "desktop", "screen", "system", etc.
+      const isScreenShareAudio =
+        label.includes('desktop') ||
+        label.includes('screen') ||
+        label.includes('system') ||
+        label.includes('audio capture')
+
+      // If label matches OR if we can't identify by label, assume tracks after the first are screen share
+      // (i > 0 is always true here since we skip i === 0, so we always add tracks after the first)
+      screenShareTracks.push(track)
+    }
+
+    // CRITICAL: Always ensure microphone track stays enabled
+    if (microphoneTrack) {
+      microphoneTrack.enabled = true
       logger.debug('PeerManager', `Ensured microphone track stays enabled for user ${userId}`, {
         userId,
-        trackId: audioTracks[0].id,
+        trackId: microphoneTrack.id,
+        trackLabel: microphoneTrack.label,
       })
     }
 
-    // If there's more than one audio track, the additional ones are screen share audio
-    if (audioTracks.length > 1) {
+    // Enable/disable screen share audio tracks
+    for (const track of screenShareTracks) {
+      track.enabled = enabled
+      logger.info(
+        'PeerManager',
+        `${enabled ? 'Enabled' : 'Disabled'} screen share audio track for user ${userId}`,
+        {
+          userId,
+          trackId: track.id,
+          trackLabel: track.label,
+        }
+      )
+    }
+
+    if (screenShareTracks.length === 0 && audioTracks.length > 1) {
+      // Fallback: if we couldn't identify screen share tracks by label,
+      // assume tracks after the first are screen share (original behavior)
+      logger.debug(
+        'PeerManager',
+        `Using fallback: treating tracks after first as screen share for user ${userId}`
+      )
       for (let i = 1; i < audioTracks.length; i++) {
         audioTracks[i].enabled = enabled
         logger.info(
           'PeerManager',
-          `${enabled ? 'Enabled' : 'Disabled'} screen share audio track ${i} for user ${userId}`,
+          `${enabled ? 'Enabled' : 'Disabled'} screen share audio track ${i} (fallback) for user ${userId}`,
           {
             userId,
             trackId: audioTracks[i].id,
+            trackLabel: audioTracks[i].label,
           }
         )
       }

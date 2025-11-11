@@ -20,6 +20,8 @@ export class VideoManager {
   private qualityAdjustmentTimeout: number | null = null
   private peers: Map<number, PeerConnection> = new Map()
   private currentChannelId: number | null = null
+  private negotiationQueue: Set<number> = new Set() // Track peers currently negotiating
+  private isProcessingNegotiation = false // Global flag to prevent concurrent negotiations
 
   setLocalStream(stream: MediaStream | null): void {
     this.localStream = stream
@@ -492,30 +494,38 @@ export class VideoManager {
       // Replace the video track with screen share track
       const videoTrack = screenShareStream.getVideoTracks()[0]
       if (videoTrack && this.localStream) {
-        // Remove current video track from localStream
+        // Get current video tracks before removal
         const currentVideoTracks = this.localStream.getVideoTracks()
-        currentVideoTracks.forEach((track) => {
-          this.localStream!.removeTrack(track)
-          track.stop()
-        })
 
-        this.localStream.addTrack(videoTrack)
-        console.log('[VideoManager] Replaced video track with screen share track')
+        // Replace the track in all peer connections FIRST (before removing from local stream)
+        // This ensures the new track is ready before the old one is stopped
+        const replacementPromises: Promise<void>[] = []
 
-        // Replace the track in all peer connections
         for (const [userId, peerConnection] of this.peers.entries()) {
           try {
             const simplePeer = peerConnection.peer
             const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
 
-            if (rtcPeerConnection) {
+            if (rtcPeerConnection && rtcPeerConnection.connectionState === 'connected') {
               const senders = rtcPeerConnection.getSenders()
               const videoSender = senders.find((sender) => sender.track?.kind === 'video')
 
               if (videoSender) {
-                await videoSender.replaceTrack(videoTrack)
-                console.log(
-                  `[VideoManager] ✅ Replaced video track with screen share for peer ${userId}`
+                // Replace track and wait for it to complete
+                replacementPromises.push(
+                  videoSender
+                    .replaceTrack(videoTrack)
+                    .then(() => {
+                      console.log(
+                        `[VideoManager] ✅ Replaced video track with screen share for peer ${userId}`
+                      )
+                    })
+                    .catch((error) => {
+                      console.error(
+                        `[VideoManager] Failed to replace video track for peer ${userId}:`,
+                        error
+                      )
+                    })
                 )
               }
             }
@@ -523,6 +533,19 @@ export class VideoManager {
             console.error(`[VideoManager] Failed to replace video track for peer ${userId}:`, error)
           }
         }
+
+        // Wait for all replacements to complete before removing old tracks
+        await Promise.all(replacementPromises)
+
+        // Now remove old video tracks from localStream and add new one
+        currentVideoTracks.forEach((track) => {
+          this.localStream!.removeTrack(track)
+          // Stop track after a small delay to ensure replacement is complete
+          setTimeout(() => track.stop(), 100)
+        })
+
+        this.localStream.addTrack(videoTrack)
+        console.log('[VideoManager] Replaced video track with screen share track')
       }
 
       // Handle screen share audio tracks (desktop audio)
@@ -532,7 +555,7 @@ export class VideoManager {
           audioTrackCount: audioTracks.length,
         })
 
-        // Add audio tracks to local stream
+        // Add audio tracks to local stream first
         audioTracks.forEach((track) => {
           if (this.localStream) {
             this.localStream.addTrack(track)
@@ -540,73 +563,156 @@ export class VideoManager {
           }
         })
 
-        // Add audio tracks to all peer connections with proper renegotiation
+        // Add audio tracks to all peer connections and trigger renegotiation properly
+        // We need to add tracks to RTCPeerConnection AND let SimplePeer handle renegotiation
         for (const [userId, peerConnection] of this.peers.entries()) {
           try {
             const simplePeer = peerConnection.peer
             const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
 
-            if (rtcPeerConnection && rtcPeerConnection.connectionState === 'connected') {
-              const isInitiator = (simplePeer as any).initiator
+            if (!rtcPeerConnection) {
+              console.warn(`[VideoManager] No RTCPeerConnection for peer ${userId}`)
+              continue
+            }
 
-              for (const audioTrack of audioTracks) {
-                // Add track to RTCPeerConnection
-                rtcPeerConnection.addTrack(audioTrack, this.localStream!)
-                console.log(`[VideoManager] ✅ Added screen share audio track to peer ${userId}`, {
-                  trackId: audioTrack.id,
-                  isInitiator,
-                })
+            // Check connection state - only proceed if connected or connecting
+            const connectionState = rtcPeerConnection.connectionState
+            if (connectionState !== 'connected' && connectionState !== 'connecting') {
+              console.warn(
+                `[VideoManager] Peer ${userId} not in valid state for audio track addition`,
+                { connectionState }
+              )
+              continue
+            }
+
+            // Set up negotiationneeded handler BEFORE adding tracks
+            // This ensures we catch the event when tracks are added
+            let negotiationHandler: (() => void) | null = null
+
+            negotiationHandler = async () => {
+              // Prevent concurrent negotiations across ALL peers
+              // This prevents bandwidth spikes when screen sharing starts
+              if (this.isProcessingNegotiation) {
+                console.log(`[VideoManager] Global negotiation in progress, queuing peer ${userId}`)
+                this.negotiationQueue.add(userId)
+                return
               }
 
-              // Manually trigger renegotiation by creating a new offer
-              // This works regardless of initiator status (proper bidirectional negotiation)
-              console.log(
-                `[VideoManager] Triggering renegotiation for peer ${userId} to send audio tracks`
-              )
+              // Check if this peer is already in queue or being processed
+              if (this.negotiationQueue.has(userId)) {
+                console.log(`[VideoManager] Peer ${userId} already queued for negotiation`)
+                return
+              }
 
-              rtcPeerConnection
-                .createOffer()
-                .then((offer) => {
-                  return rtcPeerConnection.setLocalDescription(offer).then(() => offer)
-                })
-                .then((offer) => {
-                  // Send the renegotiation offer directly through WebSocket
-                  // Don't use SimplePeer's emit as it causes the remote to create a new connection
-                  console.log(`[VideoManager] Created renegotiation offer for peer ${userId}`)
+              // Only proceed if connection is stable and connected
+              if (
+                rtcPeerConnection.signalingState !== 'stable' ||
+                rtcPeerConnection.connectionState !== 'connected'
+              ) {
+                console.log(
+                  `[VideoManager] Not in stable/connected state for negotiation, skipping`,
+                  {
+                    signalingState: rtcPeerConnection.signalingState,
+                    connectionState: rtcPeerConnection.connectionState,
+                  }
+                )
+                return
+              }
+
+              // Mark as processing and add to queue
+              this.isProcessingNegotiation = true
+              this.negotiationQueue.add(userId)
+              const isInitiator = (simplePeer as any).initiator
+
+              try {
+                // Only initiator creates offer (SimplePeer convention)
+                if (isInitiator) {
+                  console.log(`[VideoManager] Creating renegotiation offer for peer ${userId}`)
+
+                  const offer = await rtcPeerConnection.createOffer()
+                  await rtcPeerConnection.setLocalDescription(offer)
 
                   if (!this.currentChannelId) {
                     console.error('[VideoManager] No channel ID available for renegotiation')
+                    this.negotiationQueue.delete(userId)
+                    this.isProcessingNegotiation = false
+                    this.processNextNegotiation()
                     return
                   }
 
                   const socket = wsService.getSocket()
-
                   if (socket) {
-                    // Send as a voice-offer which the remote peer will handle as renegotiation
                     socket.emit('voice-offer', {
                       targetUserId: userId,
                       offer: offer,
                       channelId: this.currentChannelId,
                     })
                     console.log(
-                      `[VideoManager] Sent renegotiation offer to peer ${userId} via WebSocket`
+                      `[VideoManager] ✅ Sent renegotiation offer to peer ${userId} via WebSocket`
                     )
                   } else {
                     console.error('[VideoManager] WebSocket not available for renegotiation')
+                    this.negotiationQueue.delete(userId)
+                    this.isProcessingNegotiation = false
+                    this.processNextNegotiation()
+                    return
                   }
-                })
-                .catch((error) => {
-                  console.error(
-                    `[VideoManager] Failed to create renegotiation offer for peer ${userId}:`,
-                    error
+                } else {
+                  // Non-initiator waits for offer from remote peer
+                  console.log(
+                    `[VideoManager] Non-initiator: waiting for renegotiation offer from peer ${userId}`
                   )
-                })
-            } else {
-              console.warn(
-                `[VideoManager] Peer ${userId} not in connected state, skipping audio track addition`,
-                { connectionState: rtcPeerConnection?.connectionState }
-              )
+                  this.negotiationQueue.delete(userId)
+                  this.isProcessingNegotiation = false
+                  this.processNextNegotiation()
+                  return
+                }
+
+                // Remove from queue and process next after a short delay
+                // This allows the offer to be sent before starting the next negotiation
+                setTimeout(() => {
+                  this.negotiationQueue.delete(userId)
+                  this.isProcessingNegotiation = false
+                  this.processNextNegotiation()
+                }, 100)
+              } catch (error) {
+                console.error(
+                  `[VideoManager] Failed to handle negotiation for peer ${userId}:`,
+                  error
+                )
+                this.negotiationQueue.delete(userId)
+                this.isProcessingNegotiation = false
+                this.processNextNegotiation()
+              }
             }
+
+            // Add event listener for negotiationneeded
+            rtcPeerConnection.addEventListener('negotiationneeded', negotiationHandler)
+
+            // Add tracks to RTCPeerConnection
+            // This will trigger negotiationneeded event
+            for (const audioTrack of audioTracks) {
+              try {
+                rtcPeerConnection.addTrack(audioTrack, this.localStream!)
+                console.log(`[VideoManager] ✅ Added screen share audio track to peer ${userId}`, {
+                  trackId: audioTrack.id,
+                })
+              } catch (error) {
+                console.error(
+                  `[VideoManager] Failed to add audio track to RTCPeerConnection for peer ${userId}:`,
+                  error
+                )
+              }
+            }
+
+            // Clean up handler after a delay (negotiation should have started by then)
+            // Store cleanup function in peer connection for later removal
+            setTimeout(() => {
+              if (negotiationHandler) {
+                rtcPeerConnection.removeEventListener('negotiationneeded', negotiationHandler)
+                negotiationHandler = null
+              }
+            }, 5000)
           } catch (error) {
             console.error(
               `[VideoManager] Failed to add screen share audio track for peer ${userId}:`,
@@ -665,33 +771,61 @@ export class VideoManager {
       }
 
       // Replace screen share track with black track in all peer connections
-      this.peers.forEach(async (peerConnection, userId) => {
+      // Do this BEFORE removing tracks from local stream to ensure smooth transition
+      const replacementPromises: Promise<void>[] = []
+
+      for (const [userId, peerConnection] of this.peers.entries()) {
         try {
           const simplePeer = peerConnection.peer
           const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
 
-          if (rtcPeerConnection) {
-            const senders = rtcPeerConnection.getSenders()
+          if (!rtcPeerConnection || rtcPeerConnection.connectionState !== 'connected') {
+            console.warn(
+              `[VideoManager] Peer ${userId} not connected, skipping screen share cleanup`
+            )
+            continue
+          }
 
-            // Replace video track
-            const videoSender = senders.find((sender) => sender.track?.kind === 'video')
-            if (videoSender && this.localStream) {
-              const blackTrack = this.localStream.getVideoTracks()[0]
-              if (blackTrack) {
-                await videoSender.replaceTrack(blackTrack)
-                console.log(
-                  `[VideoManager] ✅ Replaced screen share with black track for peer ${userId}`
-                )
-              }
+          const senders = rtcPeerConnection.getSenders()
+
+          // Replace video track with black track
+          const videoSender = senders.find((sender) => sender.track?.kind === 'video')
+          if (videoSender && this.localStream) {
+            const blackTrack = this.localStream.getVideoTracks()[0]
+            if (blackTrack) {
+              replacementPromises.push(
+                videoSender
+                  .replaceTrack(blackTrack)
+                  .then(() => {
+                    console.log(
+                      `[VideoManager] ✅ Replaced screen share with black track for peer ${userId}`
+                    )
+                  })
+                  .catch((error) => {
+                    console.error(
+                      `[VideoManager] Failed to replace video track for peer ${userId}:`,
+                      error
+                    )
+                  })
+              )
             }
+          }
 
-            // Remove screen share audio senders
-            for (const audioTrack of screenShareAudioTracks) {
-              const audioSender = senders.find((sender) => sender.track?.id === audioTrack.id)
-              if (audioSender) {
+          // Remove screen share audio senders
+          for (const audioTrack of screenShareAudioTracks) {
+            const audioSender = senders.find((sender) => sender.track?.id === audioTrack.id)
+            if (audioSender) {
+              try {
                 rtcPeerConnection.removeTrack(audioSender)
                 console.log(
                   `[VideoManager] ✅ Removed screen share audio track from peer ${userId}`
+                )
+                // Note: Removing tracks will trigger negotiationneeded, but we don't need to handle it
+                // as we're just removing tracks (not adding), so the remote peer will handle it
+              } catch (error) {
+                console.error(
+                  `[VideoManager] Failed to remove audio track for peer ${userId}:`,
+                  error
                 )
               }
             }
@@ -702,7 +836,10 @@ export class VideoManager {
             error
           )
         }
-      })
+      }
+
+      // Wait for all replacements to complete
+      await Promise.all(replacementPromises)
 
       // Stop screen share stream tracks
       this.localScreenShareStream.getTracks().forEach((track) => track.stop())
@@ -724,6 +861,47 @@ export class VideoManager {
   }
 
   /**
+   * Process next negotiation in queue
+   * Ensures negotiations happen sequentially, not concurrently
+   */
+  private processNextNegotiation(): void {
+    if (this.isProcessingNegotiation || this.negotiationQueue.size === 0) {
+      return
+    }
+
+    // Get next peer from queue
+    const nextUserId = this.negotiationQueue.values().next().value
+    if (!nextUserId) {
+      return
+    }
+
+    const peerConnection = this.peers.get(nextUserId)
+    if (!peerConnection) {
+      this.negotiationQueue.delete(nextUserId)
+      this.processNextNegotiation()
+      return
+    }
+
+    const simplePeer = peerConnection.peer
+    const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
+
+    if (
+      !rtcPeerConnection ||
+      rtcPeerConnection.signalingState !== 'stable' ||
+      rtcPeerConnection.connectionState !== 'connected'
+    ) {
+      this.negotiationQueue.delete(nextUserId)
+      this.processNextNegotiation()
+      return
+    }
+
+    // Manually trigger negotiationneeded event handling
+    // This will be caught by the event listener we set up
+    this.isProcessingNegotiation = true
+    rtcPeerConnection.dispatchEvent(new Event('negotiationneeded'))
+  }
+
+  /**
    * Clean up resources
    */
   cleanup(): void {
@@ -742,6 +920,8 @@ export class VideoManager {
       this.qualityAdjustmentTimeout = null
     }
 
+    this.negotiationQueue.clear()
+    this.isProcessingNegotiation = false
     this.videoEnabled = false
     this.screenShareEnabled = false
   }

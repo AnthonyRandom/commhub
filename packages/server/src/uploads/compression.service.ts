@@ -8,6 +8,27 @@ import { UPLOAD } from '../config/constants';
 @Injectable()
 export class CompressionService {
   private logger = new Logger('CompressionService');
+  private ffmpegAvailable: boolean = false;
+
+  constructor() {
+    // Check if FFmpeg is available
+    try {
+      ffmpeg.getAvailableFormats(err => {
+        if (err) {
+          this.logger.warn(
+            'FFmpeg not available, video/audio compression disabled'
+          );
+          this.ffmpegAvailable = false;
+        } else {
+          this.logger.log('FFmpeg available for media compression');
+          this.ffmpegAvailable = true;
+        }
+      });
+    } catch (error) {
+      this.logger.warn('FFmpeg check failed, video/audio compression disabled');
+      this.ffmpegAvailable = false;
+    }
+  }
 
   /**
    * Compress a file based on its MIME type
@@ -20,9 +41,13 @@ export class CompressionService {
       if (mimeType.startsWith('image/')) {
         return await this.compressImage(filePath, mimeType);
       } else if (mimeType.startsWith('video/')) {
-        return await this.compressVideo(filePath);
+        return this.ffmpegAvailable
+          ? await this.compressVideo(filePath)
+          : await this.fallbackCompression(filePath);
       } else if (mimeType.startsWith('audio/')) {
-        return await this.compressAudio(filePath);
+        return this.ffmpegAvailable
+          ? await this.compressAudio(filePath)
+          : await this.fallbackCompression(filePath);
       } else {
         // No compression for other file types
         const stats = await fs.stat(filePath);
@@ -34,6 +59,17 @@ export class CompressionService {
       const stats = await fs.stat(filePath);
       return { compressedPath: filePath, size: stats.size };
     }
+  }
+
+  /**
+   * Fallback compression for when FFmpeg is not available
+   */
+  private async fallbackCompression(
+    filePath: string
+  ): Promise<{ compressedPath: string; size: number }> {
+    this.logger.log('Using fallback compression (no FFmpeg available)');
+    const stats = await fs.stat(filePath);
+    return { compressedPath: filePath, size: stats.size };
   }
 
   /**

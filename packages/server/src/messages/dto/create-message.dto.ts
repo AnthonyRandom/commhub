@@ -6,6 +6,7 @@ import {
   IsPositive,
   IsOptional,
   IsArray,
+  ValidateIf,
 } from 'class-validator';
 
 export interface AttachmentData {
@@ -16,12 +17,15 @@ export interface AttachmentData {
 }
 
 export class CreateMessageDto {
-  @IsNotEmpty()
+  @ValidateIf(o => !o.attachments || o.attachments.length === 0)
+  @IsNotEmpty({
+    message: 'Message content is required when no attachments are provided',
+  })
   @IsString()
   @MaxLength(2000, {
     message: 'Message content must not exceed 2000 characters',
   })
-  content: string;
+  content?: string;
 
   @IsNotEmpty()
   @IsNumber({}, { message: 'Channel ID must be a valid number' })

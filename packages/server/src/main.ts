@@ -51,9 +51,24 @@ async function bootstrap() {
       maxAge: 86400, // 24 hours
     });
 
-    // Serve static files from uploads directory
+    // Serve static files from uploads directory with range request support for videos
     const uploadsPath = path.join(process.cwd(), 'uploads');
-    app.use('/uploads', express.static(uploadsPath));
+    app.use(
+      '/uploads',
+      express.static(uploadsPath, {
+        setHeaders: (res, path) => {
+          // Enable CORS for uploaded files
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+          res.setHeader('Access-Control-Allow-Headers', 'Range');
+
+          // Enable range requests for video/audio files
+          if (path.match(/\.(mp4|webm|ogg|avi|mov|m4v|mp3|wav|aac|m4a)$/i)) {
+            res.setHeader('Accept-Ranges', 'bytes');
+          }
+        },
+      })
+    );
 
     // Note: ThrottlerGuard is automatically applied globally through ThrottlerModule configuration
 

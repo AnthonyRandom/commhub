@@ -16,7 +16,12 @@ export class MessagesService {
   ) {}
 
   async create(createMessageDto: CreateMessageDto, userId: number) {
-    const { channelId, content, replyToId, attachments } = createMessageDto;
+    const {
+      channelId,
+      content = '',
+      replyToId,
+      attachments,
+    } = createMessageDto;
 
     // Check if channel exists and user has access
     const channel = await this.prisma.channel.findUnique({

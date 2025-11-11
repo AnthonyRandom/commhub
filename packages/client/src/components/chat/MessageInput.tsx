@@ -231,7 +231,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           <div className="flex flex-wrap gap-2">
             {attachments.map((attachment, index) => (
               <FileAttachment
-                key={index}
+                key={`attachment-${attachment.filename}-${index}`}
                 attachment={{ ...attachment, id: index, createdAt: new Date().toISOString() }}
                 onRemove={() => handleRemoveAttachment(index)}
                 showRemove={true}

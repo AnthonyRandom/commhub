@@ -43,20 +43,25 @@ export class ChannelMessagesHandler {
         return;
       }
 
-      if (!data.content || typeof data.content !== 'string') {
-        client.emit('error', { message: 'Invalid message content' });
-        return;
+      // Validate content or attachments
+      let trimmedContent = '';
+      if (data.content && typeof data.content === 'string') {
+        trimmedContent = data.content.trim();
+        if (trimmedContent.length > 2000) {
+          client.emit('error', {
+            message: 'Message too long (max 2000 characters)',
+          });
+          return;
+        }
       }
 
-      const trimmedContent = data.content.trim();
-      if (trimmedContent.length === 0) {
-        client.emit('error', { message: 'Message cannot be empty' });
-        return;
-      }
+      // Ensure we have either content or attachments
+      const hasContent = trimmedContent.length > 0;
+      const hasAttachments = data.attachments && data.attachments.length > 0;
 
-      if (trimmedContent.length > 2000) {
+      if (!hasContent && !hasAttachments) {
         client.emit('error', {
-          message: 'Message too long (max 2000 characters)',
+          message: 'Message must have content or attachments',
         });
         return;
       }

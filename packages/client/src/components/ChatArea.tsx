@@ -132,7 +132,9 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   useEffect(() => {
     if (selectedChannel && selectedChannel.type === 'text') {
       fetchMessages(selectedChannel.id)
-      // Mark mentions as read when visiting a channel
+      // Fetch and mark mentions as read when visiting a channel
+      const { fetchChannelMentionCount, markChannelMentionsAsRead } = useMentionsStore.getState()
+      fetchChannelMentionCount(selectedChannel.id)
       markChannelMentionsAsRead(selectedChannel.id)
       // Mark as initial load when switching channels
       isInitialChannelLoad.current = true

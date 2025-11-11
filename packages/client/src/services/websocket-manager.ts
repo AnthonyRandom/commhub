@@ -8,6 +8,7 @@ import { useChannelsStore } from '../stores/channels'
 import { useAuthStore } from '../stores/auth'
 import { useVoiceMembersStore } from '../stores/voiceMembers'
 import { useStatusStore, type UserStatus } from '../stores/status'
+import { useMentionsStore } from '../stores/mentions'
 
 class WebSocketManager {
   private isInitialized = false
@@ -21,6 +22,7 @@ class WebSocketManager {
 
     // Initialize WebSocket listeners
     useMessagesStore.getState().initializeWebSocketListeners()
+    useMentionsStore.getState().initializeWebSocketListeners()
     this.initializeServerListeners()
     this.initializeDirectMessageListeners()
 

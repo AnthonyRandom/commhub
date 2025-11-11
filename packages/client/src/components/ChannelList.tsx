@@ -57,7 +57,8 @@ const ChannelList: React.FC<ChannelListProps> = ({
   const { user, logout } = useAuthStore()
   const { connectedChannelId, connectedUsers } = useVoiceStore()
   const voiceChannelMembers = useVoiceMembersStore((state) => state.membersByChannel)
-  const { channelMentionCounts, initializeWebSocketListeners } = useMentionsStore()
+  const { channelMentionCounts, initializeWebSocketListeners, fetchChannelMentionCount } =
+    useMentionsStore()
 
   const [showServerMenu, setShowServerMenu] = React.useState(false)
   const [inviteCode, setInviteCode] = React.useState<string | null>(null)
@@ -80,6 +81,15 @@ const ChannelList: React.FC<ChannelListProps> = ({
   const serverChannels = server ? getChannelsByServer(server.id) : []
   const textChannels = serverChannels.filter((ch) => ch.type === 'text')
   const voiceChannels = serverChannels.filter((ch) => ch.type === 'voice')
+
+  // Fetch mention counts for all text channels when channels are loaded
+  useEffect(() => {
+    if (textChannels.length > 0) {
+      textChannels.forEach((channel) => {
+        fetchChannelMentionCount(channel.id)
+      })
+    }
+  }, [textChannels, fetchChannelMentionCount])
 
   // Find the current voice channel the user is connected to
   const currentVoiceChannel = connectedChannelId

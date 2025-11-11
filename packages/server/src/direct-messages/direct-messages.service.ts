@@ -27,7 +27,15 @@ export class DirectMessagesService {
     createDirectMessageDto: CreateDirectMessageDto,
     senderId: number
   ) {
-    const { receiverId, content, attachments } = createDirectMessageDto;
+    const { receiverId, content = '', attachments } = createDirectMessageDto;
+
+    // Ensure we have either content or attachments
+    const hasContent = content && content.trim().length > 0;
+    const hasAttachments = attachments && attachments.length > 0;
+
+    if (!hasContent && !hasAttachments) {
+      throw new BadRequestException('Message must have content or attachments');
+    }
 
     if (senderId === receiverId) {
       throw new BadRequestException('Cannot send message to yourself');
@@ -69,7 +77,7 @@ export class DirectMessagesService {
 
     return this.prisma.directMessage.create({
       data: {
-        content,
+        content: content || '',
         senderId,
         receiverId,
         attachments: attachments

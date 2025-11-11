@@ -6,6 +6,7 @@ import { FileAttachment } from './FileAttachment'
 import { MentionAutocomplete } from './MentionAutocomplete'
 import { apiService } from '../../services/api'
 import { useServersStore } from '../../stores/servers'
+import { parseMentionsInMessage } from '../../utils/mentionUtils'
 
 interface MessageInputProps {
   messageInput: string
@@ -266,16 +267,39 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
       {/* Input Area */}
       <div className="p-4">
-        {/* Mention Autocomplete */}
-        {showMentionAutocomplete && (
-          <MentionAutocomplete
-            users={mentionUsers}
-            selectedIndex={selectedMentionIndex}
-            onSelect={handleMentionSelect}
-          />
-        )}
-
         <form onSubmit={onSend} className="relative">
+          {/* Mention Autocomplete - positioned above textarea */}
+          {showMentionAutocomplete && mentionUsers.length > 0 && (
+            <div className="absolute bottom-full left-0 right-0 mb-2 z-50 px-4">
+              <MentionAutocomplete
+                users={mentionUsers}
+                selectedIndex={selectedMentionIndex}
+                onSelect={handleMentionSelect}
+              />
+            </div>
+          )}
+
+          {/* Mention Preview - shows highlighted mentions as you type */}
+          {messageInput && messageInput.includes('@') && (
+            <div className="absolute bottom-full left-0 right-0 mb-1 px-4 py-2 bg-grey-900 border-2 border-grey-700 text-sm text-grey-300 max-h-32 overflow-y-auto z-40">
+              <div className="flex flex-wrap gap-1">
+                {parseMentionsInMessage(messageInput).map((part, index) => {
+                  if (part.isMention) {
+                    return (
+                      <span
+                        key={index}
+                        className="bg-blue-600/30 text-blue-300 px-1 font-bold border-l-2 border-blue-500"
+                      >
+                        {part.text}
+                      </span>
+                    )
+                  }
+                  return <span key={index}>{part.text}</span>
+                })}
+              </div>
+            </div>
+          )}
+
           <textarea
             ref={inputRef}
             value={messageInput}

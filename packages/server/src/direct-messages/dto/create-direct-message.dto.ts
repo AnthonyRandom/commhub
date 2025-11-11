@@ -12,10 +12,10 @@ export class CreateDirectMessageDto {
   @IsNumber()
   receiverId: number;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
   @MaxLength(2000)
-  content: string;
+  content?: string;
 
   @IsOptional()
   @IsArray()

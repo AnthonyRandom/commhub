@@ -404,9 +404,20 @@ class ApiService {
     content: string,
     attachments?: Array<{ url: string; filename: string; mimeType: string; size: number }>
   ): Promise<DirectMessage> {
+    const payload: any = { receiverId }
+    // Only include content if it's not empty, or if there are no attachments
+    if (content && content.trim().length > 0) {
+      payload.content = content
+    } else if (!attachments || attachments.length === 0) {
+      payload.content = ''
+    }
+    // Include attachments if present
+    if (attachments && attachments.length > 0) {
+      payload.attachments = attachments
+    }
     const response: AxiosResponse<DirectMessage> = await this.axiosInstance.post(
       '/direct-messages',
-      { receiverId, content, attachments }
+      payload
     )
     return response.data
   }

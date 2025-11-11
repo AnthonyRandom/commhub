@@ -25,6 +25,8 @@ async function bootstrap() {
             styleSrc: ["'self'", "'unsafe-inline'"],
             scriptSrc: ["'self'"],
             imgSrc: ["'self'", 'data:', 'https:'],
+            mediaSrc: ["'self'", 'https:'],
+            connectSrc: ["'self'", 'https:'],
           },
         },
         hsts: {

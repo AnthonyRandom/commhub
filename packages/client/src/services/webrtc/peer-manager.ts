@@ -610,6 +610,15 @@ export class PeerConnectionManager {
     const stream = peerConnection.audioElement.srcObject as MediaStream
     const audioTracks = stream.getAudioTracks()
 
+    // Ensure the first track (microphone) is always enabled (never touch it)
+    if (audioTracks.length > 0 && audioTracks[0]) {
+      audioTracks[0].enabled = true
+      logger.debug('PeerManager', `Ensured microphone track stays enabled for user ${userId}`, {
+        userId,
+        trackId: audioTracks[0].id,
+      })
+    }
+
     // If there's more than one audio track, the additional ones are screen share audio
     if (audioTracks.length > 1) {
       for (let i = 1; i < audioTracks.length; i++) {

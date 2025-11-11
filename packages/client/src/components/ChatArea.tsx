@@ -138,12 +138,13 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   // Auto-scroll to bottom when messages are first loaded for a channel
   useEffect(() => {
     if (selectedChannel && messages.length > 0 && isInitialChannelLoad.current) {
-      // Use a short timeout to ensure DOM has rendered
-      const timer = setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
-        isInitialChannelLoad.current = false
-      }, 50)
-      return () => clearTimeout(timer)
+      // Use requestAnimationFrame to ensure DOM has painted, then scroll
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
+          isInitialChannelLoad.current = false
+        })
+      })
     }
   }, [selectedChannel?.id, messages.length])
 

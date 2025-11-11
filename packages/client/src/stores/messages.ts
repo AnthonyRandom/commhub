@@ -33,7 +33,7 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
   fetchMessages: async (channelId: number) => {
     set({ isLoading: true, error: null })
     try {
-      const messages = await apiService.getChannelMessages(channelId)
+      const messages = await apiService.getChannelMessages(channelId, undefined, 100)
       set((state) => ({
         messages: {
           ...state.messages,
@@ -41,7 +41,7 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
         },
         hasMoreMessages: {
           ...state.hasMoreMessages,
-          [channelId]: messages.length >= 50, // If we got 50 or more messages, there might be more
+          [channelId]: messages.length >= 100, // If we got 100 or more messages, there might be more
         },
         isLoading: false,
       }))
@@ -75,14 +75,14 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
     }))
 
     try {
-      const olderMessages = await apiService.getChannelMessages(channelId, oldestMessageId, 50)
+      const olderMessages = await apiService.getChannelMessages(channelId, oldestMessageId, 100)
       set((state) => {
         const existingMessages = state.messages[channelId] || []
         const existingMessageIds = new Set(existingMessages.map((m) => m.id))
 
         // Filter out any messages that already exist to prevent duplicates
         const newOlderMessages = olderMessages.filter((msg) => !existingMessageIds.has(msg.id))
-        const hasMore = olderMessages.length >= 50 // If we got the full amount requested, there might be more
+        const hasMore = olderMessages.length >= 100 // If we got the full amount requested, there might be more
 
         return {
           messages: {

@@ -35,17 +35,9 @@ export class VoiceConnectionManager {
     this.isInitialized = true
 
     // Set up listeners immediately if socket exists
+    // Note: Listeners will also be re-attached on socket connect/reconnect
+    // via the connect handler in websocket.ts
     voiceSignalingHandler.setupWebSocketListeners()
-
-    // Also set up listeners when socket connects (handles case where socket isn't ready yet)
-    const socket = wsService.getSocket()
-    if (socket) {
-      // If socket already connected, listeners are already attached above
-      // But also listen for future reconnects
-      socket.on('connect', () => {
-        voiceSignalingHandler.setupWebSocketListeners()
-      })
-    }
   }
 
   async joinVoiceChannel(channelId: number, reconnecting: boolean = false): Promise<void> {

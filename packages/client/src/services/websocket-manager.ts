@@ -51,7 +51,6 @@ class WebSocketManager {
     socket.off('channel-created')
     socket.off('channel-updated')
     socket.off('channel-deleted')
-    socket.off('voice-channel-members')
     socket.off('friend-request-received')
     socket.off('friend-request-responded')
     socket.off('initial-sync')
@@ -72,11 +71,8 @@ class WebSocketManager {
       useChannelsStore.getState().removeChannel(data.channelId)
     })
 
-    // Voice sidebar snapshots
-    socket.on('voice-channel-members', (data: { channelId: number; members: any[] }) => {
-      console.log('[WebSocket] Voice channel members update:', data)
-      useVoiceMembersStore.getState().setMembers(data.channelId, data.members)
-    })
+    // Note: voice-channel-members is handled by voiceSignalingHandler.setupWebSocketListeners()
+    // to avoid duplicate listeners and ensure proper camera/screen share state syncing
 
     // Initial sync on connection
     socket.on(

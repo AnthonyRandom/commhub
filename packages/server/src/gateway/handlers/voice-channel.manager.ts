@@ -212,6 +212,17 @@ export class VoiceChannelManager {
         users: usersInChannel,
       });
 
+      // Also send the updated member list directly to the joining user
+      // This ensures they see themselves in the sidebar immediately
+      const currentMembers = voiceChannelMembers.get(data.channelId);
+      const currentMembersList = currentMembers
+        ? Array.from(currentMembers)
+        : [];
+      client.emit('voice-channel-members', {
+        channelId: data.channelId,
+        members: currentMembersList,
+      });
+
       this.logger.log(
         `[Voice] Broadcasting voice-user-joined to room ${roomName} (reconnecting: ${data.reconnecting || false})`
       );

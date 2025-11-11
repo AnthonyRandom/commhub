@@ -230,13 +230,29 @@ export class UploadsService {
     }
 
     // Delete file from disk
-    const filePath = path.join(this.uploadDir, path.basename(attachment.url));
-    await fs.unlink(filePath).catch(() => {});
+    // Extract filename from URL (e.g., /uploads/filename.ext -> filename.ext)
+    const filename = path.basename(attachment.url);
+    const filePath = path.join(this.uploadDir, filename);
+
+    try {
+      // Check if file exists before attempting to delete
+      await fs.access(filePath);
+      await fs.unlink(filePath);
+      this.logger.log(`Deleted file from disk: ${filePath}`);
+    } catch (error) {
+      // File might not exist (already deleted or never existed)
+      // Log warning but continue with database deletion
+      this.logger.warn(
+        `File not found or could not be deleted: ${filePath}. Error: ${error.message}`
+      );
+    }
 
     // Delete from database
     await this.prisma.attachment.delete({
       where: { id: attachmentId },
     });
+
+    this.logger.log(`Deleted attachment ${attachmentId} from database`);
 
     return { message: 'Attachment deleted successfully' };
   }

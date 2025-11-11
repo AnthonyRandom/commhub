@@ -50,13 +50,26 @@ class StorageService {
    * Save authentication data
    */
   async saveAuth(token: string, user: any): Promise<void> {
+    // Check if we're in Tauri environment
+    if (!window.__TAURI__) {
+      // Not in Tauri, use localStorage only
+      localStorage.setItem('auth_token', token)
+      localStorage.setItem('user', JSON.stringify(user))
+      logger.info('Storage', 'Saved auth data to localStorage (not in Tauri environment)')
+      return
+    }
+
     try {
       const filePath = await this.getAuthFilePath()
       const data = { token, user, timestamp: Date.now() }
       await writeTextFile(filePath, JSON.stringify(data))
       logger.info('Storage', 'Saved auth data', { filePath })
+
+      // Also save to localStorage as backup
+      localStorage.setItem('auth_token', token)
+      localStorage.setItem('user', JSON.stringify(user))
     } catch (error) {
-      logger.error('Storage', 'Failed to save auth data', { error })
+      logger.error('Storage', 'Failed to save auth data to persistent storage', { error })
       // Fallback to localStorage
       localStorage.setItem('auth_token', token)
       localStorage.setItem('user', JSON.stringify(user))
@@ -67,6 +80,17 @@ class StorageService {
    * Load authentication data
    */
   async loadAuth(): Promise<{ token: string | null; user: any | null }> {
+    // Check if we're in Tauri environment
+    if (!window.__TAURI__) {
+      // Not in Tauri, use localStorage only
+      const token = localStorage.getItem('auth_token')
+      const userStr = localStorage.getItem('user')
+      return {
+        token,
+        user: userStr ? JSON.parse(userStr) : null,
+      }
+    }
+
     try {
       const filePath = await this.getAuthFilePath()
       const fileExists = await exists(filePath)
@@ -86,9 +110,18 @@ class StorageService {
       const content = await readTextFile(filePath)
       const data = JSON.parse(content)
       logger.info('Storage', 'Loaded auth data', { hasToken: !!data.token, hasUser: !!data.user })
+
+      // Also sync to localStorage as backup
+      if (data.token) {
+        localStorage.setItem('auth_token', data.token)
+      }
+      if (data.user) {
+        localStorage.setItem('user', JSON.stringify(data.user))
+      }
+
       return { token: data.token || null, user: data.user || null }
     } catch (error) {
-      logger.error('Storage', 'Failed to load auth data', { error })
+      logger.error('Storage', 'Failed to load auth data from persistent storage', { error })
       // Fallback to localStorage
       const token = localStorage.getItem('auth_token')
       const userStr = localStorage.getItem('user')
@@ -103,6 +136,15 @@ class StorageService {
    * Remove authentication data
    */
   async removeAuth(): Promise<void> {
+    // Check if we're in Tauri environment
+    if (!window.__TAURI__) {
+      // Not in Tauri, just clear localStorage
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('user')
+      logger.info('Storage', 'Removed auth data from localStorage (not in Tauri environment)')
+      return
+    }
+
     try {
       const filePath = await this.getAuthFilePath()
       const fileExists = await exists(filePath)

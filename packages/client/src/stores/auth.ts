@@ -9,8 +9,13 @@ interface AuthState {
   error: string | null
 
   // Actions
-  login: (username: string, password: string) => Promise<void>
-  register: (username: string, email: string, password: string) => Promise<void>
+  login: (username: string, password: string, rememberMe?: boolean) => Promise<void>
+  register: (
+    username: string,
+    email: string,
+    password: string,
+    rememberMe?: boolean
+  ) => Promise<void>
   logout: () => Promise<void>
   checkAuth: () => Promise<void>
   clearError: () => void
@@ -22,12 +27,15 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
   isLoading: false,
   error: null,
 
-  login: async (username: string, password: string) => {
+  login: async (username: string, password: string, rememberMe: boolean = true) => {
     set({ isLoading: true, error: null })
     try {
       const response = await apiService.login({ username, password })
+
+      // Save auth data - if rememberMe is false, only save to session (localStorage)
+      // If rememberMe is true, save to persistent storage (Tauri filesystem)
       await apiService.setAuthToken(response.access_token)
-      await apiService.setUser(response.user)
+      await apiService.setUser(response.user, rememberMe)
 
       set({
         user: response.user,
@@ -48,12 +56,20 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
     }
   },
 
-  register: async (username: string, email: string, password: string) => {
+  register: async (
+    username: string,
+    email: string,
+    password: string,
+    rememberMe: boolean = true
+  ) => {
     set({ isLoading: true, error: null })
     try {
       const response = await apiService.register({ username, email, password })
+
+      // Save auth data - if rememberMe is false, only save to session (localStorage)
+      // If rememberMe is true, save to persistent storage (Tauri filesystem)
       await apiService.setAuthToken(response.access_token)
-      await apiService.setUser(response.user)
+      await apiService.setUser(response.user, rememberMe)
 
       set({
         user: response.user,

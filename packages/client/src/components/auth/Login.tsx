@@ -9,6 +9,7 @@ interface LoginProps {
 const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const { error, login } = useAuthStore()
@@ -21,7 +22,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
     setIsSubmitting(true)
     try {
-      await login(username.trim(), password.trim())
+      await login(username.trim(), password.trim(), rememberMe)
       onLoginSuccess()
     } catch (error) {
       // Error is handled by the store
@@ -86,6 +87,23 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             placeholder="Enter password"
             disabled={isSubmitting}
           />
+        </div>
+
+        {/* Remember Me Checkbox */}
+        <div className="flex items-center">
+          <input
+            id="rememberMe"
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.target.checked)}
+            className="w-4 h-4 bg-grey-850 border-2 border-grey-700 text-white focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-grey-900 cursor-pointer"
+          />
+          <label
+            htmlFor="rememberMe"
+            className="ml-2 text-sm text-grey-400 cursor-pointer select-none"
+          >
+            Remember me
+          </label>
         </div>
 
         {/* Error Message */}

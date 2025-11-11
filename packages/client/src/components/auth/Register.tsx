@@ -17,6 +17,7 @@ const Register: React.FC<RegisterProps> = ({ onRegisterSuccess }) => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const { error, register } = useAuthStore()
@@ -70,7 +71,7 @@ const Register: React.FC<RegisterProps> = ({ onRegisterSuccess }) => {
 
     setIsSubmitting(true)
     try {
-      await register(username.trim(), email.trim(), password)
+      await register(username.trim(), email.trim(), password, rememberMe)
       onRegisterSuccess()
     } catch (error) {
       // Error is handled by the store
@@ -275,6 +276,23 @@ const Register: React.FC<RegisterProps> = ({ onRegisterSuccess }) => {
               {confirmPasswordValidation.message}
             </p>
           )}
+        </div>
+
+        {/* Remember Me Checkbox */}
+        <div className="flex items-center">
+          <input
+            id="rememberMe"
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.target.checked)}
+            className="w-4 h-4 bg-grey-850 border-2 border-grey-700 text-white focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-grey-900 cursor-pointer"
+          />
+          <label
+            htmlFor="rememberMe"
+            className="ml-2 text-sm text-grey-400 cursor-pointer select-none"
+          >
+            Remember me
+          </label>
         </div>
 
         {/* Error Message */}

@@ -575,15 +575,9 @@ class ApiService {
 
   // Utility methods
   async setAuthToken(token: string): Promise<void> {
-    const user = await this.getUser()
-    if (user) {
-      // Use persistent storage (Tauri filesystem) for cross-update persistence
-      const { storageService } = await import('./storage')
-      await storageService.saveAuth(token, user)
-    } else {
-      // Fallback to localStorage if user not set yet
-      localStorage.setItem('auth_token', token)
-    }
+    // Always save to localStorage as immediate fallback
+    // Persistent storage is handled by setUser() based on rememberMe flag
+    localStorage.setItem('auth_token', token)
   }
 
   async getAuthToken(): Promise<string | null> {
@@ -611,15 +605,30 @@ class ApiService {
     }
   }
 
-  async setUser(user: User): Promise<void> {
+  async setUser(user: User, shouldPersist: boolean = true): Promise<void> {
+    // Always save to localStorage as immediate fallback
+    localStorage.setItem('user', JSON.stringify(user))
+
     const token = await this.getAuthToken()
     if (token) {
-      // Use persistent storage (Tauri filesystem) for cross-update persistence
-      const { storageService } = await import('./storage')
-      await storageService.saveAuth(token, user)
-    } else {
-      // Fallback to localStorage if token not set yet
-      localStorage.setItem('user', JSON.stringify(user))
+      if (shouldPersist) {
+        // Save to persistent storage if rememberMe is checked
+        try {
+          const { storageService } = await import('./storage')
+          await storageService.saveAuth(token, user)
+        } catch (error) {
+          // If persistent storage fails, localStorage already has the data
+          console.warn('Failed to save to persistent storage, using localStorage:', error)
+        }
+      } else {
+        // Clear persistent storage if rememberMe is unchecked
+        try {
+          const { storageService } = await import('./storage')
+          await storageService.removeAuth()
+        } catch (error) {
+          console.warn('Failed to clear persistent storage:', error)
+        }
+      }
     }
   }
 

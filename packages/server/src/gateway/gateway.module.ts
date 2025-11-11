@@ -12,6 +12,7 @@ import { UsersModule } from '../users/users.module';
 import { MessagesModule } from '../messages/messages.module';
 import { DirectMessagesModule } from '../direct-messages/direct-messages.module';
 import { ChannelsModule } from '../channels/channels.module';
+import { MentionsModule } from '../mentions/mentions.module';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
@@ -24,6 +25,7 @@ import { PrismaModule } from '../prisma/prisma.module';
     forwardRef(() => MessagesModule),
     forwardRef(() => DirectMessagesModule),
     forwardRef(() => ChannelsModule),
+    forwardRef(() => MentionsModule),
     PrismaModule,
   ],
   providers: [

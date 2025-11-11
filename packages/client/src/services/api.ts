@@ -37,6 +37,15 @@ export interface Channel {
   createdAt: string
 }
 
+export interface Attachment {
+  id: number
+  url: string
+  filename: string
+  mimeType: string
+  size: number
+  createdAt: string
+}
+
 export interface Message {
   id: number
   content: string
@@ -62,6 +71,7 @@ export interface Message {
     id: number
     name: string
   }
+  attachments?: Attachment[]
 }
 
 export interface Friend {
@@ -423,18 +433,87 @@ class ApiService {
   }
 
   // Tenor GIF methods
-  async getTrendingGifs(limit: number = 20): Promise<any[]> {
-    const response: AxiosResponse<any[]> = await this.axiosInstance.get(
-      `/tenor/trending?limit=${limit}`
-    )
+  async getTrendingGifs(
+    limit: number = 50,
+    pos?: string
+  ): Promise<{ results: any[]; next: string }> {
+    let url = `/tenor/trending?limit=${limit}`
+    if (pos) url += `&pos=${pos}`
+    const response = await this.axiosInstance.get(url)
     return response.data
   }
 
-  async searchGifs(query: string, limit: number = 20): Promise<any[]> {
-    const response: AxiosResponse<any[]> = await this.axiosInstance.get(
-      `/tenor/search?q=${encodeURIComponent(query)}&limit=${limit}`
-    )
+  async searchGifs(
+    query: string,
+    limit: number = 50,
+    pos?: string
+  ): Promise<{ results: any[]; next: string }> {
+    let url = `/tenor/search?q=${encodeURIComponent(query)}&limit=${limit}`
+    if (pos) url += `&pos=${pos}`
+    const response = await this.axiosInstance.get(url)
     return response.data
+  }
+
+  // Saved GIFs methods
+  async getSavedGifs(): Promise<any[]> {
+    const response = await this.axiosInstance.get('/saved-gifs')
+    return response.data
+  }
+
+  async saveGif(data: {
+    gifUrl: string
+    tenorId?: string
+    contentDescription?: string
+    thumbnailUrl?: string
+  }): Promise<any> {
+    const response = await this.axiosInstance.post('/saved-gifs', data)
+    return response.data
+  }
+
+  async removeSavedGif(gifId: number): Promise<void> {
+    await this.axiosInstance.delete(`/saved-gifs/${gifId}`)
+  }
+
+  // File upload methods
+  async uploadFile(
+    file: File,
+    channelId: number
+  ): Promise<{ url: string; filename: string; mimeType: string; size: number }> {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('channelId', channelId.toString())
+
+    const response = await this.axiosInstance.post('/uploads', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 300000, // 5 minutes timeout for large files
+    })
+    return response.data
+  }
+
+  async deleteAttachment(attachmentId: number): Promise<void> {
+    await this.axiosInstance.delete(`/uploads/${attachmentId}`)
+  }
+
+  // Mention methods
+  async getMentions(channelId?: number): Promise<any[]> {
+    const url = channelId ? `/mentions?channelId=${channelId}` : '/mentions'
+    const response = await this.axiosInstance.get(url)
+    return response.data
+  }
+
+  async getChannelMentionCount(channelId: number): Promise<number> {
+    const response = await this.axiosInstance.get(`/mentions/channel/${channelId}/count`)
+    return response.data
+  }
+
+  async markMentionAsRead(mentionId: number): Promise<void> {
+    await this.axiosInstance.patch(`/mentions/${mentionId}/read`)
+  }
+
+  async markChannelMentionsAsRead(channelId: number): Promise<void> {
+    await this.axiosInstance.patch(`/mentions/channel/${channelId}/read-all`)
   }
 
   // Utility methods

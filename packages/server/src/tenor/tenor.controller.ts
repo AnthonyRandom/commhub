@@ -12,8 +12,11 @@ export class TenorController {
   constructor(private readonly tenorService: TenorService) {}
 
   @Get('trending')
-  async getTrendingGifs(@Query('limit') limit?: string) {
-    const limitNum = limit ? parseInt(limit, 10) : 20;
+  async getTrendingGifs(
+    @Query('limit') limit?: string,
+    @Query('pos') pos?: string
+  ) {
+    const limitNum = limit ? parseInt(limit, 10) : 50;
 
     if (limitNum < 1 || limitNum > 50) {
       throw new HttpException(
@@ -22,11 +25,15 @@ export class TenorController {
       );
     }
 
-    return await this.tenorService.getTrendingGifs(limitNum);
+    return await this.tenorService.getTrendingGifs(limitNum, pos);
   }
 
   @Get('search')
-  async searchGifs(@Query('q') query: string, @Query('limit') limit?: string) {
+  async searchGifs(
+    @Query('q') query: string,
+    @Query('limit') limit?: string,
+    @Query('pos') pos?: string
+  ) {
     if (!query || query.trim().length === 0) {
       throw new HttpException(
         'Query parameter "q" is required',
@@ -34,7 +41,7 @@ export class TenorController {
       );
     }
 
-    const limitNum = limit ? parseInt(limit, 10) : 20;
+    const limitNum = limit ? parseInt(limit, 10) : 50;
 
     if (limitNum < 1 || limitNum > 50) {
       throw new HttpException(
@@ -43,6 +50,6 @@ export class TenorController {
       );
     }
 
-    return await this.tenorService.searchGifs(query.trim(), limitNum);
+    return await this.tenorService.searchGifs(query.trim(), limitNum, pos);
   }
 }

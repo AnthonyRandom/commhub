@@ -30,9 +30,15 @@ export class TenorService {
     }
   }
 
-  async getTrendingGifs(limit: number = 20): Promise<TenorGif[]> {
+  async getTrendingGifs(
+    limit: number = 50,
+    pos?: string
+  ): Promise<{ results: TenorGif[]; next: string }> {
     try {
-      const url = `${this.baseUrl}/featured?key=${this.apiKey}&client_key=${this.clientKey}&limit=${limit}`;
+      let url = `${this.baseUrl}/featured?key=${this.apiKey}&client_key=${this.clientKey}&limit=${limit}`;
+      if (pos) {
+        url += `&pos=${pos}`;
+      }
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -42,8 +48,11 @@ export class TenorService {
         );
       }
 
-      const data: TenorResponse = await response.json();
-      return data.results || [];
+      const data: any = await response.json();
+      return {
+        results: data.results || [],
+        next: data.next || '',
+      };
     } catch (error) {
       console.error('Error fetching trending gifs:', error);
       throw new HttpException(
@@ -53,10 +62,17 @@ export class TenorService {
     }
   }
 
-  async searchGifs(query: string, limit: number = 20): Promise<TenorGif[]> {
+  async searchGifs(
+    query: string,
+    limit: number = 50,
+    pos?: string
+  ): Promise<{ results: TenorGif[]; next: string }> {
     try {
       const encodedQuery = encodeURIComponent(query);
-      const url = `${this.baseUrl}/search?q=${encodedQuery}&key=${this.apiKey}&client_key=${this.clientKey}&limit=${limit}`;
+      let url = `${this.baseUrl}/search?q=${encodedQuery}&key=${this.apiKey}&client_key=${this.clientKey}&limit=${limit}`;
+      if (pos) {
+        url += `&pos=${pos}`;
+      }
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -66,8 +82,11 @@ export class TenorService {
         );
       }
 
-      const data: TenorResponse = await response.json();
-      return data.results || [];
+      const data: any = await response.json();
+      return {
+        results: data.results || [],
+        next: data.next || '',
+      };
     } catch (error) {
       console.error('Error searching gifs:', error);
       throw new HttpException(

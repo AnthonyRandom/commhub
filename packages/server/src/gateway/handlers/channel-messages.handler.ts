@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Server } from 'socket.io';
 import { MessagesService } from '../../messages/messages.service';
+import { MentionsService } from '../../mentions/mentions.service';
 import { AuthenticatedSocket } from '../types/socket.types';
 
 /**
@@ -11,11 +12,24 @@ import { AuthenticatedSocket } from '../types/socket.types';
 export class ChannelMessagesHandler {
   private logger = new Logger('ChannelMessagesHandler');
 
-  constructor(private messagesService: MessagesService) {}
+  constructor(
+    private messagesService: MessagesService,
+    private mentionsService: MentionsService
+  ) {}
 
   async handleSendMessage(
     server: Server,
-    data: { channelId: number; content: string; replyToId?: number },
+    data: {
+      channelId: number;
+      content: string;
+      replyToId?: number;
+      attachments?: Array<{
+        url: string;
+        filename: string;
+        mimeType: string;
+        size: number;
+      }>;
+    },
     client: AuthenticatedSocket
   ) {
     try {
@@ -61,6 +75,7 @@ export class ChannelMessagesHandler {
           content: trimmedContent,
           channelId: data.channelId,
           replyToId: data.replyToId,
+          attachments: data.attachments,
         },
         client.userId
       );
@@ -84,7 +99,36 @@ export class ChannelMessagesHandler {
               user: message.replyTo.user,
             }
           : null,
+        attachments: message.attachments || [],
       });
+
+      // Check for mentions and emit to mentioned users
+      setTimeout(async () => {
+        try {
+          const mentionedUserIds =
+            await this.mentionsService.getMentionedUserIds(message.id);
+
+          if (mentionedUserIds.length > 0) {
+            // Emit mention notification to each mentioned user
+            mentionedUserIds.forEach(mentionedUserId => {
+              server.to(`user-${mentionedUserId}`).emit('mention', {
+                messageId: message.id,
+                channelId: message.channel.id,
+                channelName: message.channel.name,
+                fromUserId: message.user.id,
+                fromUsername: message.user.username,
+                content: message.content,
+                createdAt: message.createdAt,
+              });
+            });
+          }
+        } catch (error) {
+          this.logger.error(
+            'Error sending mention notifications:',
+            error.message
+          );
+        }
+      }, 100); // Small delay to ensure mentions are created
     } catch (error) {
       this.logger.error('Error sending message:', error.message);
       client.emit('error', { message: 'Failed to send message' });

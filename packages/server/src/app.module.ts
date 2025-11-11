@@ -11,6 +11,9 @@ import { FriendRequestsModule } from './friend-requests/friend-requests.module';
 import { DirectMessagesModule } from './direct-messages/direct-messages.module';
 import { TenorModule } from './tenor/tenor.module';
 import { HealthModule } from './health/health.module';
+import { UploadsModule } from './uploads/uploads.module';
+import { SavedGifsModule } from './saved-gifs/saved-gifs.module';
+import { MentionsModule } from './mentions/mentions.module';
 
 @Module({
   imports: [
@@ -36,6 +39,9 @@ import { HealthModule } from './health/health.module';
     DirectMessagesModule,
     TenorModule,
     HealthModule,
+    UploadsModule,
+    SavedGifsModule,
+    MentionsModule,
   ],
 })
 export class AppModule {}

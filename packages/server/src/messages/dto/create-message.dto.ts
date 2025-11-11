@@ -5,7 +5,15 @@ import {
   MaxLength,
   IsPositive,
   IsOptional,
+  IsArray,
 } from 'class-validator';
+
+export interface AttachmentData {
+  url: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
 
 export class CreateMessageDto {
   @IsNotEmpty()
@@ -24,4 +32,8 @@ export class CreateMessageDto {
   @IsNumber({}, { message: 'Reply To ID must be a valid number' })
   @IsPositive({ message: 'Reply To ID must be a positive number' })
   replyToId?: number;
+
+  @IsOptional()
+  @IsArray()
+  attachments?: AttachmentData[];
 }

@@ -1,16 +1,25 @@
-import React, { useRef, useEffect } from 'react'
-import { Send, Image as ImageIcon, Smile, Reply as ReplyIcon, X } from 'lucide-react'
+import React, { useRef, useEffect, useState } from 'react'
+import { Send, Image as ImageIcon, Smile, Reply as ReplyIcon, X, Loader } from 'lucide-react'
 import type { Message } from '../../services/api'
+import { FileUploadButton } from './FileUploadButton'
+import { FileAttachment } from './FileAttachment'
+import { MentionAutocomplete } from './MentionAutocomplete'
+import { apiService } from '../../services/api'
+import { useServersStore } from '../../stores/servers'
 
 interface MessageInputProps {
   messageInput: string
   setMessageInput: (value: string) => void
   replyingTo: Message | null
-  onSend: (e: React.FormEvent) => Promise<void>
+  onSend: (
+    e: React.FormEvent,
+    attachments?: Array<{ url: string; filename: string; mimeType: string; size: number }>
+  ) => Promise<void>
   onGifClick: () => void
   onEmojiClick: () => void
   onCancelReply: () => void
   channelName: string
+  channelId: number
 }
 
 export const MessageInput: React.FC<MessageInputProps> = ({
@@ -22,40 +31,172 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   onEmojiClick,
   onCancelReply,
   channelName,
+  channelId,
 }) => {
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const [attachments, setAttachments] = useState<
+    Array<{ url: string; filename: string; mimeType: string; size: number }>
+  >([])
+  const [uploadingFiles, setUploadingFiles] = useState<File[]>([])
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [showMentionAutocomplete, setShowMentionAutocomplete] = useState(false)
+  const [mentionQuery, setMentionQuery] = useState('')
+  const [mentionUsers, setMentionUsers] = useState<Array<{ id: number; username: string }>>([])
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
+  const [mentionStartPos, setMentionStartPos] = useState(0)
+
+  const currentServer = useServersStore((state) => state.currentServer)
 
   // Focus input when channel changes
   useEffect(() => {
     inputRef.current?.focus()
   }, [channelName])
 
+  // Clear attachments when channel changes
+  useEffect(() => {
+    setAttachments([])
+    setUploadingFiles([])
+    setUploadError(null)
+    setShowMentionAutocomplete(false)
+  }, [channelId])
+
+  // Handle mention autocomplete
+  useEffect(() => {
+    if (!showMentionAutocomplete || !currentServer) {
+      setMentionUsers([])
+      return
+    }
+
+    // Filter server members based on mention query
+    const members = currentServer.members || []
+    const filtered = members.filter((member) =>
+      member.username.toLowerCase().includes(mentionQuery.toLowerCase())
+    )
+    setMentionUsers(filtered.slice(0, 10).map((m) => ({ id: m.id, username: m.username })))
+  }, [showMentionAutocomplete, mentionQuery, currentServer])
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Handle mention autocomplete navigation
+    if (showMentionAutocomplete) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSelectedMentionIndex((prev) => Math.min(prev + 1, mentionUsers.length - 1))
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSelectedMentionIndex((prev) => Math.max(prev - 1, 0))
+        return
+      }
+      if (e.key === 'Tab' || e.key === 'Enter') {
+        if (mentionUsers.length > 0) {
+          e.preventDefault()
+          handleMentionSelect(mentionUsers[selectedMentionIndex].username)
+          return
+        }
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setShowMentionAutocomplete(false)
+        return
+      }
+    }
+
+    // Original Enter key handling
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      onSend(e)
+      if (messageInput.trim() || attachments.length > 0) {
+        onSend(e, attachments.length > 0 ? attachments : undefined)
+        setAttachments([])
+        setUploadError(null)
+      }
     }
+  }
+
+  const handleMentionSelect = (username: string) => {
+    const beforeMention = messageInput.substring(0, mentionStartPos)
+    const afterMention = messageInput.substring(
+      inputRef.current?.selectionStart || messageInput.length
+    )
+    const newValue = beforeMention + '@' + username + ' ' + afterMention
+    setMessageInput(newValue)
+    setShowMentionAutocomplete(false)
+    setMentionQuery('')
+
+    // Focus input and set cursor after mention
+    setTimeout(() => {
+      if (inputRef.current) {
+        const cursorPos = (beforeMention + '@' + username + ' ').length
+        inputRef.current.selectionStart = cursorPos
+        inputRef.current.selectionEnd = cursorPos
+        inputRef.current.focus()
+      }
+    }, 0)
   }
 
   // Auto-resize textarea based on content
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setMessageInput(e.target.value)
+    const value = e.target.value
+    setMessageInput(value)
 
     // Reset height to auto to get the correct scrollHeight
     e.target.style.height = 'auto'
     // Set height to scrollHeight to fit content
     const newHeight = Math.min(e.target.scrollHeight, 200) // Max 200px
     e.target.style.height = `${newHeight}px`
+
+    // Detect @ mentions
+    const cursorPos = e.target.selectionStart
+    const textBeforeCursor = value.substring(0, cursorPos)
+    const lastAtIndex = textBeforeCursor.lastIndexOf('@')
+
+    if (lastAtIndex !== -1) {
+      const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1)
+      // Check if it's a valid mention (no spaces)
+      if (!textAfterAt.includes(' ') && textAfterAt.length >= 0) {
+        setMentionQuery(textAfterAt)
+        setMentionStartPos(lastAtIndex)
+        setShowMentionAutocomplete(true)
+        setSelectedMentionIndex(0)
+      } else {
+        setShowMentionAutocomplete(false)
+      }
+    } else {
+      setShowMentionAutocomplete(false)
+    }
+  }
+
+  const handleFilesSelected = async (files: File[]) => {
+    setUploadingFiles((prev) => [...prev, ...files])
+    setUploadError(null)
+
+    for (const file of files) {
+      try {
+        const uploadedFile = await apiService.uploadFile(file, channelId)
+        setAttachments((prev) => [...prev, uploadedFile])
+      } catch (error: any) {
+        console.error('Failed to upload file:', error)
+        setUploadError(error.response?.data?.message || `Failed to upload ${file.name}`)
+      } finally {
+        setUploadingFiles((prev) => prev.filter((f) => f !== file))
+      }
+    }
+  }
+
+  const handleRemoveAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index))
   }
 
   const handleSendClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault()
-    if (messageInput.trim()) {
-      await onSend(e as any)
-      // Reset textarea height
+    if (messageInput.trim() || attachments.length > 0) {
+      await onSend(e as any, attachments.length > 0 ? attachments : undefined)
+      // Reset textarea height and clear attachments
       if (inputRef.current) {
         inputRef.current.style.height = '48px'
       }
+      setAttachments([])
+      setUploadError(null)
     }
   }
 
@@ -84,8 +225,48 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         </div>
       )}
 
+      {/* Attachments Preview */}
+      {(attachments.length > 0 || uploadingFiles.length > 0) && (
+        <div className="px-4 pt-3 pb-2 bg-grey-850 border-b-2 border-grey-800">
+          <div className="flex flex-wrap gap-2">
+            {attachments.map((attachment, index) => (
+              <FileAttachment
+                key={index}
+                attachment={{ ...attachment, id: index, createdAt: new Date().toISOString() }}
+                onRemove={() => handleRemoveAttachment(index)}
+                showRemove={true}
+              />
+            ))}
+            {uploadingFiles.map((file, index) => (
+              <div
+                key={`uploading-${index}`}
+                className="bg-grey-800 border-2 border-grey-700 p-3 flex items-center gap-3 animate-pulse"
+              >
+                <Loader className="w-5 h-5 text-grey-400 animate-spin" />
+                <span className="text-grey-300 text-sm">{file.name}</span>
+              </div>
+            ))}
+          </div>
+          {uploadError && (
+            <div className="mt-2 text-red-400 text-sm flex items-center gap-2">
+              <X className="w-4 h-4" />
+              <span>{uploadError}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Input Area */}
       <div className="p-4">
+        {/* Mention Autocomplete */}
+        {showMentionAutocomplete && (
+          <MentionAutocomplete
+            users={mentionUsers}
+            selectedIndex={selectedMentionIndex}
+            onSelect={handleMentionSelect}
+          />
+        )}
+
         <form onSubmit={onSend} className="relative">
           <textarea
             ref={inputRef}
@@ -107,6 +288,10 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
           {/* Action Buttons */}
           <div className="absolute right-2 top-[10px] flex items-center gap-1 z-10">
+            <FileUploadButton
+              onFilesSelected={handleFilesSelected}
+              disabled={uploadingFiles.length > 0}
+            />
             <button
               type="button"
               onClick={onGifClick}
@@ -126,7 +311,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             <button
               type="button"
               onClick={handleSendClick}
-              disabled={!messageInput.trim()}
+              disabled={!messageInput.trim() && attachments.length === 0}
               className="h-8 w-8 flex items-center justify-center bg-white text-black hover:bg-grey-100 disabled:bg-grey-700 disabled:text-grey-500 disabled:cursor-not-allowed transition-colors border-2 border-transparent"
               title="Send message"
             >

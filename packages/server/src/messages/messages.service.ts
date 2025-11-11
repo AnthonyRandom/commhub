@@ -4,15 +4,19 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { MentionsService } from '../mentions/mentions.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { CONTENT, DATABASE } from '../config/constants';
 
 @Injectable()
 export class MessagesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private mentionsService: MentionsService
+  ) {}
 
   async create(createMessageDto: CreateMessageDto, userId: number) {
-    const { channelId, content, replyToId } = createMessageDto;
+    const { channelId, content, replyToId, attachments } = createMessageDto;
 
     // Check if channel exists and user has access
     const channel = await this.prisma.channel.findUnique({
@@ -56,12 +60,23 @@ export class MessagesService {
       }
     }
 
-    return this.prisma.message.create({
+    const message = await this.prisma.message.create({
       data: {
         content,
         channelId,
         userId,
         replyToId,
+        attachments: attachments
+          ? {
+              create: attachments.map(att => ({
+                url: att.url,
+                filename: att.filename,
+                mimeType: att.mimeType,
+                size: att.size,
+                uploadedBy: userId,
+              })),
+            }
+          : undefined,
       },
       include: {
         user: {
@@ -88,8 +103,23 @@ export class MessagesService {
             },
           },
         },
+        attachments: {
+          select: {
+            id: true,
+            url: true,
+            filename: true,
+            mimeType: true,
+            size: true,
+            createdAt: true,
+          },
+        },
       },
     });
+
+    // Create mentions asynchronously (don't await)
+    this.mentionsService.createMentions(message.id, channelId, content, userId);
+
+    return message;
   }
 
   async findAll(
@@ -154,6 +184,16 @@ export class MessagesService {
                 username: true,
               },
             },
+          },
+        },
+        attachments: {
+          select: {
+            id: true,
+            url: true,
+            filename: true,
+            mimeType: true,
+            size: true,
+            createdAt: true,
           },
         },
       },
@@ -387,6 +427,16 @@ export class MessagesService {
                 username: true,
               },
             },
+          },
+        },
+        attachments: {
+          select: {
+            id: true,
+            url: true,
+            filename: true,
+            mimeType: true,
+            size: true,
+            createdAt: true,
           },
         },
       },

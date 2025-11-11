@@ -4,6 +4,7 @@ import { ExpressAdapter } from '@nestjs/platform-express';
 import { AppModule } from './app.module.js';
 import { validateEnvironmentConfig } from './config/environment.validation';
 import helmet from 'helmet';
+import * as express from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -49,6 +50,10 @@ async function bootstrap() {
       credentials: true,
       maxAge: 86400, // 24 hours
     });
+
+    // Serve static files from uploads directory
+    const uploadsPath = path.join(process.cwd(), 'uploads');
+    app.use('/uploads', express.static(uploadsPath));
 
     // Note: ThrottlerGuard is automatically applied globally through ThrottlerModule configuration
 

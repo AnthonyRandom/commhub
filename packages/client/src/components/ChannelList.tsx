@@ -21,6 +21,7 @@ import { useServersStore } from '../stores/servers'
 import { useAuthStore } from '../stores/auth'
 import { useVoiceStore } from '../stores/voice'
 import { useVoiceMembersStore } from '../stores/voiceMembers'
+import { useMentionsStore } from '../stores/mentions'
 import { apiService, type Conversation } from '../services/api'
 import StatusIndicator from './StatusIndicator'
 import VoiceStatus from './VoiceStatus'
@@ -56,6 +57,7 @@ const ChannelList: React.FC<ChannelListProps> = ({
   const { user, logout } = useAuthStore()
   const { connectedChannelId, connectedUsers } = useVoiceStore()
   const voiceChannelMembers = useVoiceMembersStore((state) => state.membersByChannel)
+  const { channelMentionCounts, initializeWebSocketListeners } = useMentionsStore()
 
   const [showServerMenu, setShowServerMenu] = React.useState(false)
   const [inviteCode, setInviteCode] = React.useState<string | null>(null)
@@ -70,6 +72,10 @@ const ChannelList: React.FC<ChannelListProps> = ({
   useEffect(() => {
     fetchChannels()
   }, [fetchChannels])
+
+  useEffect(() => {
+    initializeWebSocketListeners()
+  }, [initializeWebSocketListeners])
 
   const serverChannels = server ? getChannelsByServer(server.id) : []
   const textChannels = serverChannels.filter((ch) => ch.type === 'text')
@@ -304,6 +310,11 @@ const ChannelList: React.FC<ChannelListProps> = ({
                       <span className="truncate text-sm font-medium flex-1 text-left">
                         {channel.name}
                       </span>
+                      {channelMentionCounts[channel.id] > 0 && (
+                        <span className="flex-shrink-0 ml-2 px-1.5 py-0.5 bg-blue-600 text-white text-xs font-bold border-2 border-white animate-pulse">
+                          @
+                        </span>
+                      )}
                     </button>
                     {isOwner && (
                       <div

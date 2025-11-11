@@ -13,7 +13,12 @@ interface MessagesState {
   // Actions
   fetchMessages: (channelId: number) => Promise<void>
   loadOlderMessages: (channelId: number) => Promise<void>
-  sendMessage: (channelId: number, content: string, replyToId?: number) => Promise<void>
+  sendMessage: (
+    channelId: number,
+    content: string,
+    replyToId?: number,
+    attachments?: Array<{ url: string; filename: string; mimeType: string; size: number }>
+  ) => Promise<void>
   editMessage: (messageId: number, content: string) => Promise<void>
   deleteMessage: (channelId: number, messageId: number) => Promise<void>
   addMessage: (message: WSMessage) => void
@@ -111,7 +116,12 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
     }
   },
 
-  sendMessage: async (channelId: number, content: string, replyToId?: number) => {
+  sendMessage: async (
+    channelId: number,
+    content: string,
+    replyToId?: number,
+    attachments?: Array<{ url: string; filename: string; mimeType: string; size: number }>
+  ) => {
     try {
       // Optimistically add message to UI
       const tempMessage: Message = {
@@ -129,6 +139,7 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
           id: channelId,
           name: 'Current Channel',
         },
+        attachments: attachments as any,
       }
 
       set((state) => ({
@@ -139,7 +150,7 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
       }))
 
       // Send via WebSocket (this will also add the real message via addMessage)
-      wsService.sendMessage(channelId, content, replyToId)
+      wsService.sendMessage(channelId, content, replyToId, attachments)
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Failed to send message'
       set({ error: errorMessage })
@@ -261,6 +272,7 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
           id: message.channelId,
           name: 'Current Channel',
         },
+        attachments: message.attachments,
       }
 
       return {

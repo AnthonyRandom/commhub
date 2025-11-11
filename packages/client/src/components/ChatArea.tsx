@@ -6,6 +6,7 @@ import { useVoiceStore } from '../stores/voice'
 import { voiceManager } from '../services/voice-manager'
 import { useSettingsStore } from '../stores/settings'
 import { useFriendsStore } from '../stores/friends'
+import { useMentionsStore } from '../stores/mentions'
 import MembersModal from './MembersModal'
 import VoiceControls from './VoiceControls'
 import GifPicker from './GifPicker'
@@ -64,6 +65,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   const deleteMessage = useMessagesStore((state) => state.deleteMessage)
   const { user } = useAuthStore()
   const { getTimeFormat } = useSettingsStore()
+  const markChannelMentionsAsRead = useMentionsStore((state) => state.markChannelMentionsAsRead)
   const { blockedUsers } = useFriendsStore()
 
   const {
@@ -130,10 +132,12 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   useEffect(() => {
     if (selectedChannel && selectedChannel.type === 'text') {
       fetchMessages(selectedChannel.id)
+      // Mark mentions as read when visiting a channel
+      markChannelMentionsAsRead(selectedChannel.id)
       // Mark as initial load when switching channels
       isInitialChannelLoad.current = true
     }
-  }, [selectedChannel, fetchMessages])
+  }, [selectedChannel, fetchMessages, markChannelMentionsAsRead])
 
   // Auto-scroll to bottom when messages are first loaded for a channel
   useEffect(() => {
@@ -201,13 +205,16 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
     }
   }, [selectedChannel])
 
-  const handleSendMessage = async (e: React.FormEvent) => {
+  const handleSendMessage = async (
+    e: React.FormEvent,
+    attachments?: Array<{ url: string; filename: string; mimeType: string; size: number }>
+  ) => {
     e.preventDefault()
-    if (!selectedChannel || !messageInput.trim()) return
+    if (!selectedChannel || (!messageInput.trim() && !attachments?.length)) return
 
     const channelId = selectedChannel.id
     try {
-      await sendMessage(channelId, messageInput.trim(), replyingTo?.id)
+      await sendMessage(channelId, messageInput.trim(), replyingTo?.id, attachments)
       // Clear this channel's input
       setChannelInputs((prev) => {
         const newMap = new Map(prev)
@@ -548,6 +555,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
         onEmojiClick={() => setShowEmojiPicker(!showEmojiPicker)}
         onCancelReply={cancelReply}
         channelName={selectedChannel.name}
+        channelId={selectedChannel.id}
       />
 
       {/* GIF Picker */}

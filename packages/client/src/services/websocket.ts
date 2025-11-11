@@ -26,6 +26,14 @@ export interface WSMessage {
       username: string
     }
   }
+  attachments?: Array<{
+    id: number
+    url: string
+    filename: string
+    mimeType: string
+    size: number
+    createdAt: string
+  }>
 }
 
 export interface FriendPresence {
@@ -83,6 +91,7 @@ class WebSocketService {
   private directMessageListeners: ((message: DirectMessageWS) => void)[] = []
   private errorListeners: ((error: any) => void)[] = []
   private statusUpdateListeners: ((data: { userId: number; status: string }) => void)[] = []
+  private mentionListeners: ((notification: any) => void)[] = []
 
   connect(token: string): void {
     if (this.socket?.connected) {
@@ -156,6 +165,23 @@ class WebSocketService {
     // Set up message listeners
     this.socket.on('message', (message: WSMessage) => {
       this.messageListeners.forEach((listener) => listener(message))
+    })
+
+    // Set up mention listeners
+    this.socket.on('mention', async (notification: any) => {
+      logger.info('WebSocket', 'Received mention notification', notification)
+
+      // Play notification sound and flash taskbar
+      try {
+        const { default: notificationService } = await import('./notifications')
+        await notificationService.playMentionSound()
+        await notificationService.flashTaskbar()
+      } catch (error) {
+        logger.error('WebSocket', 'Failed to play mention notification', { error })
+      }
+
+      // Notify all mention listeners
+      this.mentionListeners.forEach((listener) => listener(notification))
     })
 
     this.socket.on('friend-presence', (presence: FriendPresence) => {
@@ -330,9 +356,14 @@ class WebSocketService {
   }
 
   // Messaging
-  sendMessage(channelId: number, content: string, replyToId?: number): void {
+  sendMessage(
+    channelId: number,
+    content: string,
+    replyToId?: number,
+    attachments?: Array<{ url: string; filename: string; mimeType: string; size: number }>
+  ): void {
     if (this.socket) {
-      this.socket.emit('send-message', { channelId, content, replyToId })
+      this.socket.emit('send-message', { channelId, content, replyToId, attachments })
     }
   }
 
@@ -427,6 +458,16 @@ class WebSocketService {
       const index = this.statusUpdateListeners.indexOf(listener)
       if (index > -1) {
         this.statusUpdateListeners.splice(index, 1)
+      }
+    }
+  }
+
+  onMention(listener: (notification: any) => void): () => void {
+    this.mentionListeners.push(listener)
+    return () => {
+      const index = this.mentionListeners.indexOf(listener)
+      if (index > -1) {
+        this.mentionListeners.splice(index, 1)
       }
     }
   }

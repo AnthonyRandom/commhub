@@ -89,7 +89,7 @@ class NotificationService {
   /**
    * Play notification sound
    */
-  private playNotificationSound() {
+  playNotificationSound() {
     if (this.audioContext) {
       try {
         // Create a new beep sound
@@ -115,9 +115,35 @@ class NotificationService {
   }
 
   /**
+   * Play mention sound (higher pitched for mentions)
+   */
+  async playMentionSound() {
+    if (this.audioContext) {
+      try {
+        const oscillator = this.audioContext.createOscillator()
+        const gainNode = this.audioContext.createGain()
+
+        oscillator.connect(gainNode)
+        gainNode.connect(this.audioContext.destination)
+
+        oscillator.frequency.value = 800 // Higher pitch for mentions
+        oscillator.type = 'sine'
+
+        gainNode.gain.setValueAtTime(0.3, this.audioContext.currentTime)
+        gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.5)
+
+        oscillator.start(this.audioContext.currentTime)
+        oscillator.stop(this.audioContext.currentTime + 0.5)
+      } catch (error) {
+        console.error('[Notifications] Failed to play mention sound:', error)
+      }
+    }
+  }
+
+  /**
    * Flash the taskbar icon (Windows-specific)
    */
-  private async flashTaskbar() {
+  async flashTaskbar() {
     try {
       // Use Tauri command to flash the taskbar
       // This would need to be implemented in the Tauri backend

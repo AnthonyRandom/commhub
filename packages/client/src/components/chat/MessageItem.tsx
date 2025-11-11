@@ -1,6 +1,9 @@
 import React, { useRef, useEffect } from 'react'
 import { MoreVertical, Edit2, Trash2, Reply as ReplyIcon } from 'lucide-react'
 import MediaEmbed from '../MediaEmbed'
+import { FileAttachment } from './FileAttachment'
+import { GifHoverActions } from './GifHoverActions'
+import { parseMentionsInMessage } from '../../utils/mentionUtils'
 import type { Message } from '../../services/api'
 
 interface MessageItemProps {
@@ -74,6 +77,27 @@ export const MessageItem: React.FC<MessageItemProps> = ({
 
   const isGifUrl = (url: string): boolean => {
     return /\.(gif)$/i.test(url) || url.includes('tenor.com') || url.includes('giphy.com')
+  }
+
+  const renderMessageWithMentions = (text: string) => {
+    const parts = parseMentionsInMessage(text)
+    return (
+      <>
+        {parts.map((part, index) => {
+          if (part.isMention) {
+            return (
+              <span
+                key={index}
+                className="bg-blue-600/30 text-blue-300 px-1 font-bold border-l-2 border-blue-500"
+              >
+                {part.text}
+              </span>
+            )
+          }
+          return <span key={index}>{part.text}</span>
+        })}
+      </>
+    )
   }
 
   const urls = extractUrls(message.content)
@@ -155,21 +179,34 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                 {/* Display GIF if message is just a GIF URL */}
                 {messageIsGif ? (
                   <div className="max-w-md">
-                    <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden inline-block">
+                    <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden inline-block relative group">
                       <img src={urls[0]} alt="GIF" className="block h-auto max-h-96 max-w-full" />
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <GifHoverActions gifUrl={urls[0]} thumbnailUrl={urls[0]} />
+                      </div>
                     </div>
                   </div>
                 ) : (
                   <>
                     {cleanedContent && (
                       <p className="text-grey-100 break-words whitespace-pre-wrap">
-                        {isUserBlocked(message.userId) ? '[This user is blocked]' : cleanedContent}
+                        {isUserBlocked(message.userId)
+                          ? '[This user is blocked]'
+                          : renderMessageWithMentions(cleanedContent)}
                       </p>
                     )}
                     {/* Display media embeds for URLs in the message */}
                     {urls.map((url, urlIndex) => (
                       <MediaEmbed key={`${message.id}-${urlIndex}`} url={url} />
                     ))}
+                    {/* Display file attachments */}
+                    {message.attachments && message.attachments.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {message.attachments.map((attachment) => (
+                          <FileAttachment key={attachment.id} attachment={attachment} />
+                        ))}
+                      </div>
+                    )}
                   </>
                 )}
               </>
@@ -280,15 +317,20 @@ export const MessageItem: React.FC<MessageItemProps> = ({
             <>
               {messageIsGif ? (
                 <div className="max-w-md">
-                  <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden inline-block">
+                  <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden inline-block relative group">
                     <img src={urls[0]} alt="GIF" className="block h-auto max-h-96 max-w-full" />
+                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <GifHoverActions gifUrl={urls[0]} thumbnailUrl={urls[0]} />
+                    </div>
                   </div>
                 </div>
               ) : (
                 <>
                   {cleanedContent && (
                     <p className="text-grey-100 break-words whitespace-pre-wrap inline">
-                      {isUserBlocked(message.userId) ? '[This user is blocked]' : cleanedContent}
+                      {isUserBlocked(message.userId)
+                        ? '[This user is blocked]'
+                        : renderMessageWithMentions(cleanedContent)}
                     </p>
                   )}
                   {message.isEdited && (
@@ -299,6 +341,14 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                   {urls.map((url, urlIndex) => (
                     <MediaEmbed key={`${message.id}-${urlIndex}`} url={url} />
                   ))}
+                  {/* Display file attachments */}
+                  {message.attachments && message.attachments.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {message.attachments.map((attachment) => (
+                        <FileAttachment key={attachment.id} attachment={attachment} />
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
             </>

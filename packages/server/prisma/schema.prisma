@@ -41,6 +41,9 @@ model User {
   receivedFriendRequests FriendRequest[] @relation("FriendRequestReceiver")
   sentDirectMessages DirectMessage[]  @relation("DirectMessageSender")
   receivedDirectMessages DirectMessage[] @relation("DirectMessageReceiver")
+  uploadedAttachments Attachment[]    @relation("AttachmentUploader")
+  savedGifs          SavedGif[]
+  mentions           Mention[]
 }
 
 model Server {
@@ -69,6 +72,7 @@ model Channel {
   serverId Int
   server   Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
   messages Message[]
+  mentions Mention[]
 }
 
 model Message {
@@ -87,6 +91,8 @@ model Message {
   channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
   replyTo   Message? @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
   replies   Message[] @relation("MessageReplies")
+  attachments Attachment[]
+  mentions  Mention[]
 
   @@index([channelId, createdAt(sort: Desc)])
   @@index([userId])
@@ -128,4 +134,56 @@ model DirectMessage {
   @@index([senderId, receiverId, createdAt(sort: Desc)])
   @@index([receiverId, senderId, createdAt(sort: Desc)])
   @@index([receiverId, isRead])
+}
+
+model Attachment {
+  id        Int      @id @default(autoincrement())
+  url       String
+  filename  String
+  mimeType  String
+  size      Int
+  createdAt DateTime @default(now())
+
+  // Relations
+  messageId  Int
+  message    Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  uploadedBy Int
+  uploader   User    @relation("AttachmentUploader", fields: [uploadedBy], references: [id])
+
+  @@index([messageId])
+  @@index([uploadedBy])
+}
+
+model SavedGif {
+  id                 Int      @id @default(autoincrement())
+  gifUrl             String
+  tenorId            String?
+  contentDescription String?
+  thumbnailUrl       String?
+  createdAt          DateTime @default(now())
+
+  // Relations
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gifUrl])
+  @@index([userId])
+}
+
+model Mention {
+  id        Int      @id @default(autoincrement())
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Relations
+  messageId Int
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channelId Int
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([channelId, userId])
+  @@index([messageId])
 }

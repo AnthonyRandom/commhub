@@ -1,11 +1,11 @@
 {
-  "version": "1.2.1",
-  "notes": "Version 1.2.1 - Discord-Style Screen Sharing & Enhanced Video Communication. Major new feature: Full Discord-style screen sharing with monitor/application selection and desktop audio capture. Screen sharing seamlessly replaces webcam streams with smooth transitions. New focused stream view - click any user's webcam or screen share to expand it fullscreen in the chat area. Right-click context menus for muting and volume controls. Backend improvements include proper screen share state synchronization across all clients and new WebSocket events for screen share signaling. All features maintain the app's sleek design language with fluid animations and responsive UI. Zero breaking changes - fully backward compatible with 1.2.0.",
-  "pub_date": "2025-11-10T12:00:00Z",
+  "version": "1.2.2",
+  "notes": "Version 1.2.2 - Enhanced Text Communication & Rich Media Support. Major new features: File upload system supporting images, videos, audio, documents, archives, and executables up to 20MB with automatic media compression. Expanded GIF picker with pagination (up to 3 pages) and personal GIF favorites - save any GIF with hover actions for quick reuse. Discord-style @mentions with autocomplete, visual highlighting, taskbar notifications, and channel badges. Comprehensive backend includes file storage, compression services (Sharp for images, FFmpeg for video/audio), saved GIFs database, and real-time mention parsing. All features maintain the app's sleek design language with fluid animations and responsive UI. Zero breaking changes - fully backward compatible with 1.2.1.",
+  "pub_date": "2025-11-11T12:00:00Z",
   "platforms": {
     "windows-x86_64": {
       "signature": "",
-      "url": "https://github.com/AnthonyRandom/commhub/releases/download/v1.2.1/commhub_1.2.1_x64_en-US.msi"
+      "url": "https://github.com/AnthonyRandom/commhub/releases/download/v1.2.2/commhub_1.2.2_x64_en-US.msi"
     }
   }
 }

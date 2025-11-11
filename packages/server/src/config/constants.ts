@@ -113,6 +113,69 @@ export const CACHE = {
 } as const;
 
 /**
+ * File Upload constants
+ */
+export const UPLOAD = {
+  // File size limits
+  MAX_FILE_SIZE: 20 * 1024 * 1024, // 20MB in bytes
+
+  // Allowed MIME types
+  ALLOWED_MIME_TYPES: [
+    // Images
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'image/bmp',
+    'image/svg+xml',
+    // Videos
+    'video/mp4',
+    'video/webm',
+    'video/ogg',
+    'video/quicktime',
+    'video/x-msvideo',
+    // Audio
+    'audio/mpeg',
+    'audio/mp3',
+    'audio/wav',
+    'audio/ogg',
+    'audio/webm',
+    'audio/aac',
+    // Documents
+    'text/plain',
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    // Archives
+    'application/zip',
+    'application/x-zip-compressed',
+    'application/x-rar-compressed',
+    'application/x-7z-compressed',
+    'application/gzip',
+    'application/x-tar',
+    // Executables
+    'application/x-msdownload',
+    'application/x-executable',
+    'application/octet-stream',
+  ] as readonly string[],
+
+  // Compression settings
+  COMPRESSION_QUALITY: 85,
+  MAX_IMAGE_WIDTH: 2048,
+  MAX_IMAGE_HEIGHT: 2048,
+  VIDEO_TARGET_HEIGHT: 720,
+  AUDIO_BITRATE: '128k',
+
+  // Rate limiting
+  MAX_UPLOADS_PER_MINUTE: 10,
+} as const;
+
+/**
  * HTTP status codes (for reference, Node/Express provide these too)
  */
 export const HTTP_STATUS = {
@@ -141,6 +204,7 @@ export const CONSTANTS = {
   DATABASE,
   LIMITS,
   CACHE,
+  UPLOAD,
   HTTP_STATUS,
 } as const;
 

@@ -220,14 +220,8 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({
       fetchBlockedUsers(user.id)
       fetchConversations()
     }
-  }, [
-    user,
-    fetchFriends,
-    fetchReceivedRequests,
-    fetchSentRequests,
-    fetchBlockedUsers,
-    fetchConversations,
-  ])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]) // Only depend on user.id, not the functions (they're stable from zustand)
 
   // Fetch conversation when DM user is selected
   useEffect(() => {

@@ -9,6 +9,8 @@ interface FriendsState {
   receivedRequests: FriendRequest[]
   isLoading: boolean
   error: string | null
+  lastFetchTime: number | null
+  fetchingUserId: number | null
 
   // Actions
   fetchFriends: (userId: number) => Promise<void>
@@ -33,10 +35,31 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
   receivedRequests: [],
   isLoading: false,
   error: null,
+  lastFetchTime: null,
+  fetchingUserId: null,
 
   fetchFriends: async (userId: number) => {
+    const state = get()
+    const now = Date.now()
+    const CACHE_DURATION = 5000 // 5 seconds cache
+    const isSameUser = state.fetchingUserId === userId
+    const isRecentFetch = state.lastFetchTime && now - state.lastFetchTime < CACHE_DURATION
+
+    // Prevent duplicate calls: skip if already loading for same user or if data is fresh
+    if (state.isLoading && isSameUser) {
+      console.log(`[FriendsStore] fetchFriends skipped - already loading for userId: ${userId}`)
+      return
+    }
+
+    if (isRecentFetch && isSameUser && state.friends.length > 0) {
+      console.log(
+        `[FriendsStore] fetchFriends skipped - data is fresh (${now - state.lastFetchTime!}ms ago)`
+      )
+      return
+    }
+
     console.log(`[FriendsStore] fetchFriends called for userId: ${userId}`)
-    set({ isLoading: true, error: null })
+    set({ isLoading: true, error: null, fetchingUserId: userId })
     try {
       const friends = await apiService.getFriends(userId)
       console.log(`[FriendsStore] API returned ${friends.length} friends`)
@@ -65,11 +88,16 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
           status: f.status,
         }))
       )
-      set({ friends: friendsWithPreservedStatus, isLoading: false })
+      set({
+        friends: friendsWithPreservedStatus,
+        isLoading: false,
+        lastFetchTime: now,
+        fetchingUserId: null,
+      })
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Failed to fetch friends'
       console.error(`[FriendsStore] fetchFriends error:`, errorMessage)
-      set({ isLoading: false, error: errorMessage })
+      set({ isLoading: false, error: errorMessage, fetchingUserId: null })
     }
   },
 

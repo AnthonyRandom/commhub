@@ -23,10 +23,18 @@ try {
 } catch (error) {
   logger.error('Init', 'Configuration validation failed', { error })
   // In development, show error in UI. In production, this would have failed at build time.
+  const errorMessage = error instanceof Error ? error.message : 'Unknown configuration error'
+  // Escape HTML to prevent XSS
+  const escapedMessage = errorMessage
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
   document.body.innerHTML = `
     <div style="padding: 20px; font-family: monospace; background: #1a1a1a; color: #ff4444; min-height: 100vh;">
       <h1>Configuration Error</h1>
-      <p>${error instanceof Error ? error.message : 'Unknown configuration error'}</p>
+      <p>${escapedMessage}</p>
       <p style="margin-top: 20px; color: #888;">Please check your environment variables.</p>
     </div>
   `

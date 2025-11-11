@@ -7,7 +7,7 @@ import { voiceManager } from '../services/voice-manager'
 import { useSettingsStore } from '../stores/settings'
 import { useFriendsStore } from '../stores/friends'
 import { useMentionsStore } from '../stores/mentions'
-import MembersModal from './MembersModal'
+import MembersPane from './MembersPane'
 import VoiceControls from './VoiceControls'
 import GifPicker from './GifPicker'
 import EmojiPicker from './EmojiPicker'
@@ -24,7 +24,7 @@ interface ChatAreaProps {
 
 const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   const [channelInputs, setChannelInputs] = useState<Map<number, string>>(new Map())
-  const [showMembersModal, setShowMembersModal] = useState(false)
+  const [showMembersPane, setShowMembersPane] = useState(false)
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
   const [editContent, setEditContent] = useState('')
   const [contextMenuMessageId, setContextMenuMessageId] = useState<number | null>(null)
@@ -390,64 +390,67 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   // Voice Channel UI
   if (isVoiceChannel) {
     return (
-      <div className="flex-1 bg-grey-900 flex flex-col h-full">
-        {/* Channel Header */}
-        <div className="h-14 border-b-2 border-grey-800 px-4 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <Volume2 className="w-5 h-5 text-grey-400" />
-            <h2 className="font-bold text-white text-lg">{selectedChannel.name}</h2>
-          </div>
-          <button
-            onClick={() => setShowMembersModal(true)}
-            className="p-2 text-grey-400 hover:text-white hover:bg-grey-850 transition-colors border-2 border-transparent hover:border-grey-700"
-            title="Members"
-          >
-            <Users className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Voice Channel Content */}
-        <div className="flex-1 flex items-center justify-center p-8 overflow-y-auto relative">
-          {!isConnectedToVoice && !isConnecting ? (
-            <div className="text-center max-w-md">
-              <div className="w-24 h-24 bg-grey-850 border-2 border-grey-700 flex items-center justify-center mx-auto mb-6">
-                <Volume2 className="w-12 h-12 text-grey-600" />
-              </div>
-              <h2 className="text-white text-2xl font-bold mb-3">{selectedChannel.name}</h2>
-              <p className="text-grey-400 mb-6">
-                Join this voice channel to talk with others in real-time. Make sure your microphone
-                is working.
-              </p>
-              <button
-                onClick={handleJoinVoice}
-                className="px-6 py-3 bg-white text-black border-2 border-white hover:bg-grey-100 transition-colors font-bold flex items-center gap-2 mx-auto"
-              >
-                <PhoneCall className="w-5 h-5" />
-                Join Voice Channel
-              </button>
+      <div className="flex-1 bg-grey-900 flex h-full">
+        <div className="flex-1 flex flex-col h-full">
+          {/* Channel Header */}
+          <div className="h-14 border-b-2 border-grey-800 px-4 flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <Volume2 className="w-5 h-5 text-grey-400" />
+              <h2 className="font-bold text-white text-lg">{selectedChannel.name}</h2>
             </div>
-          ) : focusedUser && focusedStreamUserId ? (
-            <FocusedStreamView
-              user={focusedUser}
-              stream={focusedStream}
-              isScreenShare={focusedUser.hasScreenShare}
-              onClose={() => useVoiceStore.getState().setFocusedStreamUserId(null)}
-            />
-          ) : (
-            <VoiceChannelParticipants />
-          )}
+            {server && (
+              <button
+                onClick={() => setShowMembersPane(!showMembersPane)}
+                className={`p-2 transition-colors border-2 ${
+                  showMembersPane
+                    ? 'text-white bg-grey-850 border-grey-700'
+                    : 'text-grey-400 hover:text-white hover:bg-grey-850 border-transparent hover:border-grey-700'
+                }`}
+                title={showMembersPane ? 'Hide Members' : 'Show Members'}
+              >
+                <Users className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+
+          {/* Voice Channel Content */}
+          <div className="flex-1 flex items-center justify-center p-8 overflow-y-auto relative">
+            {!isConnectedToVoice && !isConnecting ? (
+              <div className="text-center max-w-md">
+                <div className="w-24 h-24 bg-grey-850 border-2 border-grey-700 flex items-center justify-center mx-auto mb-6">
+                  <Volume2 className="w-12 h-12 text-grey-600" />
+                </div>
+                <h2 className="text-white text-2xl font-bold mb-3">{selectedChannel.name}</h2>
+                <p className="text-grey-400 mb-6">
+                  Join this voice channel to talk with others in real-time. Make sure your
+                  microphone is working.
+                </p>
+                <button
+                  onClick={handleJoinVoice}
+                  className="px-6 py-3 bg-white text-black border-2 border-white hover:bg-grey-100 transition-colors font-bold flex items-center gap-2 mx-auto"
+                >
+                  <PhoneCall className="w-5 h-5" />
+                  Join Voice Channel
+                </button>
+              </div>
+            ) : focusedUser && focusedStreamUserId ? (
+              <FocusedStreamView
+                user={focusedUser}
+                stream={focusedStream}
+                isScreenShare={focusedUser.hasScreenShare}
+                onClose={() => useVoiceStore.getState().setFocusedStreamUserId(null)}
+              />
+            ) : (
+              <VoiceChannelParticipants />
+            )}
+          </div>
+
+          {/* Voice Controls (shown when connected) */}
+          {isConnectedToVoice && <VoiceControls channel={selectedChannel} />}
         </div>
 
-        {/* Voice Controls (shown when connected) */}
-        {isConnectedToVoice && <VoiceControls channel={selectedChannel} />}
-
-        {/* Members Modal */}
-        <MembersModal
-          key={`members-${server?.id}-${server?.members?.length || 0}`}
-          isOpen={showMembersModal}
-          onClose={() => setShowMembersModal(false)}
-          server={server}
-        />
+        {/* Members Pane */}
+        {server && <MembersPane isOpen={showMembersPane} server={server} />}
       </div>
     )
   }
@@ -455,132 +458,135 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   // Text Channel UI (existing code continues below)
 
   return (
-    <div className="flex-1 bg-grey-900 flex flex-col h-full">
-      {/* Channel Header */}
-      <div className="h-14 border-b-2 border-grey-800 px-4 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <Hash className="w-5 h-5 text-grey-400" />
-          <h2 className="font-bold text-white text-lg">{selectedChannel.name}</h2>
+    <div className="flex-1 bg-grey-900 flex h-full">
+      <div className="flex-1 flex flex-col h-full">
+        {/* Channel Header */}
+        <div className="h-14 border-b-2 border-grey-800 px-4 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <Hash className="w-5 h-5 text-grey-400" />
+            <h2 className="font-bold text-white text-lg">{selectedChannel.name}</h2>
+          </div>
+          {server && (
+            <button
+              onClick={() => setShowMembersPane(!showMembersPane)}
+              className={`p-2 transition-colors border-2 ${
+                showMembersPane
+                  ? 'text-white bg-grey-850 border-grey-700'
+                  : 'text-grey-400 hover:text-white hover:bg-grey-850 border-transparent hover:border-grey-700'
+              }`}
+              title={showMembersPane ? 'Hide Members' : 'Show Members'}
+            >
+              <Users className="w-5 h-5" />
+            </button>
+          )}
         </div>
-        <button
-          onClick={() => setShowMembersModal(true)}
-          className="p-2 text-grey-400 hover:text-white hover:bg-grey-850 transition-colors border-2 border-transparent hover:border-grey-700"
-          title="Members"
+
+        {/* Messages Area */}
+        <div
+          ref={messagesContainerRef}
+          className="flex-1 overflow-y-auto p-4 space-y-4 relative"
+          onScroll={handleScroll}
         >
-          <Users className="w-5 h-5" />
-        </button>
-      </div>
-
-      {/* Messages Area */}
-      <div
-        ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4 relative"
-        onScroll={handleScroll}
-      >
-        {messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-grey-850 border-2 border-grey-700 flex items-center justify-center mx-auto mb-3">
-                <Hash className="w-8 h-8 text-grey-600" />
+          {messages.length === 0 ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-grey-850 border-2 border-grey-700 flex items-center justify-center mx-auto mb-3">
+                  <Hash className="w-8 h-8 text-grey-600" />
+                </div>
+                <h3 className="text-white font-bold mb-2">Welcome to #{selectedChannel.name}</h3>
+                <p className="text-grey-400 text-sm">
+                  This is the start of your conversation. Say hello!
+                </p>
               </div>
-              <h3 className="text-white font-bold mb-2">Welcome to #{selectedChannel.name}</h3>
-              <p className="text-grey-400 text-sm">
-                This is the start of your conversation. Say hello!
-              </p>
             </div>
-          </div>
-        ) : (
-          <div>
-            {/* Loading indicator for older messages */}
-            {selectedChannel && isLoadingOlder[selectedChannel.id] && (
-              <div className="flex justify-center py-4">
-                <div className="text-grey-400 text-sm">Loading older messages...</div>
-              </div>
-            )}
+          ) : (
+            <div>
+              {/* Loading indicator for older messages */}
+              {selectedChannel && isLoadingOlder[selectedChannel.id] && (
+                <div className="flex justify-center py-4">
+                  <div className="text-grey-400 text-sm">Loading older messages...</div>
+                </div>
+              )}
 
-            {messages.map((message, index) => {
-              const isOwnMessage = message.user?.id === user?.id
-              const previousMessage = index > 0 ? messages[index - 1] : null
-              const showUserInfo = shouldSeparateMessages(message, previousMessage, index)
-              const canModify = canEditOrDelete(message)
-              const canDelete = isOwnMessage || isServerOwner
-              const isEditing = editingMessageId === message.id
+              {messages.map((message, index) => {
+                const isOwnMessage = message.user?.id === user?.id
+                const previousMessage = index > 0 ? messages[index - 1] : null
+                const showUserInfo = shouldSeparateMessages(message, previousMessage, index)
+                const canModify = canEditOrDelete(message)
+                const canDelete = isOwnMessage || isServerOwner
+                const isEditing = editingMessageId === message.id
 
-              return (
-                <MessageItem
-                  key={`message-${message.id}-${index}`}
-                  message={message}
-                  showUserInfo={showUserInfo}
-                  isOwnMessage={isOwnMessage}
-                  canModify={canModify}
-                  canDelete={canDelete}
-                  isEditing={isEditing}
-                  editContent={editContent}
-                  setEditContent={setEditContent}
-                  onEditMessage={handleEditMessage}
-                  onCancelEditing={cancelEditing}
-                  onDeleteMessage={handleDeleteMessage}
-                  onReplyTo={handleReplyTo}
-                  onStartEditing={startEditingMessage}
-                  formatTimestamp={formatTimestamp}
-                  formatTimeOnly={formatTimeOnly}
-                  isUserBlocked={isUserBlocked}
-                  contextMenuMessageId={contextMenuMessageId}
-                  setContextMenuMessageId={setContextMenuMessageId}
-                />
-              )
-            })}
-          </div>
-        )}
+                return (
+                  <MessageItem
+                    key={`message-${message.id}-${index}`}
+                    message={message}
+                    showUserInfo={showUserInfo}
+                    isOwnMessage={isOwnMessage}
+                    canModify={canModify}
+                    canDelete={canDelete}
+                    isEditing={isEditing}
+                    editContent={editContent}
+                    setEditContent={setEditContent}
+                    onEditMessage={handleEditMessage}
+                    onCancelEditing={cancelEditing}
+                    onDeleteMessage={handleDeleteMessage}
+                    onReplyTo={handleReplyTo}
+                    onStartEditing={startEditingMessage}
+                    formatTimestamp={formatTimestamp}
+                    formatTimeOnly={formatTimeOnly}
+                    isUserBlocked={isUserBlocked}
+                    contextMenuMessageId={contextMenuMessageId}
+                    setContextMenuMessageId={setContextMenuMessageId}
+                  />
+                )
+              })}
+            </div>
+          )}
 
-        {/* Jump to bottom button */}
-        {isScrolledUp && (
-          <button
-            onClick={jumpToBottom}
-            className="absolute bottom-4 right-4 bg-grey-800 hover:bg-grey-700 text-grey-300 hover:text-white p-2 rounded border-2 border-grey-700 hover:border-grey-600 transition-all duration-200 ease-in-out animate-slide-up z-10"
-            title="Jump to bottom"
-          >
-            <ChevronDown className="w-4 h-4" />
-          </button>
-        )}
+          {/* Jump to bottom button */}
+          {isScrolledUp && (
+            <button
+              onClick={jumpToBottom}
+              className="absolute bottom-4 right-4 bg-grey-800 hover:bg-grey-700 text-grey-300 hover:text-white p-2 rounded border-2 border-grey-700 hover:border-grey-600 transition-all duration-200 ease-in-out animate-slide-up z-10"
+              title="Jump to bottom"
+            >
+              <ChevronDown className="w-4 h-4" />
+            </button>
+          )}
 
-        <div ref={messagesEndRef} />
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Message Input */}
+        <MessageInput
+          messageInput={messageInput}
+          setMessageInput={setMessageInput}
+          replyingTo={replyingTo}
+          onSend={handleSendMessage}
+          onGifClick={() => setShowGifPicker(!showGifPicker)}
+          onEmojiClick={() => setShowEmojiPicker(!showEmojiPicker)}
+          onCancelReply={cancelReply}
+          channelName={selectedChannel.name}
+          channelId={selectedChannel.id}
+        />
+
+        {/* GIF Picker */}
+        <GifPicker
+          isOpen={showGifPicker}
+          onClose={() => setShowGifPicker(false)}
+          onSelectGif={handleGifSelect}
+        />
+
+        {/* Emoji Picker */}
+        <EmojiPicker
+          isOpen={showEmojiPicker}
+          onClose={() => setShowEmojiPicker(false)}
+          onSelectEmoji={handleEmojiSelect}
+        />
       </div>
 
-      {/* Message Input */}
-      <MessageInput
-        messageInput={messageInput}
-        setMessageInput={setMessageInput}
-        replyingTo={replyingTo}
-        onSend={handleSendMessage}
-        onGifClick={() => setShowGifPicker(!showGifPicker)}
-        onEmojiClick={() => setShowEmojiPicker(!showEmojiPicker)}
-        onCancelReply={cancelReply}
-        channelName={selectedChannel.name}
-        channelId={selectedChannel.id}
-      />
-
-      {/* GIF Picker */}
-      <GifPicker
-        isOpen={showGifPicker}
-        onClose={() => setShowGifPicker(false)}
-        onSelectGif={handleGifSelect}
-      />
-
-      {/* Emoji Picker */}
-      <EmojiPicker
-        isOpen={showEmojiPicker}
-        onClose={() => setShowEmojiPicker(false)}
-        onSelectEmoji={handleEmojiSelect}
-      />
-
-      {/* Members Modal */}
-      <MembersModal
-        key={`members-mobile-${server?.id}-${server?.members?.length || 0}`}
-        isOpen={showMembersModal}
-        onClose={() => setShowMembersModal(false)}
-        server={server}
-      />
+      {/* Members Pane */}
+      {server && <MembersPane isOpen={showMembersPane} server={server} />}
     </div>
   )
 }

@@ -61,15 +61,18 @@ export class ChannelsController {
     @Param('id', ParseIntPipe) id: number,
     @Request() req,
     @Query('limit') limit?: string,
-    @Query('offset') offset?: string
+    @Query('offset') offset?: string,
+    @Query('before') before?: string
   ) {
     const limitNum = limit ? parseInt(limit) : 50;
     const offsetNum = offset ? parseInt(offset) : 0;
+    const beforeNum = before ? parseInt(before) : undefined;
     return this.channelsService.getChannelMessages(
       id,
       req.user.id,
       limitNum,
-      offsetNum
+      offsetNum,
+      beforeNum
     );
   }
 }

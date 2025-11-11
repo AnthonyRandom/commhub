@@ -5,7 +5,6 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CompressionService } from './compression.service';
 import { UPLOAD } from '../config/constants';
 import * as path from 'path';
 import * as fs from 'fs/promises';
@@ -16,10 +15,7 @@ export class UploadsService {
   private logger = new Logger('UploadsService');
   private readonly uploadDir = path.join(process.cwd(), 'uploads');
 
-  constructor(
-    private prisma: PrismaService,
-    private compressionService: CompressionService
-  ) {
+  constructor(private prisma: PrismaService) {
     this.ensureUploadDir();
   }
 
@@ -48,7 +44,7 @@ export class UploadsService {
 
     // For text files and some types, file-type returns null
     if (fileType && !UPLOAD.ALLOWED_MIME_TYPES.includes(fileType.mime)) {
-      await this.compressionService.cleanupFile(file.path);
+      await fs.unlink(file.path).catch(() => {});
       throw new BadRequestException(
         `File type ${fileType.mime} is not allowed`
       );
@@ -60,7 +56,7 @@ export class UploadsService {
       if (fileType && UPLOAD.ALLOWED_MIME_TYPES.includes(fileType.mime)) {
         return;
       }
-      await this.compressionService.cleanupFile(file.path);
+      await fs.unlink(file.path).catch(() => {});
       throw new BadRequestException(
         `File type ${file.mimetype} is not allowed`
       );
@@ -92,46 +88,34 @@ export class UploadsService {
       // Sanitize filename
       const sanitizedFilename = this.sanitizeFilename(file.originalname);
 
-      // Compress file if applicable
-      const { compressedPath, size } =
-        await this.compressionService.compressFile(file.path, file.mimetype);
-
       // Generate unique filename
       const timestamp = Date.now();
-      const ext = path.extname(compressedPath);
-      // Remove extension from sanitized filename if it exists to avoid double extensions
+      const ext = path.extname(file.originalname) || '';
       const filenameWithoutExt = sanitizedFilename.replace(/\.[^/.]+$/, '');
       const uniqueFilename = `${timestamp}-${userId}-${filenameWithoutExt}${ext}`;
       const finalPath = path.join(this.uploadDir, uniqueFilename);
 
-      // Move compressed file to final location
-      await fs.rename(compressedPath, finalPath);
+      // Move file to final location
+      await fs.rename(file.path, finalPath);
+
+      // Get file stats
+      const stats = await fs.stat(finalPath);
 
       // Create relative URL for serving
       const fileUrl = `/uploads/${uniqueFilename}`;
-
-      // Determine actual MIME type after compression
-      let finalMimeType = file.mimetype;
-      if (compressedPath.endsWith('.webp')) {
-        finalMimeType = 'image/webp';
-      } else if (compressedPath.endsWith('.mp4')) {
-        finalMimeType = 'video/mp4';
-      } else if (compressedPath.endsWith('.mp3')) {
-        finalMimeType = 'audio/mpeg';
-      }
 
       // Note: We don't create the attachment in database here
       // It will be created when the message is sent
       return {
         url: fileUrl,
         filename: sanitizedFilename,
-        mimeType: finalMimeType,
-        size,
+        mimeType: file.mimetype,
+        size: stats.size,
       };
     } catch (error) {
       // Clean up file on error
       if (file.path) {
-        await this.compressionService.cleanupFile(file.path).catch(() => {});
+        await fs.unlink(file.path).catch(() => {});
       }
       throw error;
     }
@@ -212,7 +196,7 @@ export class UploadsService {
 
     // Delete file from disk
     const filePath = path.join(this.uploadDir, path.basename(attachment.url));
-    await this.compressionService.cleanupFile(filePath);
+    await fs.unlink(filePath).catch(() => {});
 
     // Delete from database
     await this.prisma.attachment.delete({
@@ -247,7 +231,7 @@ export class UploadsService {
 
           if (!exists) {
             this.logger.log(`Cleaning up orphaned file: ${file}`);
-            await this.compressionService.cleanupFile(filePath);
+            await fs.unlink(filePath).catch(() => {});
           }
         }
       }

@@ -37,6 +37,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   dmUsers,
 }) => {
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const [attachments, setAttachments] = useState<
     Array<{ url: string; filename: string; mimeType: string; size: number }>
   >([])
@@ -47,6 +48,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const [mentionUsers, setMentionUsers] = useState<Array<{ id: number; username: string }>>([])
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
   const [mentionStartPos, setMentionStartPos] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
 
   const currentServer = useServersStore((state) => state.currentServer)
 
@@ -194,6 +196,46 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   const handleRemoveAttachment = (index: number) => {
     setAttachments((prev) => prev.filter((_, i) => i !== index))
+    setUploadError(null)
+  }
+
+  // Drag and drop handlers
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (uploadingFiles.length === 0) {
+      setIsDragging(true)
+    }
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    // Only set dragging to false if we're leaving the container itself
+    if (e.currentTarget === containerRef.current) {
+      setIsDragging(false)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (uploadingFiles.length === 0 && e.dataTransfer.types.includes('Files')) {
+      e.dataTransfer.dropEffect = 'copy'
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+
+    if (uploadingFiles.length > 0) return
+
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length > 0) {
+      handleFilesSelected(files)
+    }
   }
 
   const handleSendClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -210,7 +252,25 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   }
 
   return (
-    <div className="border-t-2 border-grey-800 flex-shrink-0">
+    <div
+      ref={containerRef}
+      className={`border-t-2 border-grey-800 flex-shrink-0 relative ${
+        isDragging ? 'bg-grey-850 border-white' : ''
+      } transition-colors`}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 bg-grey-900/80 border-4 border-dashed border-white z-50 flex items-center justify-center pointer-events-none">
+          <div className="text-center">
+            <div className="text-white text-xl font-bold mb-2">Drop files to upload</div>
+            <div className="text-grey-300 text-sm">Release to add attachments</div>
+          </div>
+        </div>
+      )}
       {/* Reply Indicator */}
       {replyingTo && (
         <div className="px-4 pt-3 pb-2 bg-grey-850 border-b-2 border-grey-800 animate-slide-down">
@@ -239,20 +299,28 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         <div className="px-4 pt-3 pb-2 bg-grey-850 border-b-2 border-grey-800">
           <div className="flex flex-wrap gap-2">
             {attachments.map((attachment, index) => (
-              <FileAttachment
-                key={`attachment-${attachment.filename}-${index}`}
-                attachment={{ ...attachment, id: index, createdAt: new Date().toISOString() }}
-                onRemove={() => handleRemoveAttachment(index)}
-                showRemove={true}
-              />
+              <div key={`attachment-${attachment.filename}-${index}`} className="relative group">
+                <FileAttachment
+                  attachment={{ ...attachment, id: index, createdAt: new Date().toISOString() }}
+                  onRemove={() => handleRemoveAttachment(index)}
+                  showRemove={true}
+                />
+              </div>
             ))}
             {uploadingFiles.map((file, index) => (
               <div
                 key={`uploading-${index}`}
-                className="bg-grey-800 border-2 border-grey-700 p-3 flex items-center gap-3 animate-pulse"
+                className="bg-grey-800 border-2 border-grey-700 p-3 flex items-center gap-3 animate-pulse rounded"
               >
                 <Loader className="w-5 h-5 text-grey-400 animate-spin" />
                 <span className="text-grey-300 text-sm">{file.name}</span>
+                <button
+                  onClick={() => setUploadingFiles((prev) => prev.filter((_, i) => i !== index))}
+                  className="ml-2 p-1 hover:bg-grey-700 text-grey-400 hover:text-white transition-colors rounded"
+                  title="Cancel upload"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
             ))}
           </div>

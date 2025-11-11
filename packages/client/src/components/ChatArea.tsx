@@ -16,6 +16,7 @@ import { FocusedStreamView } from './chat/FocusedStreamView'
 import { MessageInput } from './chat/MessageInput'
 import { MessageItem } from './chat/MessageItem'
 import type { Channel, Server, Message } from '../services/api'
+import { apiService } from '../services/api'
 
 interface ChatAreaProps {
   selectedChannel: Channel | null
@@ -27,6 +28,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   const [showMembersPane, setShowMembersPane] = useState(false)
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
   const [editContent, setEditContent] = useState('')
+  const [editAttachmentsToRemove, setEditAttachmentsToRemove] = useState<number[]>([])
   const [contextMenuMessageId, setContextMenuMessageId] = useState<number | null>(null)
   const [showGifPicker, setShowGifPicker] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
@@ -266,12 +268,34 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   }
 
   const handleEditMessage = async (messageId: number) => {
-    if (!editContent.trim()) return
+    // Allow saving if content exists OR attachments are being removed
+    // But require at least one of them (content or remaining attachments)
+    const message = messages.find((m) => m.id === messageId)
+    const hasRemainingAttachments =
+      message?.attachments &&
+      message.attachments.filter((att) => !editAttachmentsToRemove.includes(att.id)).length > 0
+
+    if (!editContent.trim() && editAttachmentsToRemove.length === 0 && !hasRemainingAttachments) {
+      return
+    }
 
     try {
-      await editMessage(messageId, editContent.trim())
+      // Delete attachments that were removed
+      for (const attachmentId of editAttachmentsToRemove) {
+        try {
+          await apiService.deleteAttachment(attachmentId)
+        } catch (error) {
+          console.error('Failed to delete attachment:', error)
+        }
+      }
+
+      // Update message content (send empty string if no content but attachments remain)
+      const contentToSave = editContent.trim() || ''
+      await editMessage(messageId, contentToSave)
+
       setEditingMessageId(null)
       setEditContent('')
+      setEditAttachmentsToRemove([])
     } catch (error) {
       console.error('Failed to edit message:', error)
     }
@@ -291,12 +315,18 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   const startEditingMessage = (message: Message) => {
     setEditingMessageId(message.id)
     setEditContent(message.content)
+    setEditAttachmentsToRemove([])
     setContextMenuMessageId(null)
   }
 
   const cancelEditing = () => {
     setEditingMessageId(null)
     setEditContent('')
+    setEditAttachmentsToRemove([])
+  }
+
+  const handleRemoveAttachmentFromEdit = (attachmentId: number) => {
+    setEditAttachmentsToRemove((prev) => [...prev, attachmentId])
   }
 
   const canEditOrDelete = (message: Message) => {
@@ -537,6 +567,8 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
                     isUserBlocked={isUserBlocked}
                     contextMenuMessageId={contextMenuMessageId}
                     setContextMenuMessageId={setContextMenuMessageId}
+                    editAttachmentsToRemove={editAttachmentsToRemove}
+                    onRemoveAttachmentFromEdit={handleRemoveAttachmentFromEdit}
                   />
                 )
               })}

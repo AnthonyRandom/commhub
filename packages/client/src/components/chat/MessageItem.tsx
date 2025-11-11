@@ -25,6 +25,8 @@ interface MessageItemProps {
   isUserBlocked: (userId: number) => boolean
   contextMenuMessageId: number | null
   setContextMenuMessageId: (id: number | null) => void
+  editAttachmentsToRemove?: number[]
+  onRemoveAttachmentFromEdit?: (attachmentId: number) => void
 }
 
 export const MessageItem: React.FC<MessageItemProps> = ({
@@ -46,6 +48,8 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   isUserBlocked,
   contextMenuMessageId,
   setContextMenuMessageId,
+  editAttachmentsToRemove = [],
+  onRemoveAttachmentFromEdit,
 }) => {
   const editInputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -150,6 +154,26 @@ export const MessageItem: React.FC<MessageItemProps> = ({
 
             {isEditing ? (
               <div className="flex flex-col gap-2">
+                {/* Show existing attachments with remove option */}
+                {message.attachments && message.attachments.length > 0 && (
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {message.attachments
+                      .filter((att) => !editAttachmentsToRemove.includes(att.id))
+                      .map((attachment, index) => (
+                        <div key={`edit-attachment-${attachment.id}-${index}`} className="relative">
+                          <FileAttachment
+                            attachment={attachment}
+                            onRemove={
+                              onRemoveAttachmentFromEdit
+                                ? () => onRemoveAttachmentFromEdit(attachment.id)
+                                : undefined
+                            }
+                            showRemove={!!onRemoveAttachmentFromEdit}
+                          />
+                        </div>
+                      ))}
+                  </div>
+                )}
                 <textarea
                   ref={editInputRef}
                   value={editContent}
@@ -292,6 +316,26 @@ export const MessageItem: React.FC<MessageItemProps> = ({
 
           {isEditing ? (
             <div className="flex flex-col gap-2">
+              {/* Show existing attachments with remove option */}
+              {message.attachments && message.attachments.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-2">
+                  {message.attachments
+                    .filter((att) => !editAttachmentsToRemove.includes(att.id))
+                    .map((attachment, index) => (
+                      <div key={`edit-attachment-${attachment.id}-${index}`} className="relative">
+                        <FileAttachment
+                          attachment={attachment}
+                          onRemove={
+                            onRemoveAttachmentFromEdit
+                              ? () => onRemoveAttachmentFromEdit(attachment.id)
+                              : undefined
+                          }
+                          showRemove={!!onRemoveAttachmentFromEdit}
+                        />
+                      </div>
+                    ))}
+                </div>
+              )}
               <textarea
                 ref={editInputRef}
                 value={editContent}

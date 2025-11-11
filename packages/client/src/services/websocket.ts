@@ -2,6 +2,7 @@ import { io, Socket } from 'socket.io-client'
 import config from '../config/environment'
 import { logger } from '../utils/logger'
 import { handleError, NetworkError } from '../utils/errors'
+import { voiceSignalingHandler } from './voice/signaling-handler'
 
 // WebSocket URL from environment configuration
 const WS_BASE_URL = config.WS_URL
@@ -125,6 +126,10 @@ class WebSocketService {
 
       // Restore previous state after reconnection
       this.restoreConnectionState()
+
+      // Re-attach voice signaling listeners on connect/reconnect
+      // This ensures listeners are attached even if they weren't set up during initialization
+      voiceSignalingHandler.setupWebSocketListeners()
     })
 
     this.socket.on('disconnect', (reason) => {

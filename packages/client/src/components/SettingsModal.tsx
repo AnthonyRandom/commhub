@@ -6,6 +6,7 @@ import { webrtcService } from '../services/webrtc'
 import { useSettingsStore } from '../stores/settings'
 import { useStatusStore } from '../stores/status'
 import { apiService } from '../services/api'
+import { config } from '../config/environment'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -1105,7 +1106,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 <div className="space-y-4 mb-8">
                   <div className="flex justify-between items-center py-3 border-b border-grey-700">
                     <span className="text-grey-400 text-base">Version</span>
-                    <span className="text-white text-base font-mono">1.2.1</span>
+                    <span className="text-white text-base font-mono">{config.CLIENT_VERSION}</span>
                   </div>
                   <div className="flex justify-between items-center py-3 border-b border-grey-700">
                     <span className="text-grey-400 text-base">Product</span>

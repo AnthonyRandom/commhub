@@ -15,6 +15,23 @@ export class VoiceSignalingHandler {
     const socket = wsService.getSocket()
     if (!socket) return
 
+    // Remove existing listeners first to prevent duplicates
+    socket.off('voice-channel-users')
+    socket.off('voice-user-joined')
+    socket.off('voice-user-left')
+    socket.off('voice-offer')
+    socket.off('voice-answer')
+    socket.off('voice-ice-candidate')
+    socket.off('voice-channel-members')
+    socket.off('voice-user-speaking')
+    socket.off('voice-user-muted')
+    socket.off('voice-reconnect-request')
+    socket.off('voice-camera-enabled')
+    socket.off('voice-camera-disabled')
+    socket.off('voice-screen-share-enabled')
+    socket.off('voice-screen-share-disabled')
+
+    // Attach listeners
     socket.on('voice-channel-users', this.handleVoiceChannelUsers.bind(this))
     socket.on('voice-user-joined', this.handleVoiceUserJoined.bind(this))
     socket.on('voice-user-left', this.handleVoiceUserLeft.bind(this))

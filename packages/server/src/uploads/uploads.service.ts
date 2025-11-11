@@ -99,7 +99,9 @@ export class UploadsService {
       // Generate unique filename
       const timestamp = Date.now();
       const ext = path.extname(compressedPath);
-      const uniqueFilename = `${timestamp}-${userId}-${sanitizedFilename}${ext}`;
+      // Remove extension from sanitized filename if it exists to avoid double extensions
+      const filenameWithoutExt = sanitizedFilename.replace(/\.[^/.]+$/, '');
+      const uniqueFilename = `${timestamp}-${userId}-${filenameWithoutExt}${ext}`;
       const finalPath = path.join(this.uploadDir, uniqueFilename);
 
       // Move compressed file to final location

@@ -44,9 +44,10 @@ async function bootstrap() {
         'http://localhost:3000',
         'http://localhost:5173',
         'http://localhost:1420', // Add Vite dev server port
+        'https://commhub-production.up.railway.app', // Allow Railway production
       ], // Default for development
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Range'],
       credentials: true,
       maxAge: 86400, // 24 hours
     });
@@ -57,11 +58,6 @@ async function bootstrap() {
       '/uploads',
       express.static(uploadsPath, {
         setHeaders: (res, path) => {
-          // Enable CORS for uploaded files
-          res.setHeader('Access-Control-Allow-Origin', '*');
-          res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-          res.setHeader('Access-Control-Allow-Headers', 'Range');
-
           // Enable range requests for video/audio files
           if (path.match(/\.(mp4|webm|ogg|avi|mov|m4v|mp3|wav|aac|m4a)$/i)) {
             res.setHeader('Accept-Ranges', 'bytes');

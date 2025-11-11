@@ -336,8 +336,8 @@ export class VoiceSignalingHandler {
       members: data.members,
     })
 
-    // Update voice members store
-    const voiceMembersStore = useVoiceMembersStore()
+    // Update voice members store (use getState() since we're not in a React component)
+    const voiceMembersStore = useVoiceMembersStore.getState()
     voiceMembersStore.setMembers(data.channelId, data.members)
 
     // Sync camera and screen share state to connected users

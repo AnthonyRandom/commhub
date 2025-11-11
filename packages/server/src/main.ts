@@ -52,15 +52,47 @@ async function bootstrap() {
       maxAge: 86400, // 24 hours
     });
 
+    // Handle OPTIONS requests for uploaded files
+    const expressApp = app.getHttpAdapter().getInstance();
+    expressApp.options('/uploads/*', (req: any, res: any) => {
+      // Allow all origins for uploaded files since they need to be publicly accessible
+      res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Range');
+      res.setHeader('Access-Control-Max-Age', '86400');
+      res.status(200).end();
+    });
+
     // Serve static files from uploads directory with range request support for videos
     const uploadsPath = path.join(process.cwd(), 'uploads');
     app.use(
       '/uploads',
       express.static(uploadsPath, {
-        setHeaders: (res, path) => {
-          // Enable range requests for video/audio files
-          if (path.match(/\.(mp4|webm|ogg|avi|mov|m4v|mp3|wav|aac|m4a)$/i)) {
+        setHeaders: (res, path, stat) => {
+          // Enable CORS for uploaded files - allow all origins since uploaded content should be publicly accessible
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+          res.setHeader('Access-Control-Allow-Headers', 'Range');
+          res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+
+          // Enable range requests for video/audio files and large files
+          const isMediaFile = path.match(
+            /\.(mp4|webm|ogg|avi|mov|m4v|mp3|wav|aac|m4a)$/i
+          );
+          const isLargeFile = stat.size > 1024 * 1024; // > 1MB
+
+          if (isMediaFile || isLargeFile) {
             res.setHeader('Accept-Ranges', 'bytes');
+          }
+
+          // Set appropriate cache headers
+          if (isMediaFile) {
+            res.setHeader(
+              'Cache-Control',
+              'public, max-age=31536000, immutable'
+            ); // Cache media for 1 year
+          } else {
+            res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache others for 1 day
           }
         },
       })

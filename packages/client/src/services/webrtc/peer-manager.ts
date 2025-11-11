@@ -645,26 +645,16 @@ export class PeerConnectionManager {
     const screenShareTracks: MediaStreamTrack[] = []
 
     // Find screen share audio tracks
-    // They are typically tracks after the first one, OR tracks with screen share-like labels
+    // They are typically tracks after the first one (microphone is always first)
     for (let i = 0; i < audioTracks.length; i++) {
       const track = audioTracks[i]
-      const label = track.label.toLowerCase()
 
       // Skip the first track (microphone) - it's never screen share audio
       if (i === 0) {
         continue
       }
 
-      // Check if this is a screen share audio track by label
-      // Screen share audio typically has labels containing "desktop", "screen", "system", etc.
-      const isScreenShareAudio =
-        label.includes('desktop') ||
-        label.includes('screen') ||
-        label.includes('system') ||
-        label.includes('audio capture')
-
-      // If label matches OR if we can't identify by label, assume tracks after the first are screen share
-      // (i > 0 is always true here since we skip i === 0, so we always add tracks after the first)
+      // All tracks after the first are considered screen share audio
       screenShareTracks.push(track)
     }
 

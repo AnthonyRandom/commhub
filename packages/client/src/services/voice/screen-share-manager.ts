@@ -40,6 +40,11 @@ export class VoiceScreenShareManager {
         audioTracks: stream.getAudioTracks().length,
       })
 
+      // Note: Echo cancellation is handled by browser's built-in echoCancellation
+      // which is enabled by default in getUserMedia constraints.
+      // The browser's native echo cancellation is more efficient and reliable than
+      // custom filtering, and is the standard approach used by Discord, Zoom, etc.
+
       this.screenShareStream = stream
       this.screenShareEnabled = true
 

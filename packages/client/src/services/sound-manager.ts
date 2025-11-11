@@ -97,6 +97,21 @@ class SoundManager {
   }
 
   /**
+   * Play screen share focus notification - subtle notification when someone focuses on your screen share
+   */
+  playScreenShareFocused() {
+    if (!this.audioContext) {
+      this.initialize()
+    }
+
+    // Play a subtle, pleasant notification sound (gentle chime)
+    this.playTone(523.25, 0.15, 0.12) // C5 - subtle and pleasant
+    setTimeout(() => {
+      this.playTone(659.25, 0.2, 0.1) // E5 - ascending, gentle
+    }, 100)
+  }
+
+  /**
    * Enable or disable sounds
    */
   setEnabled(enabled: boolean) {

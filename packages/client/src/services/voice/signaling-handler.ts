@@ -30,6 +30,7 @@ export class VoiceSignalingHandler {
     socket.off('voice-camera-disabled')
     socket.off('voice-screen-share-enabled')
     socket.off('voice-screen-share-disabled')
+    socket.off('screen-share-focused-notification')
 
     // Attach listeners
     socket.on('voice-channel-users', this.handleVoiceChannelUsers.bind(this))
@@ -46,6 +47,10 @@ export class VoiceSignalingHandler {
     socket.on('voice-camera-disabled', this.handleVoiceCameraDisabled.bind(this))
     socket.on('voice-screen-share-enabled', this.handleVoiceScreenShareEnabled.bind(this))
     socket.on('voice-screen-share-disabled', this.handleVoiceScreenShareDisabled.bind(this))
+    socket.on(
+      'screen-share-focused-notification',
+      this.handleScreenShareFocusedNotification.bind(this)
+    )
   }
 
   private handleVoiceChannelUsers(data: {
@@ -470,6 +475,18 @@ export class VoiceSignalingHandler {
       const newUsers = new Map(useVoiceStore.getState().connectedUsers)
       newUsers.set(data.userId, { ...user, screenShareStream: undefined })
       useVoiceStore.setState({ connectedUsers: newUsers })
+    }
+  }
+
+  private handleScreenShareFocusedNotification(data: { userId: number; username: string }): void {
+    logger.info('VoiceSignaling', 'Someone focused on screen share', {
+      userId: data.userId,
+      username: data.username,
+    })
+
+    // Play notification sound if sounds are enabled
+    if (voiceSettingsManager.shouldPlaySounds()) {
+      soundManager.playScreenShareFocused()
     }
   }
 }

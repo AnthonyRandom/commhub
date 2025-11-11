@@ -459,6 +459,48 @@ export class ChatGateway
     );
   }
 
+  @SubscribeMessage('screen-share-focused')
+  async handleScreenShareFocused(
+    @MessageBody() data: { userId: number; channelId: number },
+    @ConnectedSocket() client: AuthenticatedSocket
+  ) {
+    try {
+      // Verify the user being focused on is in the same channel
+      const userVoiceChannel = this.userVoiceChannels.get(data.userId);
+      const clientVoiceChannel = this.userVoiceChannels.get(client.userId);
+
+      if (
+        userVoiceChannel &&
+        clientVoiceChannel &&
+        userVoiceChannel === data.channelId &&
+        clientVoiceChannel === data.channelId &&
+        data.userId !== client.userId
+      ) {
+        // Notify ONLY the screen sharer (data.userId) that someone focused on their stream
+        // Find the socket for the screen sharer
+        const socketsInRoom = await this.server
+          .in(`voice-${data.channelId}`)
+          .fetchSockets();
+        const screenSharerSocket = socketsInRoom.find(
+          socket =>
+            (socket as any as AuthenticatedSocket).userId === data.userId
+        );
+
+        if (screenSharerSocket) {
+          screenSharerSocket.emit('screen-share-focused-notification', {
+            userId: client.userId,
+            username: client.username,
+          });
+          this.logger.log(
+            `[ScreenShare] User ${client.username} (${client.userId}) focused on ${data.userId}'s screen share in channel ${data.channelId}`
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.error('Error handling screen share focused:', error.message);
+    }
+  }
+
   // Public methods for external controllers
   public notifyChannelCreated(serverId: number, channel: any) {
     this.channelEventsHandler.notifyChannelCreated(

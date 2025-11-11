@@ -17,6 +17,7 @@ import { MessageInput } from './chat/MessageInput'
 import { MessageItem } from './chat/MessageItem'
 import type { Channel, Server, Message } from '../services/api'
 import { apiService } from '../services/api'
+import { wsService } from '../services/websocket'
 
 interface ChatAreaProps {
   selectedChannel: Channel | null
@@ -167,8 +168,23 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
     // When no user is focused (null), all screen share audio is disabled
     if (focusedStreamUserId !== undefined) {
       voiceManager.setFocusedUserScreenShareAudio(focusedStreamUserId)
+
+      // Notify the screen sharer when someone focuses on their stream
+      if (focusedStreamUserId !== null) {
+        const focusedUser = connectedUsers.get(focusedStreamUserId)
+        if (focusedUser?.hasScreenShare) {
+          // Emit event to notify the screen sharer
+          const socket = wsService.getSocket()
+          if (socket) {
+            socket.emit('screen-share-focused', {
+              userId: focusedStreamUserId,
+              channelId: connectedChannelId,
+            })
+          }
+        }
+      }
     }
-  }, [focusedStreamUserId])
+  }, [focusedStreamUserId, connectedUsers, connectedChannelId])
 
   // Auto-scroll to bottom when new messages arrive (but not when loading older messages or user is scrolled up)
   useEffect(() => {

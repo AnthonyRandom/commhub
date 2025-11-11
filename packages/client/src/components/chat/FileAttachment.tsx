@@ -51,7 +51,7 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
     return (
       <>
         <div className="relative inline-block animate-slide-up">
-          <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden inline-block group">
+          <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden inline-block group relative">
             <img
               src={fullUrl}
               alt={attachment.filename}
@@ -66,7 +66,7 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
                   e.stopPropagation()
                   onRemove()
                 }}
-                className="absolute top-2 right-2 p-1 bg-red-600 hover:bg-red-700 text-white border-2 border-white opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute top-2 right-2 p-1.5 bg-red-600 hover:bg-red-700 text-white border-2 border-white rounded transition-all opacity-100 z-10"
                 title="Remove attachment"
               >
                 <X className="w-4 h-4" />
@@ -138,7 +138,7 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
 
     return (
       <div className="mt-2 max-w-md animate-slide-up">
-        <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden">
+        <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden relative group">
           <video
             src={fullUrl}
             controls
@@ -147,6 +147,18 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
           >
             Your browser does not support the video tag.
           </video>
+          {showRemove && onRemove && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onRemove()
+              }}
+              className="absolute top-2 right-2 p-1.5 bg-red-600 hover:bg-red-700 text-white border-2 border-white rounded transition-all z-10 opacity-100"
+              title="Remove attachment"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
         <div className="text-grey-400 text-xs mt-1">
           {attachment.filename} • {formatFileSize(attachment.size)}
@@ -212,7 +224,7 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
             {showRemove && onRemove && (
               <button
                 onClick={onRemove}
-                className="p-1 bg-red-600 hover:bg-red-700 text-white border-2 border-white transition-colors"
+                className="p-1.5 bg-red-600 hover:bg-red-700 text-white border-2 border-white rounded transition-colors flex-shrink-0"
                 title="Remove attachment"
               >
                 <X className="w-4 h-4" />
@@ -242,7 +254,7 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
           {showRemove && onRemove ? (
             <button
               onClick={onRemove}
-              className="p-2 bg-red-600 hover:bg-red-700 text-white border-2 border-white transition-colors"
+              className="p-1.5 bg-red-600 hover:bg-red-700 text-white border-2 border-white rounded transition-colors flex-shrink-0"
               title="Remove attachment"
             >
               <X className="w-4 h-4" />

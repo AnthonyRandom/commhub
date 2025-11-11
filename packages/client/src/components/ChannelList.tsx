@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import {
   Hash,
   Volume2,
@@ -79,17 +79,53 @@ const ChannelList: React.FC<ChannelListProps> = ({
   }, [initializeWebSocketListeners])
 
   const serverChannels = server ? getChannelsByServer(server.id) : []
-  const textChannels = serverChannels.filter((ch) => ch.type === 'text')
-  const voiceChannels = serverChannels.filter((ch) => ch.type === 'voice')
+  const textChannels = useMemo(
+    () => serverChannels.filter((ch) => ch.type === 'text'),
+    [serverChannels]
+  )
+  const voiceChannels = useMemo(
+    () => serverChannels.filter((ch) => ch.type === 'voice'),
+    [serverChannels]
+  )
+
+  // Track which channels we've already fetched mention counts for
+  const fetchedChannelIdsRef = useRef<Set<number>>(new Set())
+
+  // Memoize channel IDs to use as dependency
+  const textChannelIds = useMemo(
+    () =>
+      textChannels
+        .map((ch) => ch.id)
+        .sort()
+        .join(','),
+    [textChannels]
+  )
 
   // Fetch mention counts for all text channels when channels are loaded
   useEffect(() => {
     if (textChannels.length > 0) {
-      textChannels.forEach((channel) => {
-        fetchChannelMentionCount(channel.id)
-      })
+      // Only fetch counts for channels we haven't fetched yet
+      const channelsToFetch = textChannels.filter(
+        (channel) => !fetchedChannelIdsRef.current.has(channel.id)
+      )
+
+      if (channelsToFetch.length > 0) {
+        // Mark channels as fetched before making requests
+        channelsToFetch.forEach((channel) => {
+          fetchedChannelIdsRef.current.add(channel.id)
+        })
+
+        // Fetch counts for new channels
+        channelsToFetch.forEach((channel) => {
+          fetchChannelMentionCount(channel.id).catch((error) => {
+            // If fetch fails, remove from set so we can retry later
+            fetchedChannelIdsRef.current.delete(channel.id)
+            console.error(`Failed to fetch mention count for channel ${channel.id}:`, error)
+          })
+        })
+      }
     }
-  }, [textChannels, fetchChannelMentionCount])
+  }, [textChannelIds, fetchChannelMentionCount])
 
   // Find the current voice channel the user is connected to
   const currentVoiceChannel = connectedChannelId

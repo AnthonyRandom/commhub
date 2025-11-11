@@ -180,7 +180,17 @@ export class ChatGateway
   // Direct Messages
   @SubscribeMessage('send-direct-message')
   async handleDirectMessage(
-    @MessageBody() data: { receiverId: number; content: string },
+    @MessageBody()
+    data: {
+      receiverId: number;
+      content: string;
+      attachments?: Array<{
+        url: string;
+        filename: string;
+        mimeType: string;
+        size: number;
+      }>;
+    },
     @ConnectedSocket() client: AuthenticatedSocket
   ) {
     await this.directMessagesHandler.handleSendDirectMessage(

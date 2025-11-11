@@ -8,7 +8,6 @@ import {
   Search,
   MessageSquare,
   ArrowLeft,
-  Send,
   MoreVertical,
   Edit2,
 } from 'lucide-react'
@@ -18,6 +17,9 @@ import { useDirectMessagesStore } from '../stores/directMessages'
 import { useSettingsStore } from '../stores/settings'
 import { apiService, type DirectMessage } from '../services/api'
 import StatusIndicator from './StatusIndicator'
+import { MessageInput } from './chat/MessageInput'
+import GifPicker from './GifPicker'
+import EmojiPicker from './EmojiPicker'
 
 interface FriendsPanelProps {
   selectedDMUserId?: number | null
@@ -75,6 +77,8 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({
   const [hasUserScrolledUp, setHasUserScrolledUp] = useState(false)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [showGifPicker, setShowGifPicker] = useState(false)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
 
   const selectedFriend = friends.find((f) => f.id === selectedDMUserId)
 
@@ -316,15 +320,18 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({
     }
   }
 
-  const handleSendMessage = async (e: React.FormEvent) => {
+  const handleSendMessage = async (
+    e: React.FormEvent,
+    attachments?: Array<{ url: string; filename: string; mimeType: string; size: number }>
+  ) => {
     e.preventDefault()
-    if (!selectedDMUserId || !messageInput.trim()) return
+    if (!selectedDMUserId || (!messageInput.trim() && !attachments?.length)) return
 
     const conversationId = selectedDMUserId
     const inputElement = e.currentTarget.querySelector('textarea')
 
     try {
-      await sendDirectMessage(conversationId, messageInput.trim())
+      await sendDirectMessage(conversationId, messageInput.trim(), attachments)
       // Clear this conversation's input
       setConversationInputs((prev) => {
         const newMap = new Map(prev)
@@ -340,15 +347,20 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({
     }
   }
 
-  // Auto-resize textarea based on content for DMs
-  const handleDMInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setMessageInput(e.target.value)
+  const handleGifSelect = async (gifUrl: string) => {
+    if (!selectedDMUserId) return
 
-    // Reset height to auto to get the correct scrollHeight
-    e.target.style.height = 'auto'
-    // Set height to scrollHeight to fit content
-    const newHeight = Math.min(e.target.scrollHeight, 200) // Max 200px
-    e.target.style.height = `${newHeight}px`
+    const conversationId = selectedDMUserId
+    try {
+      await sendDirectMessage(conversationId, gifUrl)
+      setShowGifPicker(false)
+    } catch (error) {
+      console.error('Failed to send GIF:', error)
+    }
+  }
+
+  const handleEmojiSelect = (emoji: string) => {
+    setMessageInput(messageInput + emoji)
   }
 
   const handleEditMessage = async (messageId: number) => {
@@ -718,32 +730,32 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({
         </div>
 
         {/* Message Input */}
-        <div className="p-4 border-t-2 border-grey-800">
-          <form onSubmit={handleSendMessage} className="relative">
-            <textarea
-              value={messageInput}
-              onChange={handleDMInputChange}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  handleSendMessage(e)
-                }
-              }}
-              placeholder={`Message ${selectedFriend.username}`}
-              className="w-full bg-grey-850 border-2 border-grey-800 px-4 py-3 pr-12 text-white placeholder:text-grey-500 resize-none focus:border-white transition-colors"
-              rows={1}
-              autoComplete="off"
-              style={{ minHeight: '48px', maxHeight: '200px', height: '48px', overflow: 'hidden' }}
-            />
-            <button
-              type="submit"
-              disabled={!messageInput.trim()}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-white text-black hover:bg-grey-100 disabled:bg-grey-700 disabled:text-grey-500 disabled:cursor-not-allowed transition-colors"
-            >
-              <Send className="w-5 h-5" />
-            </button>
-          </form>
-        </div>
+        <MessageInput
+          messageInput={messageInput}
+          setMessageInput={setMessageInput}
+          replyingTo={null}
+          onSend={handleSendMessage}
+          onGifClick={() => setShowGifPicker(!showGifPicker)}
+          onEmojiClick={() => setShowEmojiPicker(!showEmojiPicker)}
+          onCancelReply={() => {}}
+          channelName={selectedFriend.username}
+          channelId={selectedDMUserId}
+          dmUsers={[selectedFriend]}
+        />
+
+        {/* GIF Picker */}
+        <GifPicker
+          isOpen={showGifPicker}
+          onClose={() => setShowGifPicker(false)}
+          onSelectGif={handleGifSelect}
+        />
+
+        {/* Emoji Picker */}
+        <EmojiPicker
+          isOpen={showEmojiPicker}
+          onClose={() => setShowEmojiPicker(false)}
+          onSelectEmoji={handleEmojiSelect}
+        />
       </div>
     )
   }

@@ -116,6 +116,14 @@ export interface DirectMessage {
     id: number
     username: string
   }
+  attachments?: Array<{
+    id: number
+    url: string
+    filename: string
+    mimeType: string
+    size: number
+    createdAt: string
+  }>
 }
 
 export interface Conversation {
@@ -391,10 +399,14 @@ class ApiService {
   }
 
   // Direct messages methods
-  async sendDirectMessage(receiverId: number, content: string): Promise<DirectMessage> {
+  async sendDirectMessage(
+    receiverId: number,
+    content: string,
+    attachments?: Array<{ url: string; filename: string; mimeType: string; size: number }>
+  ): Promise<DirectMessage> {
     const response: AxiosResponse<DirectMessage> = await this.axiosInstance.post(
       '/direct-messages',
-      { receiverId, content }
+      { receiverId, content, attachments }
     )
     return response.data
   }

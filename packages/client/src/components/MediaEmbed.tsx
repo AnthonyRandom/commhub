@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { ExternalLink, Play } from 'lucide-react'
+import { ExternalLink, Play, Download, X } from 'lucide-react'
 
 interface MediaEmbedProps {
   url: string
@@ -18,6 +18,7 @@ const MediaEmbed: React.FC<MediaEmbedProps> = ({ url }) => {
   const [embedData, setEmbedData] = useState<EmbedData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [showVideo, setShowVideo] = useState(false)
+  const [isImageExpanded, setIsImageExpanded] = useState(false)
 
   useEffect(() => {
     parseUrl(url)
@@ -138,6 +139,28 @@ const MediaEmbed: React.FC<MediaEmbedProps> = ({ url }) => {
     return null
   }
 
+  const handleDownload = async (imageUrl: string, filename?: string) => {
+    try {
+      const response = await fetch(imageUrl)
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+
+      // Extract filename from URL or use a default
+      const fileName = filename || imageUrl.split('/').pop() || 'image.jpg'
+
+      const a = document.createElement('a')
+      a.style.display = 'none'
+      a.href = url
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error) {
+      console.error('Failed to download image:', error)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="bg-grey-850 border-2 border-grey-700 p-4 mt-2 animate-pulse">
@@ -152,19 +175,66 @@ const MediaEmbed: React.FC<MediaEmbedProps> = ({ url }) => {
   // Image Embed
   if (embedData.type === 'image') {
     return (
-      <div className="mt-2 max-w-md animate-slide-up">
-        <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden inline-block">
-          <img
-            src={embedData.url}
-            alt="Embedded image"
-            className="block h-auto max-h-96 max-w-full"
-            onError={(e) => {
-              const target = e.target as HTMLImageElement
-              target.style.display = 'none'
-            }}
-          />
-        </div>
-      </div>
+      <>
+        {/* Thumbnail view */}
+        {!isImageExpanded && (
+          <div className="mt-2 max-w-md animate-slide-up">
+            <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden inline-block cursor-pointer hover:border-grey-600 transition-colors">
+              <img
+                src={embedData.url}
+                alt="Embedded image"
+                className="block h-auto max-h-96 max-w-full"
+                onClick={() => setIsImageExpanded(true)}
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement
+                  target.style.display = 'none'
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Expanded view */}
+        {isImageExpanded && (
+          <div
+            className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 animate-fade-in"
+            onClick={() => setIsImageExpanded(false)}
+          >
+            <div className="relative max-w-4xl max-h-screen p-4">
+              {/* Close button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setIsImageExpanded(false)
+                }}
+                className="absolute top-2 right-2 z-10 p-2 bg-grey-800 text-white hover:bg-grey-700 transition-colors border-2 border-grey-700 hover:border-grey-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {/* Download button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleDownload(embedData.url)
+                }}
+                className="absolute top-2 left-2 z-10 p-2 bg-grey-800 text-white hover:bg-grey-700 transition-colors border-2 border-grey-700 hover:border-grey-600"
+                title="Download image"
+              >
+                <Download className="w-5 h-5" />
+              </button>
+
+              {/* Image */}
+              <img
+                src={embedData.url}
+                alt="Embedded image"
+                className="max-w-full max-h-full object-contain"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </div>
+        )}
+      </>
     )
   }
 

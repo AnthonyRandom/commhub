@@ -21,7 +21,16 @@ export class DirectMessagesHandler {
   async handleSendDirectMessage(
     server: Server,
     onlineUsers: LRUCache<number, string>,
-    data: { receiverId: number; content: string },
+    data: {
+      receiverId: number;
+      content: string;
+      attachments?: Array<{
+        url: string;
+        filename: string;
+        mimeType: string;
+        size: number;
+      }>;
+    },
     client: AuthenticatedSocket
   ) {
     try {
@@ -67,6 +76,7 @@ export class DirectMessagesHandler {
         {
           receiverId: data.receiverId,
           content: trimmedContent,
+          attachments: data.attachments,
         },
         client.userId
       );
@@ -92,6 +102,7 @@ export class DirectMessagesHandler {
           id: messageData.receiver.id,
           username: messageData.receiver.username,
         },
+        attachments: messageData.attachments || [],
       };
 
       this.logger.log(

@@ -1,4 +1,11 @@
-import { IsNotEmpty, IsNumber, IsString, MaxLength } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsString,
+  MaxLength,
+  IsOptional,
+  IsArray,
+} from 'class-validator';
 
 export class CreateDirectMessageDto {
   @IsNotEmpty()
@@ -9,4 +16,13 @@ export class CreateDirectMessageDto {
   @IsString()
   @MaxLength(2000)
   content: string;
+
+  @IsOptional()
+  @IsArray()
+  attachments?: Array<{
+    url: string;
+    filename: string;
+    mimeType: string;
+    size: number;
+  }>;
 }

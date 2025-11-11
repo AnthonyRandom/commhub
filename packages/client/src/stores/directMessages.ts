@@ -15,7 +15,7 @@ interface DirectMessagesState {
   // Actions
   fetchConversations: () => Promise<void>
   fetchConversation: (userId: number) => Promise<void>
-  sendDirectMessage: (receiverId: number, content: string) => Promise<void>
+  sendDirectMessage: (receiverId: number, content: string, attachments?: Array<{ url: string; filename: string; mimeType: string; size: number }>) => Promise<void>
   editDirectMessage: (messageId: number, content: string) => Promise<void>
   deleteDirectMessage: (messageId: number, senderId: number, receiverId: number) => Promise<void>
   markConversationAsRead: (userId: number) => Promise<void>
@@ -62,7 +62,7 @@ export const useDirectMessagesStore = create<DirectMessagesState>((set, get) => 
     }
   },
 
-  sendDirectMessage: async (receiverId: number, content: string) => {
+  sendDirectMessage: async (receiverId: number, content: string, attachments?: Array<{ url: string; filename: string; mimeType: string; size: number }>) => {
     const currentUser = useAuthStore.getState().user
     if (!currentUser) return
 
@@ -86,6 +86,7 @@ export const useDirectMessagesStore = create<DirectMessagesState>((set, get) => 
           id: receiverId,
           username: 'Friend', // Will be replaced by real data
         },
+        attachments: attachments as any,
       }
 
       set((state) => ({
@@ -95,7 +96,7 @@ export const useDirectMessagesStore = create<DirectMessagesState>((set, get) => 
         },
       }))
 
-      await apiService.sendDirectMessage(receiverId, content)
+      await apiService.sendDirectMessage(receiverId, content, attachments)
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Failed to send message'
       set({ error: errorMessage })

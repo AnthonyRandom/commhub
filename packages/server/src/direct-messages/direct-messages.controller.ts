@@ -59,6 +59,7 @@ export class DirectMessagesController {
         id: messageData.receiver.id,
         username: messageData.receiver.username,
       },
+      attachments: messageData.attachments || [],
     };
 
     // Emit to both users via WebSocket

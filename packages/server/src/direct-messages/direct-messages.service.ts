@@ -27,7 +27,7 @@ export class DirectMessagesService {
     createDirectMessageDto: CreateDirectMessageDto,
     senderId: number
   ) {
-    const { receiverId, content } = createDirectMessageDto;
+    const { receiverId, content, attachments } = createDirectMessageDto;
 
     if (senderId === receiverId) {
       throw new BadRequestException('Cannot send message to yourself');
@@ -72,6 +72,17 @@ export class DirectMessagesService {
         content,
         senderId,
         receiverId,
+        attachments: attachments
+          ? {
+              create: attachments.map(attachment => ({
+                url: attachment.url,
+                filename: attachment.filename,
+                mimeType: attachment.mimeType,
+                size: attachment.size,
+                uploadedBy: senderId,
+              })),
+            }
+          : undefined,
       },
       include: {
         sender: {
@@ -86,6 +97,7 @@ export class DirectMessagesService {
             username: true,
           },
         },
+        attachments: true,
       },
     });
   }
@@ -145,6 +157,7 @@ export class DirectMessagesService {
             username: true,
           },
         },
+        attachments: true,
       },
       orderBy: {
         createdAt: 'asc',

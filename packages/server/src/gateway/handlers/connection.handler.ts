@@ -233,8 +233,11 @@ export class ConnectionHandler {
         });
       });
 
+      // Join personal user room for mentions and DMs
+      client.join(`user-${client.userId}`);
+
       this.logger.log(
-        `[Ready] Joined ${client.username} to ${memberships.length} servers and ${totalChannels} channels`
+        `[Ready] Joined ${client.username} to ${memberships.length} servers, ${totalChannels} channels, and personal user room`
       );
 
       // Compute online friends snapshot

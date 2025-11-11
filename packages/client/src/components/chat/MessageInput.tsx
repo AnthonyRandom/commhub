@@ -20,6 +20,7 @@ interface MessageInputProps {
   onCancelReply: () => void
   channelName: string
   channelId: number
+  dmUsers?: Array<{ id: number; username: string }> // For direct messages
 }
 
 export const MessageInput: React.FC<MessageInputProps> = ({
@@ -32,6 +33,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   onCancelReply,
   channelName,
   channelId,
+  dmUsers,
 }) => {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [attachments, setAttachments] = useState<
@@ -62,18 +64,18 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   // Handle mention autocomplete
   useEffect(() => {
-    if (!showMentionAutocomplete || !currentServer) {
+    if (!showMentionAutocomplete) {
       setMentionUsers([])
       return
     }
 
-    // Filter server members based on mention query
-    const members = currentServer.members || []
-    const filtered = members.filter((member) =>
-      member.username.toLowerCase().includes(mentionQuery.toLowerCase())
+    // Use dmUsers if provided (for direct messages), otherwise use server members
+    const users = dmUsers || currentServer?.members || []
+    const filtered = users.filter((user) =>
+      user.username.toLowerCase().includes(mentionQuery.toLowerCase())
     )
-    setMentionUsers(filtered.slice(0, 10).map((m) => ({ id: m.id, username: m.username })))
-  }, [showMentionAutocomplete, mentionQuery, currentServer])
+    setMentionUsers(filtered.slice(0, 10).map((u) => ({ id: u.id, username: u.username })))
+  }, [showMentionAutocomplete, mentionQuery, currentServer, dmUsers])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Handle mention autocomplete navigation

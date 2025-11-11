@@ -129,6 +129,7 @@ model DirectMessage {
   sender     User @relation("DirectMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
   receiverId Int
   receiver   User @relation("DirectMessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  attachments Attachment[]
 
   // Optimized indexes for conversation queries
   @@index([senderId, receiverId, createdAt(sort: Desc)])
@@ -145,12 +146,15 @@ model Attachment {
   createdAt DateTime @default(now())
 
   // Relations
-  messageId  Int
-  message    Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  uploadedBy Int
-  uploader   User    @relation("AttachmentUploader", fields: [uploadedBy], references: [id])
+  messageId       Int?
+  message         Message?        @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  directMessageId Int?
+  directMessage   DirectMessage?  @relation(fields: [directMessageId], references: [id], onDelete: Cascade)
+  uploadedBy      Int
+  uploader        User            @relation("AttachmentUploader", fields: [uploadedBy], references: [id])
 
   @@index([messageId])
+  @@index([directMessageId])
   @@index([uploadedBy])
 }
 

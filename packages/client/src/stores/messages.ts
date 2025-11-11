@@ -243,6 +243,7 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
               id: message.channelId,
               name: 'Current Channel',
             },
+            attachments: message.attachments,
           }
 
           return {

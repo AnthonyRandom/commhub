@@ -295,6 +295,7 @@ export const useMessagesStore = create<MessagesState>((set, get) => ({
               content: message.content,
               isEdited: message.isEdited,
               editedAt: message.editedAt,
+              attachments: message.attachments || m.attachments,
             }
           : m
       )

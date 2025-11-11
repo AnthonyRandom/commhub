@@ -198,6 +198,7 @@ export class ChannelMessagesHandler {
               user: message.replyTo.user,
             }
           : null,
+        attachments: message.attachments || [],
       });
     } catch (error) {
       this.logger.error('Error editing message:', error.message);

@@ -44,16 +44,21 @@ export class DirectMessagesHandler {
         return;
       }
 
-      if (!data.content || typeof data.content !== 'string') {
-        client.emit('error', { message: 'Invalid message content' });
+      // Allow messages with only attachments (no content required)
+      const hasContent =
+        data.content &&
+        typeof data.content === 'string' &&
+        data.content.trim().length > 0;
+      const hasAttachments = data.attachments && data.attachments.length > 0;
+
+      if (!hasContent && !hasAttachments) {
+        client.emit('error', {
+          message: 'Message must have content or attachments',
+        });
         return;
       }
 
-      const trimmedContent = data.content.trim();
-      if (trimmedContent.length === 0) {
-        client.emit('error', { message: 'Message cannot be empty' });
-        return;
-      }
+      const trimmedContent = hasContent ? data.content.trim() : '';
 
       if (trimmedContent.length > 2000) {
         client.emit('error', {
@@ -85,24 +90,38 @@ export class DirectMessagesHandler {
       const senderSocketId = onlineUsers.get(client.userId);
 
       // Send the full message object to both sender and receiver
+      // Type assertion needed because Prisma includes relations but TypeScript inference doesn't always catch it
+      const messageWithRelations = messageData as typeof messageData & {
+        sender: { id: number; username: string };
+        receiver: { id: number; username: string };
+        attachments: Array<{
+          id: number;
+          url: string;
+          filename: string;
+          mimeType: string;
+          size: number;
+          createdAt: Date;
+        }>;
+      };
+
       const messageDto = {
-        id: messageData.id,
-        content: messageData.content,
-        senderId: messageData.senderId,
-        receiverId: messageData.receiverId,
-        createdAt: messageData.createdAt,
-        isEdited: messageData.isEdited,
-        editedAt: messageData.editedAt,
+        id: messageWithRelations.id,
+        content: messageWithRelations.content,
+        senderId: messageWithRelations.senderId,
+        receiverId: messageWithRelations.receiverId,
+        createdAt: messageWithRelations.createdAt,
+        isEdited: messageWithRelations.isEdited,
+        editedAt: messageWithRelations.editedAt,
         isRead: false, // New messages are unread
         sender: {
-          id: messageData.sender.id,
-          username: messageData.sender.username,
+          id: messageWithRelations.sender.id,
+          username: messageWithRelations.sender.username,
         },
         receiver: {
-          id: messageData.receiver.id,
-          username: messageData.receiver.username,
+          id: messageWithRelations.receiver.id,
+          username: messageWithRelations.receiver.username,
         },
-        attachments: messageData.attachments || [],
+        attachments: messageWithRelations.attachments || [],
       };
 
       this.logger.log(

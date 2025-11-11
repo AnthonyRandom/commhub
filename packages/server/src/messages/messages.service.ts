@@ -328,6 +328,16 @@ export class MessagesService {
             },
           },
         },
+        attachments: {
+          select: {
+            id: true,
+            url: true,
+            filename: true,
+            mimeType: true,
+            size: true,
+            createdAt: true,
+          },
+        },
       },
     });
   }

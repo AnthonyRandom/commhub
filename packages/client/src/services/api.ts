@@ -504,6 +504,23 @@ class ApiService {
     return response.data
   }
 
+  async uploadFileForDM(
+    file: File,
+    receiverId: number
+  ): Promise<{ url: string; filename: string; mimeType: string; size: number }> {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('receiverId', receiverId.toString())
+
+    const response = await this.axiosInstance.post('/uploads', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 300000, // 5 minutes timeout for large files
+    })
+    return response.data
+  }
+
   async deleteAttachment(attachmentId: number): Promise<void> {
     await this.axiosInstance.delete(`/uploads/${attachmentId}`)
   }

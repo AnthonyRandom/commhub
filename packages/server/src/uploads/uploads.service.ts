@@ -122,6 +122,18 @@ export class UploadsService {
   }
 
   /**
+   * Upload and process a file for direct messages
+   */
+  async uploadFileForDM(
+    file: Express.Multer.File,
+    userId: number,
+    receiverId: number
+  ) {
+    // Same logic as uploadFile, but for DMs (no channelId needed)
+    return this.uploadFile(file, userId, 0); // Use 0 as placeholder channelId
+  }
+
+  /**
    * Create attachment record in database
    */
   async createAttachment(

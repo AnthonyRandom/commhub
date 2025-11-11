@@ -154,8 +154,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
     if (lastAtIndex !== -1) {
       const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1)
-      // Check if it's a valid mention (no spaces)
-      if (!textAfterAt.includes(' ') && textAfterAt.length >= 0) {
+      // Check if it's a valid mention (no spaces, no @ symbols after)
+      if (!textAfterAt.includes(' ') && !textAfterAt.includes('@')) {
         setMentionQuery(textAfterAt)
         setMentionStartPos(lastAtIndex)
         setShowMentionAutocomplete(true)
@@ -174,12 +174,18 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
     for (const file of files) {
       try {
-        const uploadedFile = await apiService.uploadFile(file, channelId)
-        setAttachments((prev) => [...prev, uploadedFile])
+        // For DMs, use receiverId; for channels, use channelId
+        if (dmUsers && dmUsers.length > 0) {
+          const uploadedFile = await apiService.uploadFileForDM(file, dmUsers[0].id)
+          setAttachments((prev) => [...prev, uploadedFile])
+        } else {
+          const uploadedFile = await apiService.uploadFile(file, channelId)
+          setAttachments((prev) => [...prev, uploadedFile])
+        }
+        setUploadingFiles((prev) => prev.filter((f) => f !== file))
       } catch (error: any) {
         console.error('Failed to upload file:', error)
         setUploadError(error.response?.data?.message || `Failed to upload ${file.name}`)
-      } finally {
         setUploadingFiles((prev) => prev.filter((f) => f !== file))
       }
     }
@@ -275,7 +281,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             value={messageInput}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder={`Message #${channelName}`}
+            placeholder={dmUsers ? `Message ${channelName}` : `Message #${channelName}`}
             className="w-full bg-grey-850 border-2 border-grey-700 px-4 py-3 pr-32 text-white resize-none focus:border-white placeholder:text-grey-500"
             rows={1}
             maxLength={2000}

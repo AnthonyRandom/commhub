@@ -20,6 +20,9 @@ import StatusIndicator from './StatusIndicator'
 import { MessageInput } from './chat/MessageInput'
 import GifPicker from './GifPicker'
 import EmojiPicker from './EmojiPicker'
+import MediaEmbed from './MediaEmbed'
+import { FileAttachment } from './chat/FileAttachment'
+import { parseMentionsInMessage } from '../utils/mentionUtils'
 
 interface FriendsPanelProps {
   selectedDMUserId?: number | null
@@ -661,19 +664,124 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({
                                 </div>
                               ) : (
                                 <div className="relative group/message">
-                                  <div
-                                    className={`px-4 py-2 break-words max-w-xl ${
-                                      isOwnMessage
-                                        ? 'bg-white text-black'
-                                        : 'bg-grey-850 text-white border-2 border-grey-800'
-                                    }`}
-                                  >
-                                    {blockedUsers.some(
+                                  {(() => {
+                                    const isBlocked = blockedUsers.some(
                                       (blockedUser) => blockedUser.id === message.senderId
                                     )
-                                      ? '[This user is blocked]'
-                                      : message.content}
-                                  </div>
+                                    if (isBlocked) {
+                                      return (
+                                        <div
+                                          className={`px-4 py-2 break-words max-w-xl ${
+                                            isOwnMessage
+                                              ? 'bg-white text-black'
+                                              : 'bg-grey-850 text-white border-2 border-grey-800'
+                                          }`}
+                                        >
+                                          [This user is blocked]
+                                        </div>
+                                      )
+                                    }
+
+                                    // Extract URLs and check if message is a GIF
+                                    const extractUrls = (text: string): string[] => {
+                                      const urlRegex = /(https?:\/\/[^\s]+)/g
+                                      return text.match(urlRegex) || []
+                                    }
+
+                                    const removeUrlsFromText = (text: string): string => {
+                                      const urlRegex = /(https?:\/\/[^\s]+)/g
+                                      return text.replace(urlRegex, '').trim()
+                                    }
+
+                                    const isGifUrl = (url: string): boolean => {
+                                      return (
+                                        /\.(gif)$/i.test(url) ||
+                                        url.includes('tenor.com') ||
+                                        url.includes('giphy.com')
+                                      )
+                                    }
+
+                                    const urls = extractUrls(message.content)
+                                    const messageIsGif =
+                                      urls.length === 1 &&
+                                      isGifUrl(urls[0]) &&
+                                      message.content === urls[0]
+                                    const cleanedContent = removeUrlsFromText(message.content)
+
+                                    // Render message with mentions
+                                    const renderMessageWithMentions = (text: string) => {
+                                      const parts = parseMentionsInMessage(text)
+                                      return (
+                                        <>
+                                          {parts.map((part, index) => {
+                                            if (part.isMention) {
+                                              return (
+                                                <span
+                                                  key={index}
+                                                  className="bg-blue-600/30 text-blue-300 px-1 font-bold border-l-2 border-blue-500"
+                                                >
+                                                  {part.text}
+                                                </span>
+                                              )
+                                            }
+                                            return <span key={index}>{part.text}</span>
+                                          })}
+                                        </>
+                                      )
+                                    }
+
+                                    return (
+                                      <>
+                                        {/* Display GIF if message is just a GIF URL */}
+                                        {messageIsGif ? (
+                                          <div className="max-w-md">
+                                            <div className="bg-grey-850 border-2 border-grey-700 overflow-hidden inline-block relative group">
+                                              <img
+                                                src={urls[0]}
+                                                alt="GIF"
+                                                className="block h-auto max-h-96 max-w-full"
+                                              />
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <>
+                                            {cleanedContent && (
+                                              <div
+                                                className={`px-4 py-2 break-words max-w-xl ${
+                                                  isOwnMessage
+                                                    ? 'bg-white text-black'
+                                                    : 'bg-grey-850 text-white border-2 border-grey-800'
+                                                }`}
+                                              >
+                                                <p className="break-words whitespace-pre-wrap">
+                                                  {renderMessageWithMentions(cleanedContent)}
+                                                </p>
+                                              </div>
+                                            )}
+                                            {/* Display media embeds for URLs in the message */}
+                                            {urls.map((url, urlIndex) => (
+                                              <MediaEmbed
+                                                key={`${message.id}-${urlIndex}`}
+                                                url={url}
+                                              />
+                                            ))}
+                                            {/* Display file attachments */}
+                                            {message.attachments &&
+                                              message.attachments.length > 0 && (
+                                                <div className="mt-2 flex flex-wrap gap-2">
+                                                  {message.attachments.map((attachment, index) => (
+                                                    <FileAttachment
+                                                      key={`${message.id}-attachment-${attachment.id}-${index}`}
+                                                      attachment={attachment}
+                                                    />
+                                                  ))}
+                                                </div>
+                                              )}
+                                          </>
+                                        )}
+                                      </>
+                                    )
+                                  })()}
 
                                   {/* Context Menu */}
                                   {canEditOrDelete(message) && (

@@ -60,14 +60,24 @@ export class UploadsController {
   )
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
-    @Body('channelId', ParseIntPipe) channelId: number,
-    @Request() req
+    @Request() req,
+    @Body('channelId') channelId?: number,
+    @Body('receiverId') receiverId?: number
   ) {
     if (!file) {
       throw new BadRequestException('No file provided');
     }
 
-    return this.uploadsService.uploadFile(file, req.user.id, channelId);
+    // For DMs, use receiverId; for channels, use channelId
+    if (receiverId) {
+      return this.uploadsService.uploadFileForDM(file, req.user.id, receiverId);
+    } else if (channelId) {
+      return this.uploadsService.uploadFile(file, req.user.id, channelId);
+    } else {
+      throw new BadRequestException(
+        'Either channelId or receiverId must be provided'
+      );
+    }
   }
 
   @UseGuards(JwtAuthGuard)

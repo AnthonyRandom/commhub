@@ -644,34 +644,39 @@ export class PeerConnectionManager {
       return
     }
 
-    // Identify microphone track (first track is typically the microphone)
-    // Screen share audio tracks typically have labels like "Desktop Audio" or similar
-    const microphoneTrack = audioTracks[0]
+    // Identify microphone and screen share audio tracks
+    const microphoneTracks: MediaStreamTrack[] = []
     const screenShareTracks: MediaStreamTrack[] = []
 
-    // Find screen share audio tracks
-    // They are typically tracks after the first one (microphone is always first)
+    // Use the same logic as addtrack event listener
     for (let i = 0; i < audioTracks.length; i++) {
       const track = audioTracks[i]
+      const label = track.label.toLowerCase()
 
-      // Skip the first track (microphone) - it's never screen share audio
-      if (i === 0) {
-        continue
+      // Identify if this is a screen share audio track
+      const isScreenShareAudio =
+        i > 0 ||
+        label.includes('desktop') ||
+        label.includes('screen') ||
+        label.includes('system') ||
+        label.includes('audio capture')
+
+      if (isScreenShareAudio) {
+        screenShareTracks.push(track)
+      } else {
+        microphoneTracks.push(track)
       }
-
-      // All tracks after the first are considered screen share audio
-      screenShareTracks.push(track)
     }
 
-    // CRITICAL: Always ensure microphone track stays enabled
-    if (microphoneTrack) {
-      microphoneTrack.enabled = true
+    // CRITICAL: Always ensure microphone tracks stay enabled
+    microphoneTracks.forEach((track) => {
+      track.enabled = true
       logger.debug('PeerManager', `Ensured microphone track stays enabled for user ${userId}`, {
         userId,
-        trackId: microphoneTrack.id,
-        trackLabel: microphoneTrack.label,
+        trackId: track.id,
+        trackLabel: track.label,
       })
-    }
+    })
 
     // Enable/disable screen share audio tracks
     for (const track of screenShareTracks) {

@@ -1,5 +1,6 @@
 import SimplePeer from 'simple-peer'
 import { useVoiceStore } from '../../stores/voice'
+import { useAuthStore } from '../../stores/auth'
 import { wsService } from '../websocket'
 import { logger } from '../../utils/logger'
 import { handleError, NetworkError } from '../../utils/errors'
@@ -153,9 +154,10 @@ export class PeerConnectionManager {
             label.includes('audio capture')
 
           if (isScreenShareAudio) {
-            // Check if this user is currently focused
+            // Check if this user is currently focused, but don't enable for local user
             const focusedUserId = useVoiceStore.getState().focusedStreamUserId
-            const shouldEnable = focusedUserId === userId
+            const { user: localUser } = useAuthStore.getState()
+            const shouldEnable = focusedUserId === userId && focusedUserId !== localUser?.id
 
             track.enabled = shouldEnable
             logger.info(
@@ -709,8 +711,12 @@ export class PeerConnectionManager {
    * Used when focusing on a specific user's stream
    */
   setFocusedUserScreenShareAudio(focusedUserId: number | null): void {
+    // Get the local user ID from auth store
+    const { user } = useAuthStore.getState()
+
     this.peers.forEach((_, userId) => {
-      const shouldEnable = focusedUserId === userId
+      // Don't enable screen share audio for the local user (prevent echo)
+      const shouldEnable = focusedUserId === userId && focusedUserId !== user?.id
       this.setUserScreenShareAudio(userId, shouldEnable)
     })
   }

@@ -38,6 +38,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const isInitialChannelLoad = useRef(true)
+  const previouslyFocusedScreenSharerRef = useRef<number | null>(null)
 
   // Get the current channel's input value
   const messageInput = selectedChannel ? channelInputs.get(selectedChannel.id) || '' : ''
@@ -169,10 +170,16 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
     if (focusedStreamUserId !== undefined) {
       voiceManager.setFocusedUserScreenShareAudio(focusedStreamUserId)
 
-      // Notify the screen sharer when someone focuses on their stream
+      // Notify the screen sharer when someone focuses on their stream (only once per focus session)
       if (focusedStreamUserId !== null) {
         const focusedUser = connectedUsers.get(focusedStreamUserId)
-        if (focusedUser?.hasScreenShare) {
+        if (
+          focusedUser?.hasScreenShare &&
+          focusedStreamUserId !== previouslyFocusedScreenSharerRef.current
+        ) {
+          // Update the previously focused screen sharer
+          previouslyFocusedScreenSharerRef.current = focusedStreamUserId
+
           // Emit event to notify the screen sharer
           const socket = wsService.getSocket()
           if (socket) {
@@ -182,6 +189,9 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
             })
           }
         }
+      } else if (focusedStreamUserId === null) {
+        // Reset when focus is cleared
+        previouslyFocusedScreenSharerRef.current = null
       }
     }
   }, [focusedStreamUserId, connectedUsers, connectedChannelId])

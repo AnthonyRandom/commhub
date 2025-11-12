@@ -104,10 +104,10 @@ class SoundManager {
       this.initialize()
     }
 
-    // Play a subtle, pleasant notification sound (gentle chime)
-    this.playTone(523.25, 0.15, 0.12) // C5 - subtle and pleasant
+    // Play a subtle, pleasant notification sound (gentle chime) - quieter than before
+    this.playTone(523.25, 0.15, 0.08) // C5 - subtle and pleasant
     setTimeout(() => {
-      this.playTone(659.25, 0.2, 0.1) // E5 - ascending, gentle
+      this.playTone(659.25, 0.2, 0.06) // E5 - ascending, gentle
     }, 100)
   }
 

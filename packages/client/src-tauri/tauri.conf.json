@@ -32,7 +32,7 @@
         "scope": ["https://commhub-production.up.railway.app/*", "https://tenor.googleapis.com/*"]
       },
       "path": {
-        "all": false
+        "all": true
       },
       "fs": {
         "all": false,
@@ -45,7 +45,7 @@
         "removeFile": true,
         "renameFile": false,
         "exists": true,
-        "scope": ["$APPCONFIG/commhub/*", "$APPDATA/commhub/*", "$APPLOCALDATA/commhub/*"]
+        "scope": ["$APPCONFIG/**", "$APPDATA/**", "$APPLOCALDATA/**"]
       },
       "os": {
         "all": false

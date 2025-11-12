@@ -95,6 +95,7 @@ export const FocusedStreamView: React.FC<FocusedStreamViewProps> = ({
           <video
             ref={videoRef}
             autoPlay
+            muted
             playsInline
             className="max-w-full max-h-full object-contain"
           />

@@ -47,7 +47,7 @@ function App() {
 
   const { isAuthenticated, isLoading } = useAuthStore()
   const selectServer = useServersStore((state) => state.selectServer)
-  const { conversations, fetchConversations, deleteConversation } = useDirectMessagesStore()
+  const { conversations, deleteConversation } = useDirectMessagesStore()
   const { initializeStatusTracking, cleanup } = useStatusStore()
 
   // Debug showUpdateNotification state changes (development only)
@@ -159,10 +159,10 @@ function App() {
       if (selectedDMUserId === userId) {
         setSelectedDMUserId(null)
       }
-      // Refresh conversations
-      await fetchConversations()
+      // Note: We don't refetch conversations since "closing" a DM is just a local UI action
+      // The conversation can be reopened by messaging the friend again
     } catch (error) {
-      console.error('Failed to delete DM conversation:', error)
+      console.error('Failed to close DM conversation:', error)
     }
   }
 

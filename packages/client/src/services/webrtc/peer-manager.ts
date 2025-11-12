@@ -138,11 +138,10 @@ export class PeerConnectionManager {
         peerConnection.audioElement = audioElement
       }
 
-      // Listen for dynamically added tracks (e.g., screen share audio during renegotiation)
-      stream.addEventListener('addtrack', (event) => {
-        const track = event.track
+      // Listen for track events (SimplePeer fires 'track' for received tracks)
+      peer.on('track', (track, remoteStream) => {
         if (track.kind === 'audio') {
-          const audioTracks = stream.getAudioTracks()
+          const audioTracks = remoteStream.getAudioTracks()
           const trackIndex = audioTracks.indexOf(track)
           const label = track.label.toLowerCase()
 
@@ -165,7 +164,7 @@ export class PeerConnectionManager {
             track.enabled = shouldEnable
             logger.info(
               'PeerManager',
-              `New screen share audio track added for ${username}, ${shouldEnable ? 'enabled' : 'disabled'} based on focus state`,
+              `New screen share audio track received for ${username}, ${shouldEnable ? 'enabled' : 'disabled'} based on focus state`,
               {
                 userId,
                 trackId: track.id,

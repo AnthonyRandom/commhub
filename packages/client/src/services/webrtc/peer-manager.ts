@@ -638,6 +638,16 @@ export class PeerConnectionManager {
     const stream = peerConnection.audioElement.srcObject as MediaStream
     const audioTracks = stream.getAudioTracks()
 
+    logger.debug('PeerManager', `Checking ${audioTracks.length} audio tracks for user ${userId}`, {
+      userId,
+      trackDetails: audioTracks.map((t, i) => ({
+        index: i,
+        id: t.id,
+        label: t.label,
+        enabled: t.enabled,
+      })),
+    })
+
     if (audioTracks.length === 0) {
       logger.debug('PeerManager', `No audio tracks for user ${userId}`)
       return
@@ -678,6 +688,20 @@ export class PeerConnectionManager {
     })
 
     // Enable/disable screen share audio tracks
+    logger.info(
+      'PeerManager',
+      `Found ${screenShareTracks.length} screen share tracks for user ${userId}`,
+      {
+        userId,
+        enabled,
+        screenShareTrackDetails: screenShareTracks.map((t) => ({
+          id: t.id,
+          label: t.label,
+          wasEnabled: t.enabled,
+        })),
+      }
+    )
+
     for (const track of screenShareTracks) {
       track.enabled = enabled
       logger.info(

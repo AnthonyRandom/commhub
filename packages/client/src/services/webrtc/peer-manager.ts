@@ -124,7 +124,10 @@ export class PeerConnectionManager {
 
       // Update user stream in store
       useVoiceStore.getState().updateUserStream(userId, stream)
-      useVoiceStore.getState().updateUserVideoStream(userId, stream)
+
+      // Create a video-only stream for the video display
+      const videoOnlyStream = new MediaStream(stream.getVideoTracks())
+      useVoiceStore.getState().updateUserVideoStream(userId, videoOnlyStream)
 
       callbacks.onStream(stream)
 

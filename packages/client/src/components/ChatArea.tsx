@@ -106,27 +106,21 @@ const ChatArea: React.FC<ChatAreaProps> = ({ selectedChannel, server }) => {
       localVolume: 1.0,
     }
 
-    // Use local streams (create video-only streams for display)
+    // Use local streams
     if (localScreenShareEnabled && localScreenShareStream) {
-      focusedStream = new MediaStream(localScreenShareStream.getVideoTracks())
+      focusedStream = localScreenShareStream
     } else if (localVideoEnabled && localVideoStream) {
-      focusedStream = new MediaStream(localVideoStream.getVideoTracks())
+      focusedStream = localVideoStream
     }
   } else if (focusedStreamUserId) {
     // For remote users, use data from connectedUsers
     focusedUser = connectedUsers.get(focusedStreamUserId) || null
 
     if (focusedUser) {
-      let sourceStream: MediaStream | undefined
       if (focusedUser.hasScreenShare) {
-        sourceStream = focusedUser.screenShareStream || focusedUser.stream
+        focusedStream = focusedUser.screenShareStream || focusedUser.stream
       } else if (focusedUser.hasVideo) {
-        sourceStream = focusedUser.videoStream || focusedUser.stream
-      }
-
-      // Create a video-only stream for display (audio comes from peer connection)
-      if (sourceStream) {
-        focusedStream = new MediaStream(sourceStream.getVideoTracks())
+        focusedStream = focusedUser.videoStream || focusedUser.stream
       }
     }
   }

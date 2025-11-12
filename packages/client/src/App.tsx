@@ -47,7 +47,7 @@ function App() {
 
   const { isAuthenticated, isLoading } = useAuthStore()
   const selectServer = useServersStore((state) => state.selectServer)
-  const { conversations, deleteConversation } = useDirectMessagesStore()
+  const { conversations, fetchConversations, deleteConversation } = useDirectMessagesStore()
   const { initializeStatusTracking, cleanup } = useStatusStore()
 
   // Debug showUpdateNotification state changes (development only)

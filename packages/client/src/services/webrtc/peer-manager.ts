@@ -124,10 +124,7 @@ export class PeerConnectionManager {
 
       // Update user stream in store
       useVoiceStore.getState().updateUserStream(userId, stream)
-
-      // Create a video-only stream for the video display
-      const videoOnlyStream = new MediaStream(stream.getVideoTracks())
-      useVoiceStore.getState().updateUserVideoStream(userId, videoOnlyStream)
+      useVoiceStore.getState().updateUserVideoStream(userId, stream)
 
       callbacks.onStream(stream)
 
@@ -138,10 +135,11 @@ export class PeerConnectionManager {
         peerConnection.audioElement = audioElement
       }
 
-      // Listen for track events (SimplePeer fires 'track' for received tracks)
-      peer.on('track', (track, remoteStream) => {
+      // Listen for dynamically added tracks (e.g., screen share audio during renegotiation)
+      stream.addEventListener('addtrack', (event) => {
+        const track = event.track
         if (track.kind === 'audio') {
-          const audioTracks = remoteStream.getAudioTracks()
+          const audioTracks = stream.getAudioTracks()
           const trackIndex = audioTracks.indexOf(track)
           const label = track.label.toLowerCase()
 
@@ -156,15 +154,14 @@ export class PeerConnectionManager {
             label.includes('audio capture')
 
           if (isScreenShareAudio) {
-            // Check if this user is currently focused, but don't enable for local user
+            // Check if this user is currently focused
             const focusedUserId = useVoiceStore.getState().focusedStreamUserId
-            const { user: localUser } = useAuthStore.getState()
-            const shouldEnable = focusedUserId === userId && focusedUserId !== localUser?.id
+            const shouldEnable = focusedUserId === userId
 
             track.enabled = shouldEnable
             logger.info(
               'PeerManager',
-              `New screen share audio track received for ${username}, ${shouldEnable ? 'enabled' : 'disabled'} based on focus state`,
+              `New screen share audio track added for ${username}, ${shouldEnable ? 'enabled' : 'disabled'} based on focus state`,
               {
                 userId,
                 trackId: track.id,
@@ -638,70 +635,41 @@ export class PeerConnectionManager {
     const stream = peerConnection.audioElement.srcObject as MediaStream
     const audioTracks = stream.getAudioTracks()
 
-    logger.debug('PeerManager', `Checking ${audioTracks.length} audio tracks for user ${userId}`, {
-      userId,
-      trackDetails: audioTracks.map((t, i) => ({
-        index: i,
-        id: t.id,
-        label: t.label,
-        enabled: t.enabled,
-      })),
-    })
-
     if (audioTracks.length === 0) {
       logger.debug('PeerManager', `No audio tracks for user ${userId}`)
       return
     }
 
-    // Identify microphone and screen share audio tracks
-    const microphoneTracks: MediaStreamTrack[] = []
+    // Identify microphone track (first track is typically the microphone)
+    // Screen share audio tracks typically have labels like "Desktop Audio" or similar
+    const microphoneTrack = audioTracks[0]
     const screenShareTracks: MediaStreamTrack[] = []
 
-    // Use the same logic as addtrack event listener
+    // Find screen share audio tracks
+    // They are typically tracks after the first one (microphone is always first)
     for (let i = 0; i < audioTracks.length; i++) {
       const track = audioTracks[i]
-      const label = track.label.toLowerCase()
 
-      // Identify if this is a screen share audio track
-      const isScreenShareAudio =
-        i > 0 ||
-        label.includes('desktop') ||
-        label.includes('screen') ||
-        label.includes('system') ||
-        label.includes('audio capture')
-
-      if (isScreenShareAudio) {
-        screenShareTracks.push(track)
-      } else {
-        microphoneTracks.push(track)
+      // Skip the first track (microphone) - it's never screen share audio
+      if (i === 0) {
+        continue
       }
+
+      // All tracks after the first are considered screen share audio
+      screenShareTracks.push(track)
     }
 
-    // CRITICAL: Always ensure microphone tracks stay enabled
-    microphoneTracks.forEach((track) => {
-      track.enabled = true
+    // CRITICAL: Always ensure microphone track stays enabled
+    if (microphoneTrack) {
+      microphoneTrack.enabled = true
       logger.debug('PeerManager', `Ensured microphone track stays enabled for user ${userId}`, {
         userId,
-        trackId: track.id,
-        trackLabel: track.label,
+        trackId: microphoneTrack.id,
+        trackLabel: microphoneTrack.label,
       })
-    })
+    }
 
     // Enable/disable screen share audio tracks
-    logger.info(
-      'PeerManager',
-      `Found ${screenShareTracks.length} screen share tracks for user ${userId}`,
-      {
-        userId,
-        enabled,
-        screenShareTrackDetails: screenShareTracks.map((t) => ({
-          id: t.id,
-          label: t.label,
-          wasEnabled: t.enabled,
-        })),
-      }
-    )
-
     for (const track of screenShareTracks) {
       track.enabled = enabled
       logger.info(

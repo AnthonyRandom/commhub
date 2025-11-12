@@ -47,7 +47,7 @@ function App() {
 
   const { isAuthenticated, isLoading } = useAuthStore()
   const selectServer = useServersStore((state) => state.selectServer)
-  const { conversations, fetchConversations, deleteConversation } = useDirectMessagesStore()
+  const { visibleConversations, deleteConversation } = useDirectMessagesStore()
   const { initializeStatusTracking, cleanup } = useStatusStore()
 
   // Debug showUpdateNotification state changes (development only)
@@ -217,7 +217,7 @@ function App() {
             onAppSettings={handleAppSettings}
             onShowFriends={handleShowFriends}
             showFriendsPanel={showFriendsPanel}
-            dmConversations={conversations}
+            dmConversations={visibleConversations}
             onDMSelect={handleDMSelect}
             onDeleteDM={handleDeleteDM}
           />

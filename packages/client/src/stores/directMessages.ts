@@ -8,6 +8,7 @@ import { notificationService } from '../services/notifications'
 interface DirectMessagesState {
   conversations: Conversation[]
   messages: { [userId: number]: DirectMessage[] }
+  hiddenConversations: Set<number> // Track which conversations are hidden/closed by user
   activeConversation: number | null
   isLoading: boolean
   error: string | null
@@ -29,11 +30,15 @@ interface DirectMessagesState {
   updateDirectMessage: (message: DirectMessage) => void
   removeDirectMessage: (userId: number, messageId: number) => void
   clearError: () => void
+
+  // Computed getters
+  visibleConversations: Conversation[]
 }
 
 export const useDirectMessagesStore = create<DirectMessagesState>((set, get) => ({
   conversations: [],
   messages: {},
+  hiddenConversations: new Set(),
   activeConversation: null,
   isLoading: false,
   error: null,
@@ -97,12 +102,19 @@ export const useDirectMessagesStore = create<DirectMessagesState>((set, get) => 
         attachments: attachments as any,
       }
 
-      set((state) => ({
-        messages: {
-          ...state.messages,
-          [receiverId]: [...(state.messages[receiverId] || []), tempMessage],
-        },
-      }))
+      set((state) => {
+        // Un-hide conversation if it was previously hidden
+        const newHiddenConversations = new Set(state.hiddenConversations)
+        newHiddenConversations.delete(receiverId)
+
+        return {
+          messages: {
+            ...state.messages,
+            [receiverId]: [...(state.messages[receiverId] || []), tempMessage],
+          },
+          hiddenConversations: newHiddenConversations,
+        }
+      })
 
       // Send empty string if no content but attachments exist
       const messageContent = content || (attachments && attachments.length > 0 ? '' : content)
@@ -185,7 +197,7 @@ export const useDirectMessagesStore = create<DirectMessagesState>((set, get) => 
 
   deleteConversation: async (userId: number) => {
     set((state) => ({
-      conversations: state.conversations.filter((conv) => conv.user.id !== userId),
+      hiddenConversations: new Set([...state.hiddenConversations, userId]),
       messages: {
         ...state.messages,
         [userId]: [], // Clear messages for this conversation
@@ -297,5 +309,11 @@ export const useDirectMessagesStore = create<DirectMessagesState>((set, get) => 
 
   clearError: () => {
     set({ error: null })
+  },
+
+  // Computed getter for visible conversations (filters out hidden ones)
+  get visibleConversations() {
+    const state = get()
+    return state.conversations.filter((conv) => !state.hiddenConversations.has(conv.user.id))
   },
 }))

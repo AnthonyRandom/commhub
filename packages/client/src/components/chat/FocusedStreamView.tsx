@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { MicOff, VolumeX, Volume2, Volume1, X } from 'lucide-react'
 import { voiceManager } from '../../services/voice-manager'
+import { useAuthStore } from '../../stores/auth'
 import type { VoiceUser } from '../../stores/voice'
 
 interface FocusedStreamViewProps {
@@ -20,6 +21,7 @@ export const FocusedStreamView: React.FC<FocusedStreamViewProps> = ({
   const [showContextMenu, setShowContextMenu] = useState(false)
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 })
   const [showVolumeSlider, setShowVolumeSlider] = useState(false)
+  const { user: currentUser } = useAuthStore()
 
   // Set video stream
   useEffect(() => {
@@ -95,7 +97,7 @@ export const FocusedStreamView: React.FC<FocusedStreamViewProps> = ({
           <video
             ref={videoRef}
             autoPlay
-            muted
+            muted={user.userId === currentUser?.id}
             playsInline
             className="max-w-full max-h-full object-contain"
           />

@@ -141,8 +141,7 @@ export class VideoManager {
         // Replace the track in all peer connections (no renegotiation needed!)
         for (const [userId, peerConnection] of this.peers.entries()) {
           try {
-            const simplePeer = peerConnection.peer
-            const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
+            const rtcPeerConnection = peerConnection.peerConnection
 
             if (rtcPeerConnection) {
               // Find the video sender
@@ -218,8 +217,7 @@ export class VideoManager {
       // Replace camera track with black track in all peer connections
       this.peers.forEach((peerConnection, userId) => {
         try {
-          const simplePeer = peerConnection.peer
-          const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
+          const rtcPeerConnection = peerConnection.peerConnection
 
           if (rtcPeerConnection) {
             // Find the video sender
@@ -503,8 +501,7 @@ export class VideoManager {
 
         for (const [userId, peerConnection] of this.peers.entries()) {
           try {
-            const simplePeer = peerConnection.peer
-            const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
+            const rtcPeerConnection = peerConnection.peerConnection
 
             if (rtcPeerConnection && rtcPeerConnection.connectionState === 'connected') {
               const senders = rtcPeerConnection.getSenders()
@@ -567,8 +564,7 @@ export class VideoManager {
         // We need to add tracks to RTCPeerConnection AND let SimplePeer handle renegotiation
         for (const [userId, peerConnection] of this.peers.entries()) {
           try {
-            const simplePeer = peerConnection.peer
-            const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
+            const rtcPeerConnection = peerConnection.peerConnection
 
             if (!rtcPeerConnection) {
               console.warn(`[VideoManager] No RTCPeerConnection for peer ${userId}`)
@@ -622,10 +618,12 @@ export class VideoManager {
               // Mark as processing and add to queue
               this.isProcessingNegotiation = true
               this.negotiationQueue.add(userId)
-              const isInitiator = (simplePeer as any).initiator
+              // For renegotiation, we (the local peer) are always the initiator
+              // since we're the ones detecting the need to add/remove tracks
+              const isInitiator = true
 
               try {
-                // Only initiator creates offer (SimplePeer convention)
+                // Create renegotiation offer
                 if (isInitiator) {
                   console.log(`[VideoManager] Creating renegotiation offer for peer ${userId}`)
 
@@ -776,8 +774,7 @@ export class VideoManager {
 
       for (const [userId, peerConnection] of this.peers.entries()) {
         try {
-          const simplePeer = peerConnection.peer
-          const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
+          const rtcPeerConnection = peerConnection.peerConnection
 
           if (!rtcPeerConnection || rtcPeerConnection.connectionState !== 'connected') {
             console.warn(
@@ -882,8 +879,7 @@ export class VideoManager {
       return
     }
 
-    const simplePeer = peerConnection.peer
-    const rtcPeerConnection = (simplePeer as any)._pc as RTCPeerConnection
+    const rtcPeerConnection = peerConnection.peerConnection
 
     if (
       !rtcPeerConnection ||

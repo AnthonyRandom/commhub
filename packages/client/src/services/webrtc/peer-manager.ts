@@ -1,4 +1,3 @@
-import SimplePeer from 'simple-peer'
 import { useVoiceStore } from '../../stores/voice'
 import { useAuthStore } from '../../stores/auth'
 import { wsService } from '../websocket'
@@ -18,12 +17,40 @@ export class PeerConnectionManager {
   private readonly CONNECTION_TIMEOUT = 30000 // 30 seconds
   private readonly MAX_RETRY_ATTEMPTS = 3
   private readonly RECONNECT_DELAY_BASE = 2000
+  private readonly ICE_GATHERING_TIMEOUT = 15000 // 15 seconds for ICE gathering
 
-  private readonly rtcConfig: RTCConfiguration = {
-    iceServers: [
+  private get rtcConfig(): RTCConfiguration {
+    const iceServers: RTCIceServer[] = [
+      // STUN servers for NAT traversal
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
-    ],
+      { urls: 'stun:stun2.l.google.com:19302' },
+    ]
+
+    // Add TURN servers only if environment variables are available
+    if (process.env.TURN_HOST && process.env.TURN_USERNAME && process.env.TURN_PASSWORD) {
+      iceServers.push(
+        // Primary TURN server (secure port)
+        {
+          urls: `turn:${process.env.TURN_HOST}:443`,
+          username: process.env.TURN_USERNAME,
+          credential: process.env.TURN_PASSWORD,
+        },
+        // Fallback TURN server (alternative port)
+        {
+          urls: `turn:${process.env.TURN_HOST}:80`,
+          username: process.env.TURN_USERNAME,
+          credential: process.env.TURN_PASSWORD,
+        }
+      )
+    }
+
+    return {
+      iceServers,
+      iceCandidatePoolSize: 10, // Pre-gather ICE candidates for faster connections
+      bundlePolicy: 'max-bundle', // Optimize bandwidth usage
+      rtcpMuxPolicy: 'require', // Require RTCP muxing for modern WebRTC
+    }
   }
 
   setLocalStream(stream: MediaStream | null): void {
@@ -46,7 +73,7 @@ export class PeerConnectionManager {
     username: string,
     isInitiator: boolean,
     callbacks: ConnectionCallbacks
-  ): SimplePeer.Instance {
+  ): RTCPeerConnection {
     if (!this.localStream) {
       throw new Error('Local stream not initialized')
     }
@@ -60,61 +87,98 @@ export class PeerConnectionManager {
     // Remove existing peer if it exists (but don't remove from voice store)
     this.cleanupPeerConnection(userId)
 
-    const peer = this.createPeerWithRetry(userId, username, isInitiator, callbacks)
+    const peerConnection = this.createPeerWithRetry(userId, username, isInitiator, callbacks)
 
     // Store peer connection
     this.peers.set(userId, {
-      peer,
+      peerConnection,
       userId,
       username,
       retryCount: 0,
       lastConnectAttempt: Date.now(),
     })
 
-    return peer
+    return peerConnection
   }
 
   /**
-   * Create peer with retry logic and enhanced error handling
+   * Create peer connection with retry logic and enhanced error handling
    */
   private createPeerWithRetry(
     userId: number,
     username: string,
     isInitiator: boolean,
     callbacks: ConnectionCallbacks
-  ): SimplePeer.Instance {
-    const peer = new SimplePeer({
-      initiator: isInitiator,
-      stream: this.localStream!,
-      config: this.rtcConfig,
-      trickle: true,
-      offerOptions: {
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: true,
-      },
-    })
+  ): RTCPeerConnection {
+    const rtcPeerConnection = new RTCPeerConnection(this.rtcConfig)
 
     let connectionTimeout: number | null = null
 
     // Set connection timeout
     connectionTimeout = window.setTimeout(() => {
-      if (!peer.connected) {
+      if (rtcPeerConnection.connectionState !== 'connected') {
         logger.warn('PeerManager', `Connection timeout for ${username}`, { userId })
         this.handlePeerError(userId, new NetworkError('Connection timeout'), callbacks.onClose)
       }
     }, this.CONNECTION_TIMEOUT)
 
-    // Handle signaling
-    peer.on('signal', (signal) => {
-      callbacks.onSignal(signal)
+    // Add local stream tracks
+    this.localStream!.getTracks().forEach((track) => {
+      rtcPeerConnection.addTrack(track, this.localStream!)
     })
 
-    // Handle incoming stream
-    peer.on('stream', (stream) => {
+    // Handle ICE gathering state changes for timeout detection
+    let iceGatheringTimeout: number | null = null
+    rtcPeerConnection.onicegatheringstatechange = () => {
+      const state = rtcPeerConnection.iceGatheringState
+      logger.debug('PeerManager', `ICE gathering state for ${username}: ${state}`, {
+        userId,
+        state,
+      })
+
+      if (state === 'gathering') {
+        // Start timeout for ICE gathering
+        iceGatheringTimeout = window.setTimeout(() => {
+          if (rtcPeerConnection.iceGatheringState === 'gathering') {
+            logger.warn('PeerManager', `ICE gathering timeout for ${username}, proceeding anyway`, {
+              userId,
+            })
+            // Create offer/answer even if ICE gathering isn't complete
+            if (isInitiator && rtcPeerConnection.signalingState === 'stable') {
+              this.createOffer(rtcPeerConnection, userId, username, callbacks)
+            }
+          }
+        }, this.ICE_GATHERING_TIMEOUT)
+      } else if (state === 'complete') {
+        if (iceGatheringTimeout) {
+          clearTimeout(iceGatheringTimeout)
+          iceGatheringTimeout = null
+        }
+      }
+    }
+
+    // Handle ICE candidates
+    rtcPeerConnection.onicecandidate = (event) => {
+      if (event.candidate) {
+        callbacks.onIceCandidate?.(event.candidate)
+      } else if (rtcPeerConnection.iceGatheringState === 'complete') {
+        // ICE gathering complete, create offer/answer if not already done
+        if (isInitiator && rtcPeerConnection.signalingState === 'stable') {
+          this.createOffer(rtcPeerConnection, userId, username, callbacks)
+        }
+      }
+    }
+
+    // Handle incoming streams
+    rtcPeerConnection.ontrack = (event) => {
+      const stream = event.streams[0]
+      if (!stream) return
+
       logger.info('PeerManager', `Received stream from ${username}`, {
         userId,
         tracks: stream.getTracks().length,
       })
+
       if (connectionTimeout) {
         clearTimeout(connectionTimeout)
         connectionTimeout = null
@@ -135,95 +199,165 @@ export class PeerConnectionManager {
         peerConnection.audioElement = audioElement
       }
 
-      // Listen for dynamically added tracks (e.g., screen share audio during renegotiation)
+      // Listen for dynamically added tracks
       stream.addEventListener('addtrack', (event) => {
         const track = event.track
         if (track.kind === 'audio') {
-          const audioTracks = stream.getAudioTracks()
-          const trackIndex = audioTracks.indexOf(track)
-          const label = track.label.toLowerCase()
-
-          // Identify if this is a screen share audio track
-          // Screen share audio typically has labels containing "desktop", "screen", "system", etc.
-          // OR it's a track after the first one (microphone)
-          const isScreenShareAudio =
-            trackIndex > 0 ||
-            label.includes('desktop') ||
-            label.includes('screen') ||
-            label.includes('system') ||
-            label.includes('audio capture')
-
-          if (isScreenShareAudio) {
-            // Check if this user is currently focused
-            const focusedUserId = useVoiceStore.getState().focusedStreamUserId
-            const shouldEnable = focusedUserId === userId
-
-            track.enabled = shouldEnable
-            logger.info(
-              'PeerManager',
-              `New screen share audio track added for ${username}, ${shouldEnable ? 'enabled' : 'disabled'} based on focus state`,
-              {
-                userId,
-                trackId: track.id,
-                trackIndex,
-                trackLabel: track.label,
-                focusedUserId,
-              }
-            )
-          } else {
-            // This is likely the microphone track - ensure it's always enabled
-            track.enabled = true
-            logger.debug('PeerManager', `Ensured microphone track enabled for ${username}`, {
-              userId,
-              trackId: track.id,
-              trackLabel: track.label,
-            })
-          }
+          this.handleNewAudioTrack(track, stream, userId, username)
         }
       })
 
       // Start quality monitoring
-      const rtcPeerConnection = (peer as any)._pc as RTCPeerConnection
-      if (rtcPeerConnection) {
-        this.setupICEConnectionMonitoring(rtcPeerConnection, userId, username)
-        this.startConnectionQualityMonitoring(userId, rtcPeerConnection)
+      this.setupICEConnectionMonitoring(rtcPeerConnection, userId, username)
+      this.startConnectionQualityMonitoring(userId, rtcPeerConnection)
+    }
+
+    // Handle connection state changes
+    rtcPeerConnection.onconnectionstatechange = () => {
+      const state = rtcPeerConnection.connectionState
+      logger.debug('PeerManager', `Connection state change for ${username}: ${state}`, {
+        userId,
+        state,
+      })
+
+      switch (state) {
+        case 'connected':
+          logger.info('PeerManager', `Peer connection established with ${username}`, { userId })
+          if (connectionTimeout) {
+            clearTimeout(connectionTimeout)
+            connectionTimeout = null
+          }
+          this.updateConnectionQuality(userId, 'excellent')
+          useVoiceStore.getState().updateUserConnectionStatus(userId, 'connected')
+          break
+        case 'failed':
+        case 'disconnected':
+          this.handlePeerDisconnect(userId, callbacks.onClose)
+          break
       }
-    })
+    }
 
-    // Handle connection established
-    peer.on('connect', () => {
-      logger.info('PeerManager', `Peer connection established with ${username}`, { userId })
-      if (connectionTimeout) {
-        clearTimeout(connectionTimeout)
-        connectionTimeout = null
+    // Handle ICE connection state changes
+    rtcPeerConnection.oniceconnectionstatechange = () => {
+      const state = rtcPeerConnection.iceConnectionState
+      logger.debug('PeerManager', `ICE state change for ${username}: ${state}`, { userId, state })
+
+      switch (state) {
+        case 'connected':
+        case 'completed':
+          this.updateConnectionQuality(userId, 'excellent')
+          break
+        case 'disconnected':
+          this.updateConnectionQuality(userId, 'poor')
+          break
+        case 'failed':
+          this.updateConnectionQuality(userId, 'critical')
+          break
+      }
+    }
+
+    // Enhanced error handling
+    rtcPeerConnection.onicecandidateerror = (event) => {
+      logger.error('PeerManager', `ICE candidate error for ${username}`, {
+        userId,
+        error: event.errorText,
+        url: event.url,
+      })
+    }
+
+    // Create offer if initiator
+    if (isInitiator) {
+      this.createOffer(rtcPeerConnection, userId, username, callbacks)
+    }
+
+    return rtcPeerConnection
+  }
+
+  /**
+   * Create WebRTC offer
+   */
+  private async createOffer(
+    peerConnection: RTCPeerConnection,
+    userId: number,
+    username: string,
+    callbacks: ConnectionCallbacks
+  ): Promise<void> {
+    try {
+      const offer = await peerConnection.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true,
+      })
+
+      // Set bitrate limits for audio
+      const audioSender = peerConnection
+        .getSenders()
+        .find((sender) => sender.track?.kind === 'audio')
+      if (audioSender) {
+        const parameters = audioSender.getParameters()
+        if (!parameters.encodings) parameters.encodings = [{}]
+        parameters.encodings[0].maxBitrate = 64000 // 64kbps for voice
+        await audioSender.setParameters(parameters)
       }
 
-      this.updateConnectionQuality(userId, 'excellent')
-      useVoiceStore.getState().updateUserConnectionStatus(userId, 'connected')
-    })
+      await peerConnection.setLocalDescription(offer)
+      callbacks.onSignal(offer)
+    } catch (error) {
+      logger.error('PeerManager', `Failed to create offer for ${username}`, { userId, error })
+      this.handlePeerError(
+        userId,
+        error instanceof Error ? error : new Error(String(error)),
+        callbacks.onClose
+      )
+    }
+  }
 
-    // Enhanced error handling with retry logic
-    peer.on('error', (err) => {
-      logger.error('PeerManager', `Peer connection error for ${username}`, { userId, error: err })
-      handleError(err, 'PeerManager')
-      if (connectionTimeout) {
-        clearTimeout(connectionTimeout)
-        connectionTimeout = null
-      }
-      this.handlePeerError(userId, err, callbacks.onClose)
-    })
+  /**
+   * Handle new audio track addition
+   */
+  private handleNewAudioTrack(
+    track: MediaStreamTrack,
+    stream: MediaStream,
+    userId: number,
+    username: string
+  ): void {
+    const audioTracks = stream.getAudioTracks()
+    const trackIndex = audioTracks.indexOf(track)
+    const label = track.label.toLowerCase()
 
-    // Handle peer disconnection
-    peer.on('close', () => {
-      logger.info('PeerManager', `Peer connection closed: ${username}`, { userId })
-      if (connectionTimeout) {
-        clearTimeout(connectionTimeout)
-        connectionTimeout = null
-      }
-      this.handlePeerDisconnect(userId, callbacks.onClose)
-    })
+    // Identify if this is a screen share audio track
+    const isScreenShareAudio =
+      trackIndex > 0 ||
+      label.includes('desktop') ||
+      label.includes('screen') ||
+      label.includes('system') ||
+      label.includes('audio capture')
 
-    return peer
+    if (isScreenShareAudio) {
+      // Check if this user is currently focused
+      const focusedUserId = useVoiceStore.getState().focusedStreamUserId
+      const shouldEnable = focusedUserId === userId
+
+      track.enabled = shouldEnable
+      logger.info(
+        'PeerManager',
+        `New screen share audio track added for ${username}, ${shouldEnable ? 'enabled' : 'disabled'} based on focus state`,
+        {
+          userId,
+          trackId: track.id,
+          trackIndex,
+          trackLabel: track.label,
+          focusedUserId,
+        }
+      )
+    } else {
+      // This is likely the microphone track - ensure it's always enabled
+      track.enabled = true
+      logger.debug('PeerManager', `Ensured microphone track enabled for ${username}`, {
+        userId,
+        trackId: track.id,
+        trackLabel: track.label,
+      })
+    }
   }
 
   /**
@@ -385,7 +519,7 @@ export class PeerConnectionManager {
   }
 
   /**
-   * Update connection quality for a user
+   * Update connection quality for a user and adjust bitrate if needed
    */
   private updateConnectionQuality(userId: number, quality: ConnectionState['quality']) {
     const state = this.connectionStates.get(userId)
@@ -393,11 +527,71 @@ export class PeerConnectionManager {
       state.quality = quality
     }
 
+    // Adapt bitrate based on connection quality
+    this.adaptBitrateToQuality(userId, quality)
+
     // Update store with both status and quality
     const storeStatus =
       quality === 'critical' ? 'failed' : quality === 'poor' ? 'connecting' : 'connected'
     useVoiceStore.getState().updateUserConnectionStatus(userId, storeStatus)
     useVoiceStore.getState().updateUserConnectionQuality(userId, quality)
+  }
+
+  /**
+   * Adapt audio bitrate based on connection quality
+   */
+  private async adaptBitrateToQuality(userId: number, quality: ConnectionState['quality']) {
+    const peerConnection = this.peers.get(userId)?.peerConnection
+    if (!peerConnection) return
+
+    try {
+      const audioSender = peerConnection
+        .getSenders()
+        .find((sender) => sender.track?.kind === 'audio')
+
+      if (audioSender) {
+        const parameters = audioSender.getParameters()
+        if (!parameters.encodings) parameters.encodings = [{}]
+
+        // Adjust bitrate based on quality
+        let maxBitrate: number
+        switch (quality) {
+          case 'excellent':
+            maxBitrate = 64000 // 64kbps - full quality
+            break
+          case 'good':
+            maxBitrate = 48000 // 48kbps - good quality
+            break
+          case 'poor':
+            maxBitrate = 32000 // 32kbps - reduced quality
+            break
+          case 'critical':
+            maxBitrate = 16000 // 16kbps - emergency quality
+            break
+          default:
+            maxBitrate = 64000
+        }
+
+        parameters.encodings[0].maxBitrate = maxBitrate
+        await audioSender.setParameters(parameters)
+
+        logger.debug(
+          'PeerManager',
+          `Adapted bitrate for ${userId}: ${maxBitrate}bps (${quality})`,
+          {
+            userId,
+            quality,
+            maxBitrate,
+          }
+        )
+      }
+    } catch (error) {
+      logger.warn('PeerManager', `Failed to adapt bitrate for ${userId}`, {
+        userId,
+        quality,
+        error,
+      })
+    }
   }
 
   /**
@@ -462,27 +656,71 @@ export class PeerConnectionManager {
   }
 
   /**
-   * Send signal to a peer
+   * Handle remote description (offer/answer)
    */
-  signal(userId: number, signalData: SimplePeer.SignalData): void {
-    const peerConnection = this.peers.get(userId)
-    if (peerConnection?.peer) {
-      try {
-        peerConnection.peer.signal(signalData)
-      } catch (error) {
-        logger.error('PeerManager', `Failed to signal peer ${userId}`, { userId, error })
-        handleError(error instanceof Error ? error : new Error(String(error)), 'PeerManager')
+  async handleRemoteDescription(
+    userId: number,
+    description: RTCSessionDescriptionInit
+  ): Promise<void> {
+    const peerConnection = this.peers.get(userId)?.peerConnection
+    if (!peerConnection) {
+      logger.warn('PeerManager', `Cannot handle remote description: peer ${userId} not found`, {
+        userId,
+      })
+      return
+    }
+
+    try {
+      await peerConnection.setRemoteDescription(description)
+
+      // Create answer if this is an offer
+      if (description.type === 'offer') {
+        const answer = await peerConnection.createAnswer()
+        await peerConnection.setLocalDescription(answer)
+
+        // Signal the answer back
+        const socket = wsService.getSocket()
+        if (socket && this.currentChannelId) {
+          socket.emit('voice-answer', {
+            channelId: this.currentChannelId,
+            targetUserId: userId,
+            answer,
+          })
+        }
       }
-    } else {
-      logger.warn('PeerManager', `Cannot signal: peer ${userId} not found`, { userId })
+    } catch (error) {
+      logger.error('PeerManager', `Failed to handle remote description for ${userId}`, {
+        userId,
+        error,
+      })
+      handleError(error instanceof Error ? error : new Error(String(error)), 'PeerManager')
+    }
+  }
+
+  /**
+   * Handle ICE candidate
+   */
+  async handleIceCandidate(userId: number, candidate: RTCIceCandidate): Promise<void> {
+    const peerConnection = this.peers.get(userId)?.peerConnection
+    if (!peerConnection) {
+      logger.warn('PeerManager', `Cannot handle ICE candidate: peer ${userId} not found`, {
+        userId,
+      })
+      return
+    }
+
+    try {
+      await peerConnection.addIceCandidate(candidate)
+    } catch (error) {
+      logger.error('PeerManager', `Failed to handle ICE candidate for ${userId}`, { userId, error })
     }
   }
 
   /**
    * Get a peer connection
    */
-  getPeer(userId: number): SimplePeer.Instance | undefined {
-    return this.peers.get(userId)?.peer
+  getPeer(userId: number): RTCPeerConnection | undefined {
+    return this.peers.get(userId)?.peerConnection
   }
 
   /**
@@ -498,9 +736,14 @@ export class PeerConnectionManager {
         peerConnection.audioElement.srcObject = null
       }
 
-      // Destroy peer connection
-      if (peerConnection.peer) {
-        peerConnection.peer.destroy()
+      // Close peer connection
+      if (peerConnection.peerConnection) {
+        peerConnection.peerConnection.close()
+      }
+
+      // Close data channel if exists
+      if (peerConnection.dataChannel) {
+        peerConnection.dataChannel.close()
       }
 
       this.peers.delete(userId)

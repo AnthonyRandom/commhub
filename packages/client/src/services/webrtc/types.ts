@@ -1,13 +1,12 @@
-import type SimplePeer from 'simple-peer'
-
 export interface PeerConnection {
-  peer: SimplePeer.Instance
+  peerConnection: RTCPeerConnection
   userId: number
   username: string
   audioElement?: HTMLAudioElement
   videoElement?: HTMLVideoElement
   retryCount: number
   lastConnectAttempt: number
+  dataChannel?: RTCDataChannel
 }
 
 export interface ConnectionState {
@@ -34,7 +33,8 @@ export interface NoiseSuppressionConfig {
 }
 
 export interface ConnectionCallbacks {
-  onSignal: (signal: SimplePeer.SignalData) => void
+  onSignal: (signal: RTCSessionDescriptionInit | RTCIceCandidate) => void
   onStream: (stream: MediaStream) => void
   onClose: () => void
+  onIceCandidate?: (candidate: RTCIceCandidate) => void
 }

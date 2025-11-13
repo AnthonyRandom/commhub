@@ -4,7 +4,6 @@ import { useVoiceStore } from '../../stores/voice'
 import { soundManager } from '../sound-manager'
 import { voiceSettingsManager } from './settings-manager'
 import { logger } from '../../utils/logger'
-import type SimplePeer from 'simple-peer'
 
 /**
  * Handles WebSocket signaling for voice connections
@@ -167,7 +166,7 @@ export class VoiceSignalingHandler {
     channelId: number
     fromUserId: number
     fromUsername: string
-    offer: SimplePeer.SignalData
+    offer: RTCSessionDescriptionInit
   }): void {
     logger.info('VoiceSignaling', 'Received WebRTC offer', {
       channelId: data.channelId,
@@ -180,12 +179,12 @@ export class VoiceSignalingHandler {
 
     if (existingPeer) {
       // This is a renegotiation (e.g., adding screen share audio)
-      logger.info('VoiceSignaling', 'Renegotiation offer received, signaling existing peer', {
+      logger.info('VoiceSignaling', 'Renegotiation offer received, handling existing peer', {
         userId: data.fromUserId,
       })
 
-      // Signal the existing peer with the new offer
-      webrtcService.signal(data.fromUserId, data.offer)
+      // Handle the remote description for renegotiation
+      webrtcService.handleRemoteDescription(data.fromUserId, data.offer)
     } else {
       // This is a new connection, create peer connection (we are not the initiator)
       logger.info('VoiceSignaling', 'New connection offer received, creating peer', {
@@ -200,7 +199,7 @@ export class VoiceSignalingHandler {
     channelId: number
     fromUserId: number
     fromUsername: string
-    answer: SimplePeer.SignalData
+    answer: RTCSessionDescriptionInit
   }): void {
     logger.info('VoiceSignaling', 'Received WebRTC answer', {
       channelId: data.channelId,
@@ -208,26 +207,28 @@ export class VoiceSignalingHandler {
       fromUsername: data.fromUsername,
     })
 
-    webrtcService.signal(data.fromUserId, data.answer)
+    webrtcService.handleRemoteDescription(data.fromUserId, data.answer)
   }
 
   private handleVoiceIceCandidate(data: {
     channelId: number
     fromUserId: number
-    candidate: SimplePeer.SignalData
+    candidate: RTCIceCandidateInit
   }): void {
     logger.debug('VoiceSignaling', 'Received ICE candidate', {
       channelId: data.channelId,
       fromUserId: data.fromUserId,
     })
-    webrtcService.signal(data.fromUserId, data.candidate)
+
+    const candidate = new RTCIceCandidate(data.candidate)
+    webrtcService.handleIceCandidate(data.fromUserId, candidate)
   }
 
   private createPeerConnection(
     userId: number,
     username: string,
     isInitiator: boolean,
-    initialSignal?: SimplePeer.SignalData
+    initialSignal?: RTCSessionDescriptionInit
   ): void {
     const channelId = webrtcService.getCurrentChannelId()
     if (!channelId) {
@@ -272,38 +273,35 @@ export class VoiceSignalingHandler {
       isInitiator,
       (signal) => {
         // Send signaling data via WebSocket
-        const eventName =
-          signal.type === 'offer'
-            ? 'voice-offer'
-            : signal.type === 'answer'
-              ? 'voice-answer'
-              : 'voice-ice-candidate'
-
-        logger.debug('VoiceSignaling', `Sending ${eventName}`, { userId, username, eventName })
-
         const socket = wsService.getSocket()
         if (!socket) {
           logger.error('VoiceSignaling', 'No socket connection', { userId, username })
           return
         }
 
-        if (eventName === 'voice-offer') {
-          socket.emit('voice-offer', {
-            channelId,
-            targetUserId: userId,
-            offer: signal,
-          })
-        } else if (eventName === 'voice-answer') {
-          socket.emit('voice-answer', {
-            channelId,
-            targetUserId: userId,
-            answer: signal,
-          })
-        } else {
+        if (signal instanceof RTCSessionDescription) {
+          const eventName = signal.type === 'offer' ? 'voice-offer' : 'voice-answer'
+          logger.debug('VoiceSignaling', `Sending ${eventName}`, { userId, username, eventName })
+
+          if (eventName === 'voice-offer') {
+            socket.emit('voice-offer', {
+              channelId,
+              targetUserId: userId,
+              offer: signal.toJSON(),
+            })
+          } else if (eventName === 'voice-answer') {
+            socket.emit('voice-answer', {
+              channelId,
+              targetUserId: userId,
+              answer: signal.toJSON(),
+            })
+          }
+        } else if (signal instanceof RTCIceCandidate) {
+          logger.debug('VoiceSignaling', 'Sending ICE candidate', { userId, username })
           socket.emit('voice-ice-candidate', {
             channelId,
             targetUserId: userId,
-            candidate: signal,
+            candidate: signal.toJSON(),
           })
         }
       },
@@ -320,9 +318,9 @@ export class VoiceSignalingHandler {
       }
     )
 
-    // If we have an initial signal (offer), signal it to the peer
+    // If we have an initial signal (offer), handle it
     if (initialSignal) {
-      webrtcService.signal(userId, initialSignal)
+      webrtcService.handleRemoteDescription(userId, initialSignal)
     }
   }
 

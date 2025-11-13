@@ -1,4 +1,3 @@
-import SimplePeer from 'simple-peer'
 import { wsService } from '../websocket'
 import { PeerConnectionManager } from './peer-manager'
 import { StreamManager } from './stream-manager'
@@ -54,25 +53,35 @@ class WebRTCService {
     userId: number,
     username: string,
     isInitiator: boolean,
-    onSignal: (signal: SimplePeer.SignalData) => void,
+    onSignal: (signal: RTCSessionDescriptionInit | RTCIceCandidate) => void,
     onStream: (stream: MediaStream) => void,
     onClose: () => void
-  ): SimplePeer.Instance {
+  ): RTCPeerConnection {
     const callbacks: ConnectionCallbacks = { onSignal, onStream, onClose }
     return this.peerManager.createPeerConnection(userId, username, isInitiator, callbacks)
   }
 
   /**
-   * Send signal to a peer
+   * Handle remote description (offer/answer)
    */
-  signal(userId: number, signalData: SimplePeer.SignalData): void {
-    this.peerManager.signal(userId, signalData)
+  async handleRemoteDescription(
+    userId: number,
+    description: RTCSessionDescriptionInit
+  ): Promise<void> {
+    await this.peerManager.handleRemoteDescription(userId, description)
+  }
+
+  /**
+   * Handle ICE candidate
+   */
+  async handleIceCandidate(userId: number, candidate: RTCIceCandidate): Promise<void> {
+    await this.peerManager.handleIceCandidate(userId, candidate)
   }
 
   /**
    * Get a peer connection
    */
-  getPeer(userId: number): SimplePeer.Instance | undefined {
+  getPeer(userId: number): RTCPeerConnection | undefined {
     return this.peerManager.getPeer(userId)
   }
 

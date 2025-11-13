@@ -545,7 +545,8 @@ export class ChatGateway
 
   // Periodic cleanup
   private async performPeriodicCleanup() {
-    if (!this.server || !this.server.sockets || !this.server.sockets.sockets) {
+    // Only skip cleanup if server is completely uninitialized
+    if (!this.server) {
       this.logger.warn(
         '[Cleanup] WebSocket server not initialized yet, skipping cleanup'
       );
@@ -559,7 +560,7 @@ export class ChatGateway
 
     // Cleanup onlineUsers
     for (const [userId, socketId] of this.onlineUsers.entries()) {
-      const socket = this.server.sockets.sockets.get(socketId);
+      const socket = this.server.sockets?.sockets?.get(socketId);
       if (!socket || !socket.connected) {
         this.logger.warn(
           `[Cleanup] Removing stale user entry for userId ${userId} (socket ${socketId} no longer connected)`
@@ -569,12 +570,39 @@ export class ChatGateway
       }
     }
 
-    // Cleanup userVoiceChannels
+    // Cleanup userVoiceChannels - be more careful here
+    // Check both cache and actual socket existence to avoid removing still-connected users
     for (const [userId, channelId] of this.userVoiceChannels.entries()) {
       const socketId = this.onlineUsers.get(userId);
-      if (!socketId) {
+      let isUserStillConnected = false;
+
+      // First check if we have them in onlineUsers cache
+      if (socketId) {
+        const socket = this.server.sockets?.sockets?.get(socketId);
+        if (socket && socket.connected) {
+          isUserStillConnected = true;
+        }
+      }
+
+      // If not in cache, check if they have ANY connected socket (more expensive but thorough)
+      if (!isUserStillConnected && this.server.sockets?.sockets) {
+        for (const socket of this.server.sockets.sockets.values()) {
+          const authSocket = socket as any as AuthenticatedSocket;
+          if (authSocket.userId === userId && socket.connected) {
+            // Found a connected socket for this user, re-add to onlineUsers cache
+            this.onlineUsers.set(userId, socket.id);
+            isUserStillConnected = true;
+            this.logger.log(
+              `[Cleanup] Re-added user ${userId} to onlineUsers cache during cleanup`
+            );
+            break;
+          }
+        }
+      }
+
+      if (!isUserStillConnected) {
         this.logger.warn(
-          `[Cleanup] Removing stale voice channel entry for userId ${userId}`
+          `[Cleanup] Removing stale voice channel entry for userId ${userId} (not connected)`
         );
         this.userVoiceChannels.delete(userId);
 
@@ -594,7 +622,7 @@ export class ChatGateway
       }
     }
 
-    // Cleanup voiceChannelMembers
+    // Cleanup voiceChannelMembers - also check actual socket existence
     for (const [channelId, members] of this.voiceChannelMembers.entries()) {
       if (members.size === 0) {
         this.voiceChannelMembers.delete(channelId);
@@ -606,7 +634,30 @@ export class ChatGateway
         [];
       for (const member of members) {
         const socketId = this.onlineUsers.get(member.userId);
-        if (!socketId) {
+        let isUserStillConnected = false;
+
+        // Check if user has a connected socket
+        if (socketId) {
+          const socket = this.server.sockets?.sockets?.get(socketId);
+          if (socket && socket.connected) {
+            isUserStillConnected = true;
+          }
+        }
+
+        // If not in cache, check all sockets
+        if (!isUserStillConnected && this.server.sockets?.sockets) {
+          for (const socket of this.server.sockets.sockets.values()) {
+            const authSocket = socket as any as AuthenticatedSocket;
+            if (authSocket.userId === member.userId && socket.connected) {
+              // Re-add to onlineUsers cache
+              this.onlineUsers.set(member.userId, socket.id);
+              isUserStillConnected = true;
+              break;
+            }
+          }
+        }
+
+        if (!isUserStillConnected) {
           membersToRemove.push(member);
         }
       }

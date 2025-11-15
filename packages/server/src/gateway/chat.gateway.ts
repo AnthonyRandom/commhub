@@ -558,19 +558,9 @@ export class ChatGateway
     let cleanedUsersCount = 0;
     let cleanedVoiceChannelsCount = 0;
 
-    // Cleanup onlineUsers
-    for (const [userId, socketId] of this.onlineUsers.entries()) {
-      const socket = this.server.sockets?.sockets?.get(socketId);
-      if (!socket || !socket.connected) {
-        this.logger.warn(
-          `[Cleanup] Removing stale user entry for userId ${userId} (socket ${socketId} no longer connected)`
-        );
-        this.onlineUsers.delete(userId);
-        cleanedUsersCount++;
-      }
-    }
-
-    // Cleanup userVoiceChannels - be more careful here
+    // Cleanup userVoiceChannels FIRST - be more careful here
+    // We need to check voice channels before cleaning onlineUsers to avoid removing
+    // users who reconnected but are still in voice channels
     // Check both cache and actual socket existence to avoid removing still-connected users
     for (const [userId, channelId] of this.userVoiceChannels.entries()) {
       const socketId = this.onlineUsers.get(userId);
@@ -625,7 +615,7 @@ export class ChatGateway
 
       // CRITICAL: Also check if user has ANY connected socket at all (even if not in room yet)
       // This handles cases where user reconnected but hasn't rejoined room yet
-      if (this.server.sockets?.sockets) {
+      if (!isUserStillConnected && this.server.sockets?.sockets) {
         const totalSockets = this.server.sockets.sockets.size;
         let checkedSockets = 0;
         let foundUserSockets = 0;
@@ -639,16 +629,10 @@ export class ChatGateway
               isUserStillConnected = true;
               connectedSocket = authSocket;
               // Update cache with the connected socket
-              if (!socketId || socketId !== socket.id) {
-                this.onlineUsers.set(userId, socket.id);
-                this.logger.log(
-                  `[Cleanup] Found connected socket for user ${userId}: ${socket.id} (was ${socketId || 'none'}), updating cache`
-                );
-              } else {
-                this.logger.debug(
-                  `[Cleanup] User ${userId} has connected socket ${socket.id} (matches cache)`
-                );
-              }
+              this.onlineUsers.set(userId, socket.id);
+              this.logger.log(
+                `[Cleanup] Found connected socket for user ${userId}: ${socket.id} (was ${socketId || 'none'}), updating cache and keeping in voice channel`
+              );
               break;
             } else {
               // Found user's socket but it's disconnected
@@ -659,7 +643,7 @@ export class ChatGateway
           }
         }
         this.logger.debug(
-          `[Cleanup] Checked ${checkedSockets}/${totalSockets} sockets for user ${userId}, found ${foundUserSockets} sockets belonging to user`
+          `[Cleanup] Checked ${checkedSockets}/${totalSockets} sockets for user ${userId}, found ${foundUserSockets} sockets belonging to user, connected: ${isUserStillConnected}`
         );
       }
 
@@ -734,6 +718,25 @@ export class ChatGateway
             }
           }
         }
+      }
+    }
+
+    // Cleanup onlineUsers - but don't remove users who are in voice channels
+    // (they might have reconnected with a new socket ID)
+    const usersInVoiceChannels = new Set(this.userVoiceChannels.keys());
+    for (const [userId, socketId] of this.onlineUsers.entries()) {
+      // Skip users who are in voice channels - they'll be handled by voice channel cleanup
+      if (usersInVoiceChannels.has(userId)) {
+        continue;
+      }
+
+      const socket = this.server.sockets?.sockets?.get(socketId);
+      if (!socket || !socket.connected) {
+        this.logger.warn(
+          `[Cleanup] Removing stale user entry for userId ${userId} (socket ${socketId} no longer connected)`
+        );
+        this.onlineUsers.delete(userId);
+        cleanedUsersCount++;
       }
     }
 

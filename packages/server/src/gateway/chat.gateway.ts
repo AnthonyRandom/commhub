@@ -575,12 +575,14 @@ export class ChatGateway
     for (const [userId, channelId] of this.userVoiceChannels.entries()) {
       const socketId = this.onlineUsers.get(userId);
       let isUserStillConnected = false;
+      let connectedSocket: AuthenticatedSocket | null = null;
 
       // First check if we have them in onlineUsers cache
       if (socketId) {
         const socket = this.server.sockets?.sockets?.get(socketId);
         if (socket && socket.connected) {
           isUserStillConnected = true;
+          connectedSocket = socket as any as AuthenticatedSocket;
         }
       }
 
@@ -592,11 +594,44 @@ export class ChatGateway
             // Found a connected socket for this user, re-add to onlineUsers cache
             this.onlineUsers.set(userId, socket.id);
             isUserStillConnected = true;
+            connectedSocket = authSocket;
             this.logger.log(
               `[Cleanup] Re-added user ${userId} to onlineUsers cache during cleanup`
             );
             break;
           }
+        }
+      }
+
+      // Also check if user is actually in the voice channel room
+      // This prevents removing users who are connected but not in cache
+      if (isUserStillConnected && connectedSocket) {
+        const roomName = `voice-${channelId}`;
+        const room = this.server.sockets?.adapter?.rooms?.get(roomName);
+        if (room && room.has(connectedSocket.id)) {
+          // User is connected and in the room, keep them
+          continue;
+        } else {
+          // User is connected but not in the room - they left gracefully
+          // Remove them from tracking
+          this.logger.warn(
+            `[Cleanup] User ${userId} is connected but not in voice room ${channelId}, removing from tracking`
+          );
+          this.userVoiceChannels.delete(userId);
+          const members = this.voiceChannelMembers.get(channelId);
+          if (members) {
+            const userToRemove = Array.from(members).find(
+              m => m.userId === userId
+            );
+            if (userToRemove) {
+              members.delete(userToRemove);
+              if (members.size === 0) {
+                this.voiceChannelMembers.delete(channelId);
+                cleanedVoiceChannelsCount++;
+              }
+            }
+          }
+          continue;
         }
       }
 

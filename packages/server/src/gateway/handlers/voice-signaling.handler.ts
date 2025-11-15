@@ -210,7 +210,29 @@ export class VoiceSignalingHandler {
         return;
       }
 
-      // User is not properly tracked in any voice channel, deny the speaking event
+      // User is not in userVoiceChannels - check if they're actually in the room
+      // This handles reconnection scenarios where tracking was lost but user is still in room
+      const roomName = `voice-${data.channelId}`;
+      const room = server.sockets?.adapter?.rooms?.get(roomName);
+      if (room && room.has(client.id)) {
+        // User is in the room but not tracked - likely a reconnection scenario
+        // Re-add them to tracking and allow the speaking event
+        this.logger.log(
+          `[Voice] User ${client.username} (${client.userId}) is in voice room ${data.channelId} but not tracked - re-adding to tracking (reconnection scenario)`
+        );
+        userVoiceChannels.set(client.userId, data.channelId);
+
+        // Emit the speaking event
+        client.to(roomName).emit('voice-user-speaking', {
+          channelId: data.channelId,
+          userId: client.userId,
+          username: client.username,
+          isSpeaking: data.isSpeaking,
+        });
+        return;
+      }
+
+      // User is not properly tracked in any voice channel and not in the room
       // Users must explicitly join voice channels to participate
       this.logger.warn(
         `[Voice] User ${client.username} (${client.userId}) attempted to speak in channel ${data.channelId} but is not properly joined to any voice channel`

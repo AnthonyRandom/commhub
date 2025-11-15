@@ -80,6 +80,7 @@ class WebSocketManager {
       (data: {
         onlineFriends: any[]
         voiceChannels?: Record<number, Array<{ userId: number; username: string }>>
+        turnConfig?: { host: string; username: string; password: string } | null
       }) => {
         console.log('[WebSocket] Initial sync received:', data)
         useFriendsStore.getState().setOnlineFriends(data.onlineFriends)
@@ -109,6 +110,13 @@ class WebSocketManager {
             Object.keys(data.voiceChannels).length,
             'channels'
           )
+        }
+
+        // Store TURN configuration for WebRTC
+        if (data.turnConfig) {
+          // Store in a way that peer-manager can access
+          ;(window as any).__TURN_CONFIG = data.turnConfig
+          console.log('[WebSocket] TURN server configuration received')
         }
       }
     )

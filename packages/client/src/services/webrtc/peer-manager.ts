@@ -19,6 +19,12 @@ export class PeerConnectionManager {
   private readonly RECONNECT_DELAY_BASE = 2000
   private readonly ICE_GATHERING_TIMEOUT = 15000 // 15 seconds for ICE gathering
 
+  private getTurnConfig(): { host: string; username: string; password: string } | null {
+    // Get TURN config from window (set by websocket-manager on initial-sync)
+    const turnConfig = (window as any).__TURN_CONFIG
+    return turnConfig || null
+  }
+
   private get rtcConfig(): RTCConfiguration {
     const iceServers: RTCIceServer[] = [
       // STUN servers for NAT traversal
@@ -27,20 +33,33 @@ export class PeerConnectionManager {
       { urls: 'stun:stun2.l.google.com:19302' },
     ]
 
-    // Add TURN servers only if environment variables are available
-    if (process.env.TURN_HOST && process.env.TURN_USERNAME && process.env.TURN_PASSWORD) {
+    // Add TURN servers from server configuration
+    const turnConfig = this.getTurnConfig()
+    if (turnConfig) {
       iceServers.push(
-        // Primary TURN server (secure port)
+        // Primary TURN server (standard port)
         {
-          urls: `turn:${process.env.TURN_HOST}:443`,
-          username: process.env.TURN_USERNAME,
-          credential: process.env.TURN_PASSWORD,
+          urls: `turn:${turnConfig.host}:3478`,
+          username: turnConfig.username,
+          credential: turnConfig.password,
+        },
+        // TURNS (secure TURN over TLS)
+        {
+          urls: `turns:${turnConfig.host}:5349`,
+          username: turnConfig.username,
+          credential: turnConfig.password,
         },
         // Fallback TURN server (alternative port)
         {
-          urls: `turn:${process.env.TURN_HOST}:80`,
-          username: process.env.TURN_USERNAME,
-          credential: process.env.TURN_PASSWORD,
+          urls: `turn:${turnConfig.host}:80`,
+          username: turnConfig.username,
+          credential: turnConfig.password,
+        },
+        // Fallback TURNS (alternative secure port)
+        {
+          urls: `turns:${turnConfig.host}:443`,
+          username: turnConfig.username,
+          credential: turnConfig.password,
         }
       )
     }

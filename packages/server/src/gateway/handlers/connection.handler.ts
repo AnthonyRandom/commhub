@@ -12,9 +12,17 @@ import { AuthenticatedSocket, VoiceMember } from '../types/socket.types';
  * Handles WebSocket connection lifecycle
  * Manages authentication, connection/disconnection, and initial sync
  */
+interface TurnCredentials {
+  host: string;
+  username: string;
+  password: string;
+  expiresAt: number;
+}
+
 @Injectable()
 export class ConnectionHandler {
   private logger = new Logger('ConnectionHandler');
+  private turnCredentialsCache: TurnCredentials | null = null;
 
   constructor(
     private jwtService: JwtService,
@@ -262,15 +270,112 @@ export class ConnectionHandler {
         `[Ready] Sending initial-sync with ${onlineFriends.length} online friends and ${Object.keys(voiceChannelSnapshots).length} voice channels to ${client.username}`
       );
 
+      // Prepare TURN server configuration
+      const turnConfig = await this.getTurnConfig();
+
       // Send initial sync payload
       client.emit('initial-sync', {
         onlineFriends,
         voiceChannels: voiceChannelSnapshots,
+        turnConfig,
       });
     } catch (error) {
       this.logger.error('Error during ready handshake:', error.message);
       client.emit('error', { message: 'Failed to initialize connection' });
     }
+  }
+
+  /**
+   * Fetches TURN credentials from Metered API or uses static credentials
+   * Credentials are cached and refreshed when they expire
+   */
+  private async getTurnConfig(): Promise<{
+    host: string;
+    username: string;
+    password: string;
+  } | null> {
+    // Check if Metered domain and secret key are configured (preferred method)
+    const meteredDomain = process.env.METERED_DOMAIN;
+    const meteredSecretKey = process.env.METERED_SECRET_KEY;
+
+    if (meteredDomain && meteredSecretKey) {
+      try {
+        // Check if cached credentials are still valid (refresh 5 minutes before expiry)
+        const now = Date.now();
+        if (
+          this.turnCredentialsCache &&
+          this.turnCredentialsCache.expiresAt > now + 5 * 60 * 1000
+        ) {
+          this.logger.debug('[TURN] Using cached TURN credentials');
+          return {
+            host: this.turnCredentialsCache.host,
+            username: this.turnCredentialsCache.username,
+            password: this.turnCredentialsCache.password,
+          };
+        }
+
+        // Fetch new credentials from Metered API
+        this.logger.log('[TURN] Fetching TURN credentials from Metered API');
+        const apiUrl = `https://${meteredDomain}/api/v1/turn/credential?secretKey=${encodeURIComponent(meteredSecretKey)}`;
+
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expiryInSeconds: 3600 }), // 1 hour validity
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(
+            `Metered API error: ${response.status} ${response.statusText} - ${errorText}`
+          );
+        }
+
+        const data = await response.json();
+
+        // Cache the credentials
+        this.turnCredentialsCache = {
+          host: meteredDomain,
+          username: data.username,
+          password: data.password,
+          expiresAt: now + 3600 * 1000, // 1 hour from now
+        };
+
+        this.logger.log(
+          '[TURN] Successfully fetched TURN credentials from Metered'
+        );
+        return {
+          host: this.turnCredentialsCache.host,
+          username: this.turnCredentialsCache.username,
+          password: this.turnCredentialsCache.password,
+        };
+      } catch (error) {
+        this.logger.error(
+          `[TURN] Failed to fetch credentials from Metered API: ${error.message}`
+        );
+        // Fall through to static credentials if available
+      }
+    }
+
+    // Fallback to static credentials if Metered API is not configured
+    if (
+      process.env.TURN_HOST &&
+      process.env.TURN_USERNAME &&
+      process.env.TURN_PASSWORD
+    ) {
+      this.logger.debug('[TURN] Using static TURN credentials');
+      return {
+        host: process.env.TURN_HOST,
+        username: process.env.TURN_USERNAME,
+        password: process.env.TURN_PASSWORD,
+      };
+    }
+
+    // No TURN configuration available
+    this.logger.warn(
+      '[TURN] No TURN server configuration available. WebRTC connections may fail in restrictive networks.'
+    );
+    return null;
   }
 
   private isVersionCompatible(

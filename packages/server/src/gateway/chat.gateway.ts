@@ -576,6 +576,8 @@ export class ChatGateway
       const socketId = this.onlineUsers.get(userId);
       let isUserStillConnected = false;
       let connectedSocket: AuthenticatedSocket | null = null;
+      const roomName = `voice-${channelId}`;
+      const room = this.server.sockets?.adapter?.rooms?.get(roomName);
 
       // First check if we have them in onlineUsers cache
       if (socketId) {
@@ -603,41 +605,59 @@ export class ChatGateway
         }
       }
 
-      // Also check if user is actually in the voice channel room
-      // This prevents removing users who are connected but not in cache
-      if (isUserStillConnected && connectedSocket) {
-        const roomName = `voice-${channelId}`;
-        const room = this.server.sockets?.adapter?.rooms?.get(roomName);
-        if (room && room.has(connectedSocket.id)) {
-          // User is connected and in the room, keep them
-          continue;
-        } else {
-          // User is connected but not in the room - they left gracefully
-          // Remove them from tracking
-          this.logger.warn(
-            `[Cleanup] User ${userId} is connected but not in voice room ${channelId}, removing from tracking`
-          );
-          this.userVoiceChannels.delete(userId);
-          const members = this.voiceChannelMembers.get(channelId);
-          if (members) {
-            const userToRemove = Array.from(members).find(
-              m => m.userId === userId
-            );
-            if (userToRemove) {
-              members.delete(userToRemove);
-              if (members.size === 0) {
-                this.voiceChannelMembers.delete(channelId);
-                cleanedVoiceChannelsCount++;
-              }
+      // CRITICAL: Check if ANY socket for this user is in the voice room
+      // This handles cases where user reconnected with a new socket ID
+      let userSocketInRoom = false;
+      if (room && this.server.sockets?.sockets) {
+        for (const socket of this.server.sockets.sockets.values()) {
+          const authSocket = socket as any as AuthenticatedSocket;
+          if (authSocket.userId === userId && room.has(socket.id)) {
+            userSocketInRoom = true;
+            // Update cache with the socket that's actually in the room
+            if (!isUserStillConnected || connectedSocket?.id !== socket.id) {
+              this.onlineUsers.set(userId, socket.id);
+              this.logger.log(
+                `[Cleanup] Found user ${userId} in voice room ${channelId} with socket ${socket.id}, updating cache`
+              );
             }
+            break;
           }
-          continue;
         }
       }
 
+      // If user has a socket in the room, keep them regardless of cache state
+      if (userSocketInRoom) {
+        continue;
+      }
+
+      // User is not in the room - check if they're connected
+      if (isUserStillConnected && connectedSocket) {
+        // User is connected but not in the room - they left gracefully
+        // Remove them from tracking
+        this.logger.warn(
+          `[Cleanup] User ${userId} is connected but not in voice room ${channelId}, removing from tracking`
+        );
+        this.userVoiceChannels.delete(userId);
+        const members = this.voiceChannelMembers.get(channelId);
+        if (members) {
+          const userToRemove = Array.from(members).find(
+            m => m.userId === userId
+          );
+          if (userToRemove) {
+            members.delete(userToRemove);
+            if (members.size === 0) {
+              this.voiceChannelMembers.delete(channelId);
+              cleanedVoiceChannelsCount++;
+            }
+          }
+        }
+        continue;
+      }
+
+      // User is not connected and not in room - remove them
       if (!isUserStillConnected) {
         this.logger.warn(
-          `[Cleanup] Removing stale voice channel entry for userId ${userId} (not connected)`
+          `[Cleanup] Removing stale voice channel entry for userId ${userId} (not connected and not in room)`
         );
         this.userVoiceChannels.delete(userId);
 

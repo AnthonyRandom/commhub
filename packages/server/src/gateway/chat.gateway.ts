@@ -588,34 +588,51 @@ export class ChatGateway
         );
       }
 
-      // First check if we have them in onlineUsers cache
-      if (socketId) {
-        const socket = this.server.sockets?.sockets?.get(socketId);
-        if (socket && socket.connected) {
-          isUserStillConnected = true;
-          connectedSocket = socket as any as AuthenticatedSocket;
-        }
-      }
-
-      // If not in cache, check if they have ANY connected socket (more expensive but thorough)
-      if (!isUserStillConnected && this.server.sockets?.sockets) {
+      // CRITICAL: First check if user has ANY connected socket at all
+      // This is the most important check - if user is connected, keep them
+      if (this.server.sockets?.sockets) {
         for (const socket of this.server.sockets.sockets.values()) {
           const authSocket = socket as any as AuthenticatedSocket;
           if (authSocket.userId === userId && socket.connected) {
-            // Found a connected socket for this user, re-add to onlineUsers cache
-            this.onlineUsers.set(userId, socket.id);
             isUserStillConnected = true;
             connectedSocket = authSocket;
-            this.logger.log(
-              `[Cleanup] Re-added user ${userId} to onlineUsers cache during cleanup`
-            );
+            // Update cache with the connected socket
+            if (!socketId || socketId !== socket.id) {
+              this.onlineUsers.set(userId, socket.id);
+              this.logger.log(
+                `[Cleanup] Found connected socket for user ${userId}: ${socket.id}, updating cache`
+              );
+            }
             break;
           }
         }
       }
 
-      // CRITICAL: Check if ANY socket for this user is in the voice room
-      // This handles cases where user reconnected with a new socket ID
+      // If user is connected, keep them in voice channel tracking
+      // They might be in the process of rejoining the room after reconnection
+      if (isUserStillConnected) {
+        // Check if they're actually in the room
+        let userSocketInRoom = false;
+        if (room && connectedSocket) {
+          userSocketInRoom = room.has(connectedSocket.id);
+        }
+
+        if (!userSocketInRoom) {
+          // User is connected but not in room - log but don't remove
+          // They might be rejoining or the room check might be stale
+          this.logger.debug(
+            `[Cleanup] User ${userId} is connected (socket ${connectedSocket.id}) but not in voice room ${channelId} - keeping in tracking (may be rejoining)`
+          );
+        } else {
+          this.logger.debug(
+            `[Cleanup] User ${userId} is connected and in voice room ${channelId} - keeping in tracking`
+          );
+        }
+        // Keep user in tracking since they're connected
+        continue;
+      }
+
+      // User is not connected - check if they're in the room (might be a stale room entry)
       let userSocketInRoom = false;
       if (room && this.server.sockets?.sockets) {
         // Check all sockets in the room
@@ -623,54 +640,29 @@ export class ChatGateway
           const socket = this.server.sockets.sockets.get(socketIdInRoom);
           if (socket) {
             const authSocket = socket as any as AuthenticatedSocket;
-            if (authSocket.userId === userId && socket.connected) {
-              userSocketInRoom = true;
-              // Update cache with the socket that's actually in the room
-              if (!isUserStillConnected || connectedSocket?.id !== socket.id) {
+            if (authSocket.userId === userId) {
+              // Found user's socket in room, but it's not connected
+              // This is a stale room entry, but we should still check
+              if (socket.connected) {
+                // Socket is connected but wasn't found in our search above - update cache
                 this.onlineUsers.set(userId, socket.id);
+                isUserStillConnected = true;
                 this.logger.log(
-                  `[Cleanup] Found user ${userId} in voice room ${channelId} with socket ${socket.id}, updating cache`
+                  `[Cleanup] Found user ${userId} in voice room ${channelId} with connected socket ${socket.id}, updating cache`
                 );
+                continue; // Keep them
               }
+              userSocketInRoom = true;
               break;
             }
           }
         }
       }
 
-      // If user has a socket in the room, keep them regardless of cache state
-      if (userSocketInRoom) {
-        continue;
-      }
-
-      // User is not in the room - check if they're connected
-      if (isUserStillConnected && connectedSocket) {
-        // User is connected but not in the room - they left gracefully
-        // Remove them from tracking
-        this.logger.warn(
-          `[Cleanup] User ${userId} is connected but not in voice room ${channelId}, removing from tracking`
-        );
-        this.userVoiceChannels.delete(userId);
-        const members = this.voiceChannelMembers.get(channelId);
-        if (members) {
-          const userToRemove = Array.from(members).find(
-            m => m.userId === userId
-          );
-          if (userToRemove) {
-            members.delete(userToRemove);
-            if (members.size === 0) {
-              this.voiceChannelMembers.delete(channelId);
-              cleanedVoiceChannelsCount++;
-            }
-          }
-        }
-        continue;
-      }
-
-      // User is not connected and not in room - remove them
+      // User is not connected and not in room (or only stale entries) - remove them
       if (!isUserStillConnected) {
         this.logger.warn(
-          `[Cleanup] Removing stale voice channel entry for userId ${userId} (not connected and not in room)`
+          `[Cleanup] Removing stale voice channel entry for userId ${userId} (not connected${userSocketInRoom ? ' and room has stale entries' : ' and not in room'})`
         );
         this.userVoiceChannels.delete(userId);
 

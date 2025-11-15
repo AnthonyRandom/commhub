@@ -36,28 +36,20 @@ export class PeerConnectionManager {
     // Add TURN servers from server configuration
     const turnConfig = this.getTurnConfig()
     if (turnConfig) {
+      // Metered TURN servers - use standard ports
       iceServers.push(
-        // Primary TURN server (standard port)
+        // Primary TURN server (UDP/TCP on standard port)
         {
-          urls: `turn:${turnConfig.host}:3478`,
+          urls: [
+            `turn:${turnConfig.host}:3478?transport=udp`,
+            `turn:${turnConfig.host}:3478?transport=tcp`,
+          ],
           username: turnConfig.username,
           credential: turnConfig.password,
         },
         // TURNS (secure TURN over TLS)
         {
-          urls: `turns:${turnConfig.host}:5349`,
-          username: turnConfig.username,
-          credential: turnConfig.password,
-        },
-        // Fallback TURN server (alternative port)
-        {
-          urls: `turn:${turnConfig.host}:80`,
-          username: turnConfig.username,
-          credential: turnConfig.password,
-        },
-        // Fallback TURNS (alternative secure port)
-        {
-          urls: `turns:${turnConfig.host}:443`,
+          urls: `turns:${turnConfig.host}:443?transport=tcp`,
           username: turnConfig.username,
           credential: turnConfig.password,
         }

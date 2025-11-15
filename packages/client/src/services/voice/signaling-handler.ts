@@ -1,6 +1,7 @@
 import { wsService } from '../websocket'
 import { webrtcService } from '../webrtc'
 import { useVoiceStore } from '../../stores/voice'
+import { useAuthStore } from '../../stores/auth'
 import { soundManager } from '../sound-manager'
 import { voiceSettingsManager } from './settings-manager'
 import { logger } from '../../utils/logger'
@@ -70,31 +71,38 @@ export class VoiceSignalingHandler {
     // Mark that we've successfully joined
     webrtcService.setVoiceChannelJoined(true)
 
+    // Get current user to filter out self-connections
+    const currentUser = useAuthStore.getState().user
+    const currentUserId = currentUser?.id
+
     // Create peer connections to all existing users (we are the initiator)
-    data.users.forEach((user) => {
-      logger.info('VoiceSignaling', 'Initiating connection to user', {
-        userId: user.userId,
-        username: user.username,
-        hasCamera: user.hasCamera,
-        hasScreenShare: user.hasScreenShare,
-      })
+    // Filter out ourselves - we don't need to connect to ourselves
+    data.users
+      .filter((user) => user.userId !== currentUserId)
+      .forEach((user) => {
+        logger.info('VoiceSignaling', 'Initiating connection to user', {
+          userId: user.userId,
+          username: user.username,
+          hasCamera: user.hasCamera,
+          hasScreenShare: user.hasScreenShare,
+        })
 
-      // Add user to voice store so they appear in the UI
-      useVoiceStore.getState().addConnectedUser({
-        userId: user.userId,
-        username: user.username,
-        isSpeaking: false,
-        isMuted: false,
-        hasVideo: user.hasCamera || false,
-        hasScreenShare: user.hasScreenShare || false,
-        connectionStatus: 'connecting',
-        connectionQuality: 'connecting',
-        localMuted: false,
-        localVolume: 1.0,
-      })
+        // Add user to voice store so they appear in the UI
+        useVoiceStore.getState().addConnectedUser({
+          userId: user.userId,
+          username: user.username,
+          isSpeaking: false,
+          isMuted: false,
+          hasVideo: user.hasCamera || false,
+          hasScreenShare: user.hasScreenShare || false,
+          connectionStatus: 'connecting',
+          connectionQuality: 'connecting',
+          localMuted: false,
+          localVolume: 1.0,
+        })
 
-      this.createPeerConnection(user.userId, user.username, true)
-    })
+        this.createPeerConnection(user.userId, user.username, true)
+      })
   }
 
   private handleVoiceUserJoined(data: {

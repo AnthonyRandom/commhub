@@ -339,9 +339,13 @@ export class ConnectionHandler {
 
         const data = await response.json();
 
+        // Metered TURN servers use the relay domain, not the custom domain
+        // The custom domain is for the API endpoint only
+        const turnHost = 'a.relay.metered.ca';
+
         // Cache the credentials
         this.turnCredentialsCache = {
-          host: meteredDomain,
+          host: turnHost,
           username: data.username,
           password: data.password,
           expiresAt: now + 3600 * 1000, // 1 hour from now

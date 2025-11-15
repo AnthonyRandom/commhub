@@ -80,11 +80,17 @@ export class ConnectionHandler {
         this.logger.warn(
           `User ${client.username} (${client.userId}) already has an active connection (${existingSocketId}). Disconnecting old socket.`
         );
-        if (server && server.sockets) {
-          const existingSocket = server.sockets.sockets.get(existingSocketId);
-          if (existingSocket) {
-            existingSocket.disconnect(true);
+        try {
+          if (server?.sockets?.sockets) {
+            const existingSocket = server.sockets.sockets.get(existingSocketId);
+            if (existingSocket) {
+              existingSocket.disconnect(true);
+            }
           }
+        } catch (error) {
+          this.logger.error(
+            `Error disconnecting existing socket: ${error.message}`
+          );
         }
       }
 

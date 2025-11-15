@@ -577,7 +577,16 @@ export class ChatGateway
       let isUserStillConnected = false;
       let connectedSocket: AuthenticatedSocket | null = null;
       const roomName = `voice-${channelId}`;
-      const room = this.server.sockets?.adapter?.rooms?.get(roomName);
+
+      // Get room safely
+      let room: Set<string> | undefined;
+      try {
+        room = this.server.sockets?.adapter?.rooms?.get(roomName);
+      } catch (error) {
+        this.logger.warn(
+          `[Cleanup] Error accessing room ${roomName}: ${error.message}`
+        );
+      }
 
       // First check if we have them in onlineUsers cache
       if (socketId) {
@@ -609,18 +618,22 @@ export class ChatGateway
       // This handles cases where user reconnected with a new socket ID
       let userSocketInRoom = false;
       if (room && this.server.sockets?.sockets) {
-        for (const socket of this.server.sockets.sockets.values()) {
-          const authSocket = socket as any as AuthenticatedSocket;
-          if (authSocket.userId === userId && room.has(socket.id)) {
-            userSocketInRoom = true;
-            // Update cache with the socket that's actually in the room
-            if (!isUserStillConnected || connectedSocket?.id !== socket.id) {
-              this.onlineUsers.set(userId, socket.id);
-              this.logger.log(
-                `[Cleanup] Found user ${userId} in voice room ${channelId} with socket ${socket.id}, updating cache`
-              );
+        // Check all sockets in the room
+        for (const socketIdInRoom of room) {
+          const socket = this.server.sockets.sockets.get(socketIdInRoom);
+          if (socket) {
+            const authSocket = socket as any as AuthenticatedSocket;
+            if (authSocket.userId === userId && socket.connected) {
+              userSocketInRoom = true;
+              // Update cache with the socket that's actually in the room
+              if (!isUserStillConnected || connectedSocket?.id !== socket.id) {
+                this.onlineUsers.set(userId, socket.id);
+                this.logger.log(
+                  `[Cleanup] Found user ${userId} in voice room ${channelId} with socket ${socket.id}, updating cache`
+                );
+              }
+              break;
             }
-            break;
           }
         }
       }

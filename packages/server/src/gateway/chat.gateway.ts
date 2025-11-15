@@ -580,32 +580,87 @@ export class ChatGateway
 
       // Get room safely
       let room: Set<string> | undefined;
+      let roomSize = 0;
       try {
         room = this.server.sockets?.adapter?.rooms?.get(roomName);
+        roomSize = room?.size || 0;
       } catch (error) {
         this.logger.warn(
           `[Cleanup] Error accessing room ${roomName}: ${error.message}`
         );
       }
 
-      // CRITICAL: First check if user has ANY connected socket at all
-      // This is the most important check - if user is connected, keep them
-      if (this.server.sockets?.sockets) {
-        for (const socket of this.server.sockets.sockets.values()) {
-          const authSocket = socket as any as AuthenticatedSocket;
-          if (authSocket.userId === userId && socket.connected) {
-            isUserStillConnected = true;
-            connectedSocket = authSocket;
-            // Update cache with the connected socket
-            if (!socketId || socketId !== socket.id) {
-              this.onlineUsers.set(userId, socket.id);
-              this.logger.log(
-                `[Cleanup] Found connected socket for user ${userId}: ${socket.id}, updating cache`
-              );
+      this.logger.debug(
+        `[Cleanup] Checking user ${userId} in voice channel ${channelId}, cached socket: ${socketId || 'none'}, room size: ${roomSize}`
+      );
+
+      // CRITICAL: First check if user is in the room (rooms persist through reconnections)
+      // If they're in the room, check if any of those sockets are connected
+      if (room && room.size > 0) {
+        for (const socketIdInRoom of room) {
+          const socket = this.server.sockets?.sockets?.get(socketIdInRoom);
+          if (socket) {
+            const authSocket = socket as any as AuthenticatedSocket;
+            if (authSocket.userId === userId) {
+              if (socket.connected) {
+                // User is in room and socket is connected - keep them
+                isUserStillConnected = true;
+                connectedSocket = authSocket;
+                if (!socketId || socketId !== socket.id) {
+                  this.onlineUsers.set(userId, socket.id);
+                  this.logger.log(
+                    `[Cleanup] Found user ${userId} in voice room ${channelId} with connected socket ${socket.id}, updating cache`
+                  );
+                }
+                break;
+              } else {
+                this.logger.debug(
+                  `[Cleanup] User ${userId} has socket ${socket.id} in room but it's disconnected`
+                );
+              }
             }
-            break;
           }
         }
+      }
+
+      // CRITICAL: Also check if user has ANY connected socket at all (even if not in room yet)
+      // This handles cases where user reconnected but hasn't rejoined room yet
+      if (this.server.sockets?.sockets) {
+        const totalSockets = this.server.sockets.sockets.size;
+        let checkedSockets = 0;
+        let foundUserSockets = 0;
+        for (const socket of this.server.sockets.sockets.values()) {
+          checkedSockets++;
+          const authSocket = socket as any as AuthenticatedSocket;
+          // Check if socket belongs to this user
+          if (authSocket.userId === userId) {
+            foundUserSockets++;
+            if (socket.connected) {
+              isUserStillConnected = true;
+              connectedSocket = authSocket;
+              // Update cache with the connected socket
+              if (!socketId || socketId !== socket.id) {
+                this.onlineUsers.set(userId, socket.id);
+                this.logger.log(
+                  `[Cleanup] Found connected socket for user ${userId}: ${socket.id} (was ${socketId || 'none'}), updating cache`
+                );
+              } else {
+                this.logger.debug(
+                  `[Cleanup] User ${userId} has connected socket ${socket.id} (matches cache)`
+                );
+              }
+              break;
+            } else {
+              // Found user's socket but it's disconnected
+              this.logger.debug(
+                `[Cleanup] Found disconnected socket for user ${userId}: ${socket.id}`
+              );
+            }
+          }
+        }
+        this.logger.debug(
+          `[Cleanup] Checked ${checkedSockets}/${totalSockets} sockets for user ${userId}, found ${foundUserSockets} sockets belonging to user`
+        );
       }
 
       // If user is connected, keep them in voice channel tracking
